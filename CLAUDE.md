@@ -79,23 +79,22 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 1: repo scaffold, config files, empty main.py pipeline
 - [x] Day 2: data factory
 - [x] Day 3: score engine + watchdog
-- [ ] Day 4-5: law engine + tests + Samadhaan draft
+- [~] Day 4-5: law engine DONE (interest + tax + facts); Samadhaan draft left
 - [ ] Day 6: brain + writer
 - [ ] Day 7: channels (real email) + promise tracker
 - [ ] Day 8-9: simulator + baseline experiment
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 3 done (Aug 23, 2026): watchdog + score engine, 138 tests green.
-  Score separates the hidden personas it never saw: forgetful ~96,
-  cash_tight ~63, habitual ~19, deadbeat 0.
-- Section 15 (statutory_due_date) was pulled forward into engine/law.py with
-  tests, because score and watchdog both measure lateness against it.
-  Interest + 43B(h) + Samadhaan still to do on Day 4-5.
-- New infrastructure: engine/config.py (only reader of config/*.yaml) and
-  data/store.py (loads seed data, DatasetMissing if absent). main.py now
-  auto-generates the dataset when it is missing, so a fresh clone runs.
-- config/legal.yaml `rbi_bank_rate` is STILL null - Day 4 interest math is
-  blocked on setting the verified rate.
-- Next: Day 4 law engine - Section 16 compound interest (monthly rests,
-  3x bank rate) and Section 43B(h) buyer tax exposure, tests first.
+- Day 4 done (Aug 23, 2026): Section 16 interest + Section 37(2)(g) tax
+  exposure, written test-first. 209 tests pass. Two hand-checked vectors:
+  Rs 42,694.23 (6 rests) and Rs 66,911.66 (with a part payment).
+- VERIFIED 2026-08-23: RBI Bank Rate 5.50% (NOT repo 5.25%) -> 16.50% p.a.
+  43B(h) is now Section 37(2)(g), Income-tax Act 2025, in force 1 Apr 2026.
+  Re-verify the bank rate before submission; the MPC meets ~2-monthly.
+- Legal prose lives in config/legal.yaml `facts` templates, never in code.
+  tests/test_no_legal_constants.py parses the AST and enforces this.
+- Interest runs from the day AFTER the due date; partial payments segment the
+  accrual; disputed invoices compute interest but carry dispute_hold: true.
+- Next: Day 5 Samadhaan complaint draft generator (law.samadhaan_draft still
+  raises NotImplementedError), then Day 6 brain + writer.
