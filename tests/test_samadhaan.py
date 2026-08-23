@@ -263,12 +263,29 @@ def test_the_draft_and_a_message_quote_identical_section_16_wording() -> None:
     assert clause in draft, "the draft does not use the canonical clause"
 
 
-def test_the_draft_and_a_message_quote_identical_predeposit_wording() -> None:
+def test_the_predeposit_is_worded_per_audience_but_shares_one_figure() -> None:
+    """The draft says "the Respondent"; a message speaks to the buyer directly.
+
+    Different phrasing is the point of the split. The percentage is not allowed
+    to differ, because that is a legal figure and both come from one config
+    value through the same renderer.
+    """
     record = invoice()
     position = law.legal_position(record, TODAY)
-    clause = law.render_clauses({"predeposit_pct": "75"})["section_19_predeposit"]
-    assert clause in position["facts_by_key"]["samadhaan"]
-    assert clause in samadhaan.build_draft(record, BUYER, position, TODAY)["markdown"]
+    rendered = law.render_clauses({"predeposit_pct": "75"})
+    formal = rendered["section_19_predeposit_formal"]
+    plain = rendered["section_19_predeposit_plain"]
+
+    draft = samadhaan.build_draft(record, BUYER, position, TODAY)["markdown"]
+    message = position["facts_by_key"]["samadhaan"]
+
+    assert formal in draft, "the draft does not use the formal clause"
+    assert plain in message, "the message does not use the plain clause"
+    assert formal not in message and plain not in draft, "the wordings crossed over"
+
+    # the wording differs; the figure does not
+    assert "Respondent" in formal and "Respondent" not in plain
+    assert "75%" in formal and "75%" in plain
 
 
 def test_clauses_resolve_from_the_law_engine_value_set() -> None:

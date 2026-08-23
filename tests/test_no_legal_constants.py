@@ -166,7 +166,6 @@ def _config_body() -> str:
 @pytest.mark.parametrize("phrase", [
     "three times the RBI Bank Rate",
     "ceiling set by Section 15",
-    "Section 19 of the MSMED Act",
 ])
 def test_each_legal_position_is_worded_exactly_once(phrase: str) -> None:
     occurrences = _config_body().count(phrase)
@@ -180,7 +179,8 @@ def test_the_clauses_block_is_where_those_statements_live() -> None:
     clauses = _CONFIG["clauses"]
     assert "three times the RBI Bank Rate" in clauses["section_16_rate"]
     assert "ceiling set by Section 15" in clauses["section_15_ceiling"]
-    assert "Section 19 of the MSMED Act" in clauses["section_19_predeposit"]
+    assert "Section 19 of the MSMED Act" in clauses["section_19_predeposit_formal"]
+    assert "Section 19 of the MSMED Act" in clauses["section_19_predeposit_plain"]
 
 
 def test_every_clause_reference_names_a_real_clause() -> None:
@@ -198,3 +198,25 @@ def test_every_clause_reference_names_a_real_clause() -> None:
     composed += " ".join(str(v) for v in _CONFIG["reference_text"].values())
     for clause in known:
         assert "{" + clause + "}" in composed, f"clause {clause} is never used"
+
+
+def test_section_19_is_split_by_audience_but_shares_one_figure() -> None:
+    """Two wordings are allowed where two audiences read them. One number is not.
+
+    The draft addresses the buyer as the Respondent; a message addresses them
+    directly. Both must take the percentage from the same config value, so the
+    phrasing can differ and the figure cannot.
+    """
+    clauses = _CONFIG["clauses"]
+    formal = clauses["section_19_predeposit_formal"]
+    plain = clauses["section_19_predeposit_plain"]
+
+    assert formal != plain, "the split exists to word this per audience"
+    assert "Respondent" in formal and "Respondent" not in plain
+    assert "{predeposit_pct}" in formal
+    assert "{predeposit_pct}" in plain
+
+    # neither may hardcode the number
+    share = _CONFIG["samadhaan"]["challenge_predeposit_share"]
+    for text in (formal, plain):
+        assert str(int(share * 100)) not in text

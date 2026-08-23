@@ -124,10 +124,18 @@ clauses:
     compound interest with monthly rests at {effective_rate_pct}% per annum,
     being three times the RBI Bank Rate of {bank_rate_pct}%
     (Section 16, MSMED Act 2006)
-  section_19_predeposit: >-
+  # Section 19 states one position -- the pre-deposit required to challenge an
+  # award -- but two audiences read it. The formal wording goes in the
+  # Samadhaan draft, where the buyer is the Respondent; the plain wording goes
+  # to the buyer themselves. Both draw {predeposit_pct} from the same config
+  # value, so the figure cannot drift; only the phrasing differs.
+  section_19_predeposit_formal: >-
     Under Section 19 of the MSMED Act 2006, an application to set aside a
-    decree, award or order of the Council is not entertained unless the buyer
-    deposits {predeposit_pct}% of the amount in terms of the award.
+    decree, award or order of the Council is not entertained unless the
+    Respondent deposits {predeposit_pct}% of the amount in terms of the award.
+  section_19_predeposit_plain: >-
+    Under Section 19 of the MSMED Act 2006, a buyer challenging an award of the
+    Facilitation Council deposits {predeposit_pct}% of the amount first.
 
 facts:
   section_15_no_agreement: >-
@@ -165,7 +173,7 @@ facts:
     is worth about {tax_exposure}.
   samadhaan: >-
     Delayed payments may be referred to the {portal_name} portal at
-    {portal_url}. {section_19_predeposit}
+    {portal_url}. {section_19_predeposit_plain}
 
 # --- MSME Samadhaan: the final rung --------------------------------------
 samadhaan:
@@ -187,7 +195,7 @@ reference_text:
     This reference is made under Section 18 of the MSMED Act 2006 to the
     {council_name}, the Micro and Small Enterprises Facilitation Council for
     the State in which the Applicant is located.
-  predeposit_note: "{section_19_predeposit}"
+  predeposit_note: "{section_19_predeposit_formal}"
   declaration: >-
     I declare that the facts stated above are true to the best of my knowledge
     and belief, that the Applicant is a registered micro or small enterprise
