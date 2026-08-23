@@ -113,6 +113,14 @@ ladder:
     poor:                       # score < score.bands.poor_below
       start_rung: 2
       days_between_rungs: 4
+  # A score built on almost no history is not evidence. With low confidence we
+  # neither extend the benefit of the doubt nor presume habitual delay -- the
+  # buyer is paced as an ordinary one until we know more. Applied in both
+  # directions on purpose: two late invoices is no more proof of a habitual
+  # delayer than two prompt ones is proof of a good payer.
+  # Set to null to pace purely on score.
+  low_confidence_band: medium
+
   # A promise that comes and goes unpaid moves the case up one rung.
   broken_promise_rung_jump: 1
   # Days of silence after a fresh promise before we speak again.

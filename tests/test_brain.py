@@ -412,3 +412,84 @@ def test_a_send_carries_the_skeleton_the_writer_must_follow() -> None:
 
 def test_a_non_send_carries_no_skeleton() -> None:
     assert run(who=buyer(opted_out=True)).skeleton is None
+
+
+# --- confidence modifies pacing ------------------------------------------
+# A score built on almost no history is not evidence. Low confidence clamps the
+# buyer to the middle band in BOTH directions: two late invoices is no more
+# proof of a habitual delayer than two prompt ones is proof of a good payer.
+
+def thin(value: int) -> dict:
+    """A score from almost no history -- the low-confidence case."""
+    return {"buyer_id": "BUY-01", "name": "ABC Traders", "score": value,
+            "confidence": "low", "history_count": 2}
+
+
+def decide_with(score_record: dict, *, record=None, history=None, today=TODAY):
+    record = record if record is not None else invoice()
+    return brain.decide(record, buyer(), score_record,
+                        law.legal_position(record, today), [], history or [])
+
+
+def test_a_high_score_on_thin_history_is_paced_as_ordinary() -> None:
+    """BUY-07's case: 87 from two invoices should not buy the 7-day patience."""
+    action = decide_with(thin(87))
+    assert action.detail["scored_band"] == "good"
+    assert action.detail["effective_band"] == "medium"
+
+
+def test_a_low_score_on_thin_history_is_treated_more_gently() -> None:
+    """The symmetric half. Two late invoices is not proof of a habitual delayer."""
+    thin_action = decide_with(thin(20))
+    thick_action = decide_with({**thin(20), "confidence": "high", "history_count": 14})
+    assert thin_action.rung == 1, "a barely-known buyer should not open at rung 2"
+    assert thick_action.rung == 2, "a well-known poor payer still opens at rung 2"
+
+
+def test_a_confident_score_is_left_alone() -> None:
+    for value, expected in ((87, "good"), (62, "medium"), (20, "poor")):
+        action = decide_with({"buyer_id": "BUY-01", "name": "ABC", "score": value,
+                              "confidence": "high", "history_count": 14})
+        assert action.detail["scored_band"] == expected
+        assert action.detail["effective_band"] == expected
+
+
+def test_the_clamp_changes_how_fast_the_case_escalates() -> None:
+    """good waits 7 days between rungs, medium waits 5. Thin history gets 5."""
+    history = [contact("2026-08-18", 1)]          # 6 days ago
+    thick = decide_with({**thin(87), "confidence": "high", "history_count": 14},
+                        history=history)
+    lean = decide_with(thin(87), history=history)
+    assert lean.rung > thick.rung, "the clamp did not speed up escalation"
+
+
+def test_the_clamp_is_config_driven(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Setting low_confidence_band to null paces purely on score."""
+    from engine.config import rules
+    config = rules()
+    disabled = {**config, "ladder": {**config["ladder"], "low_confidence_band": None}}
+    record = invoice()
+    action = brain.decide(record, buyer(), thin(20), law.legal_position(record, TODAY),
+                          [], [], config=disabled)
+    assert action.detail["effective_band"] == "poor"
+    assert action.rung == 2
+
+
+def test_the_reason_says_when_confidence_changed_the_pacing() -> None:
+    reason = decide_with(thin(87)).reason
+    assert "low confidence" in reason
+    assert "2 settled invoices" in reason
+
+
+def test_the_reason_stays_quiet_when_confidence_changed_nothing() -> None:
+    reason = decide_with({"buyer_id": "BUY-01", "name": "ABC", "score": 87,
+                          "confidence": "high", "history_count": 14}).reason
+    assert "low confidence" not in reason
+
+
+def test_the_clamp_does_not_touch_the_ceiling() -> None:
+    """Pacing picks a starting rung; the law still decides the maximum."""
+    fresh = invoice(acceptance="2026-07-25")
+    position = law.legal_position(fresh, TODAY)
+    action = brain.decide(fresh, buyer(), thin(20), position, [], [])
+    assert action.rung == 0 or 1 <= action.rung <= position["available_rung"]

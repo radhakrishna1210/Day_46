@@ -123,15 +123,17 @@ def broken_promises(promises: list[dict[str, Any]], today: date, grace_days: int
     )
 
 
-def _is_ambiguous(legal_position: dict[str, Any], history: list[dict[str, Any]]) -> bool:
+def _is_ambiguous(
+    invoice: dict[str, Any],
+    legal_position: dict[str, Any],
+    history: list[dict[str, Any]],
+) -> bool:
     """The one case the rules admit they cannot settle.
 
     A buyer has paid part of the invoice and then said something we could not
     classify. ARCHITECTURE names exactly this as the LLM's judgment call.
     """
-    part_paid = legal_position["principal_paise"] < int(legal_position.get("invoice_amount_paise", 0) or 0)
-    if not part_paid:
-        part_paid = any(entry.get("outcome") == "partial_payment" for entry in history)
+    part_paid = legal_position["principal_paise"] < int(invoice.get("amount_paise", 0))
     latest = history[-1] if history else {}
     return bool(part_paid) and latest.get("outcome") == "unclear_reply"
 
@@ -236,6 +238,7 @@ def decide(
         "days_since_last_contact": days_since,
         "score": score.get("score"),
         "confidence": score.get("confidence"),
+        "history_count": score.get("history_count"),
     }
 
     def act(kind: str, rung_id: int, reason: str, *, source: str = "rule",
@@ -285,7 +288,12 @@ def decide(
                    extra={"promise_date": promise["promised_date"]})
 
     # 7. Rung selection.
-    pacing = ladder["pacing"][band(int(score.get("score", 0)), config)]
+    scored_band = band(int(score.get("score", 0)), config)
+    effective_band = scored_band
+    clamp = ladder.get("low_confidence_band")
+    if clamp and score.get("confidence") == "low":
+        effective_band = clamp
+    pacing = ladder["pacing"][effective_band]
     base = int(pacing["start_rung"])
     current = highest_rung_used(history)
     current = base if current is None else max(current, base)
@@ -304,12 +312,18 @@ def decide(
         chosen += 1
     chosen = min(chosen, ceiling)                        # <-- re-applied after the walk
 
+    base_detail.update({"scored_band": scored_band, "effective_band": effective_band})
     capped = desired > ceiling
     cap_note = (f"; wanted rung {desired} but the law supports at most {ceiling}"
                 if capped else "")
-    why = (f"score {score.get('score')} ({band(int(score.get('score', 0)), config)} band) "
-           f"starts at rung {base}; {legal_position['days_overdue']} days overdue; "
-           f"ceiling {ceiling}{cap_note}")
+    if effective_band != scored_band:
+        seen = int(score.get("history_count", 0) or 0)
+        how_paced = (f"{scored_band} band, paced as {effective_band}: low confidence "
+                     f"from {seen} settled invoice{'' if seen == 1 else 's'}")
+    else:
+        how_paced = f"{scored_band} band"
+    why = (f"score {score.get('score')} ({how_paced}) starts at rung {base}; "
+           f"{legal_position['days_overdue']} days overdue; ceiling {ceiling}{cap_note}")
 
     # 8. Rung 4 is a stop, not a message. This MUST precede every send gate:
     #    rung 4 has max_messages of 0, so the exhaustion check below would
@@ -351,7 +365,7 @@ def decide(
 
     # 12. Send -- unless this is the ambiguous case, where we ask for a view.
     skeleton = rungs.fact_skeleton(chosen, legal_position, invoice, buyer)
-    if _is_ambiguous(legal_position, history):
+    if _is_ambiguous(invoice, legal_position, history):
         decision, reasoning = _ask_llm(invoice, legal_position, history,
                                        f"send a rung {chosen} message")
         if decision == "wait":
