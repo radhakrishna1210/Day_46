@@ -86,12 +86,13 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 2 done (Aug 23, 2026): data/generate.py builds 20 buyers + 279 invoices
-  (179 history, 100 current) from --seed; two seed-42 runs are byte-identical.
-- Hidden personas live in sim/hidden_personas.json (gitignored). Nothing under
+- Day 2 complete (Aug 23, 2026): data/generate.py builds 20 buyers + ~250
+  invoices (100 current) from --seed; two seed-42 runs are byte-identical.
+  Invoices name the goods and a PO, so messages read like real documents.
+- Hidden personas in sim/hidden_personas.json (gitignored). Nothing under
   engine/ may read it - a test asserts no persona tag reaches data/seed/.
-- Dataset is gitignored, so run `python data/generate.py --seed 42` first on
-  any fresh clone. SIMULATION_START is 2026-08-24, never date.today().
+- Dataset is gitignored: run `python data/generate.py --seed 42` on a fresh
+  clone. SIMULATION_START is 2026-08-24, never date.today().
 - config/legal.yaml `rbi_bank_rate` is still null - set the verified rate
   before Day 4 law math, and again before submission.
 - Next: Day 3 score engine + watchdog. Persona delay signal is clean
