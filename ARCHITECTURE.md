@@ -266,18 +266,32 @@ revenue-recovery-agent/
 │   └── legal.yaml         ← 15/45 days, bank rate, tax rate (marked "as of Aug 2026")
 ├── data/
 │   ├── generate.py
-│   └── seed/              ← buyers.json, invoices.json
+│   ├── store.py           ← loads the generated seed data back off disk
+│   └── seed/              ← buyers.json, invoices.json (generated, gitignored)
 ├── engine/
+│   ├── config.py          ← the only reader of config/*.yaml
 │   ├── score.py  watchdog.py  law.py  brain.py
-│   ├── writer.py  channels.py  promises.py
+│   ├── writer.py  channels.py  promises.py  audit.py
 ├── sim/
 │   ├── personas.py  run_sim.py
+│   └── hidden_personas.json  ← generated; engine/ must never read it
 ├── report/
 │   └── build_report.py    ← baseline-vs-agent HTML report + exceptions list
-├── audit/                 ← generated audit logs land here
+├── audit/                 ← generated audit logs land here (append-only JSONL)
 └── tests/
     └── test_law.py        ← interest math, 45-day cap, 15-day default
 ```
+
+### Support modules (not blocks — plumbing added during the build)
+
+These carry no business logic. They exist so the rules above have exactly one
+place each to live, rather than being copy-pasted across blocks.
+
+| Module | Why it exists |
+|---|---|
+| `engine/config.py` | The single reader of `config/rules.yaml` and `config/legal.yaml`, cached. The rule "code reads config, code never embeds these numbers" needs one door, or every block grows its own YAML loader and they drift. `reload()` lets tests swap a rule set. |
+| `data/store.py` | Reads `data/seed/*.json` back. The dataset is generated rather than committed, so every entry point needs the same "not generated yet, here is the command" answer instead of its own traceback. Also groups invoices by buyer, which the score engine and the simulator both need. |
+| `engine/audit.py` | Named in the non-negotiables but not in the original block list. Every money-related action is appended here with timestamp, invoice, action, reason, and whether the reason came from a rule or the AI. |
 
 ---
 
