@@ -157,6 +157,73 @@ def test_current_invoices_are_not_yet_settled(current: list[dict]) -> None:
         assert invoice["amount_paid_paise"] < invoice["amount_paise"]
 
 
+# --- invoices have to read like business documents ------------------------
+
+def test_every_invoice_describes_what_was_sold(invoices: list[dict]) -> None:
+    """The writer quotes this line, so it cannot be blank or a bare number."""
+    for invoice in invoices:
+        description = invoice["description"]
+        assert description and not description.isdigit()
+        assert any(ch.isdigit() for ch in description), "a quantity is expected"
+        assert any(ch.isalpha() for ch in description), "an item name is expected"
+
+
+def test_descriptions_match_the_buyer_sector(buyers: list[dict], invoices: list[dict]) -> None:
+    """A textiles buyer should not be invoiced for brake pads."""
+    sector_of = {b["buyer_id"]: b["sector"] for b in buyers}
+    for invoice in invoices:
+        sector = sector_of[invoice["buyer_id"]]
+        items = [item for item, _unit, _low, _high in gen.GOODS[sector]]
+        assert any(item in invoice["description"] for item in items)
+
+
+def test_purchase_orders_are_financial_year_formatted(invoices: list[dict]) -> None:
+    for invoice in invoices:
+        po = invoice["po_number"]
+        if po is None:
+            continue
+        prefix, fy, serial = po.split("/")
+        assert prefix == "PO"
+        start, end = fy.split("-")
+        assert (int(start) + 1) % 100 == int(end), "Indian FY runs April to March"
+        assert serial.isdigit() and len(serial) == 5
+
+
+def test_some_orders_have_no_purchase_order(invoices: list[dict]) -> None:
+    """Plenty of MSME trade runs on a phone call. That gap is part of the problem."""
+    missing = [inv for inv in invoices if inv["po_number"] is None]
+    assert 0 < len(missing) < len(invoices)
+
+
+def test_the_dispute_quotes_the_goods(buyers: list[dict], current: list[dict]) -> None:
+    """A dispute is always about something specific, so the note names the item."""
+    sector_of = {b["buyer_id"]: b["sector"] for b in buyers}
+    disputed = next(inv for inv in current if inv["status"] == "disputed")
+    item = gen._goods_label(disputed["description"], sector_of[disputed["buyer_id"]])
+    assert item != "consignment", "the item should be recognised, not fall back"
+    assert item in disputed["dispute_note"]
+
+
+def test_invoice_quantities_agree_with_their_amounts(buyers: list[dict], invoices: list[dict]) -> None:
+    """A line reading 810 cases against a Rs 9,600 total would read as fake.
+
+    The implied per-unit rate must land inside the band declared for that item.
+    """
+    sector_of = {b["buyer_id"]: b["sector"] for b in buyers}
+    for invoice in invoices:
+        sector = sector_of[invoice["buyer_id"]]
+        quantity = int(invoice["description"].split()[0])
+        assert quantity >= 1
+        implied_rate = invoice["amount_paise"] / quantity
+        item = gen._goods_label(invoice["description"], sector)
+        band = next(g for g in gen.GOODS[sector] if g[0] == item)
+        # Rounding the quantity moves the implied rate a little; allow 20%.
+        assert band[2] * 0.8 <= implied_rate <= band[3] * 1.2, (
+            f"{invoice['invoice_id']}: {invoice['description']} does not fit "
+            f"{gen.format_inr(invoice['amount_paise'], 'Rs ')}"
+        )
+
+
 # --- the mess, which is the point ----------------------------------------
 
 def test_exactly_one_open_dispute(current: list[dict]) -> None:

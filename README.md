@@ -71,6 +71,11 @@ Ideas that came up during the build and were deliberately **not** built:
 - TReDS invoice-discounting suggestion for stuck invoices
 - Network-level buyer score across many vendors (the Razorpay-scale version)
 - Dispute-resolution assistant
+- Financial-year seasonality in the synthetic data: a visible cluster of buyers
+  settling just before March 31, so the Section 43B(h) tax-deduction cliff can
+  be shown landing rather than asserted. Parked on Day 2 because the simulation
+  window (starts 2026-08-24, runs 90 days) never crosses March 31 -- revisit on
+  Day 8 if the window changes.
 
 ## Legal disclaimer
 

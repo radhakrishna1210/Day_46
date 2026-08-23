@@ -96,35 +96,117 @@ PERSONA_BEHAVIOUR: dict[str, Persona] = {
     "deadbeat": Persona(60, 150, 0.00, 0.55, 0.15),
 }
 
-#: name, profile, city, state, GST state code, contact person
-BUYER_SEEDS: tuple[tuple[str, str, str, str, str, str], ...] = (
-    ("Sundaram Auto Components Pvt Ltd", "corporate", "Coimbatore", "Tamil Nadu", "33", "Ramesh Iyer"),
-    ("Meridian Logistics India Pvt Ltd", "corporate", "Navi Mumbai", "Maharashtra", "27", "Farid Shaikh"),
-    ("Kaveri Textiles Ltd", "corporate", "Tiruppur", "Tamil Nadu", "33", "Lakshmi Narayanan"),
-    ("Northstar Engineering Pvt Ltd", "corporate", "Pune", "Maharashtra", "27", "Sneha Kulkarni"),
-    ("Bharat Polymers Ltd", "corporate", "Vadodara", "Gujarat", "24", "Nilesh Patel"),
-    ("Vistara Consumer Goods Pvt Ltd", "corporate", "Bengaluru", "Karnataka", "29", "Arun Prakash"),
-    ("Deccan Electricals Ltd", "corporate", "Hyderabad", "Telangana", "36", "Padmaja Rao"),
-    ("Anand Precision Works Pvt Ltd", "corporate", "Gurugram", "Haryana", "06", "Vikas Ahuja"),
-    ("Orbit Retail Ventures Pvt Ltd", "corporate", "New Delhi", "Delhi", "07", "Tanvi Bhalla"),
-    ("Verma Hardware Stores", "small_trader", "Kanpur", "Uttar Pradesh", "09", "Suresh Verma"),
-    ("Sharma Trading Co", "small_trader", "Ludhiana", "Punjab", "03", "Gopal Sharma"),
-    ("New Ganesh Enterprises", "small_trader", "Nagpur", "Maharashtra", "27", "Mangesh Deshmukh"),
-    ("Ravi Steel Traders", "small_trader", "Raipur", "Chhattisgarh", "22", "Ravi Agrawal"),
-    ("Jain Packaging Mart", "small_trader", "Indore", "Madhya Pradesh", "23", "Mahesh Jain"),
-    ("Krishna Electricals", "small_trader", "Vijayawada", "Andhra Pradesh", "37", "Krishna Murthy"),
-    ("Modern Tools and Spares", "small_trader", "Rajkot", "Gujarat", "24", "Jignesh Thakkar"),
-    ("Balaji Agencies", "small_trader", "Belagavi", "Karnataka", "29", "Shrikant Patil"),
-    ("Sethi Brothers", "small_trader", "Jalandhar", "Punjab", "03", "Harpreet Sethi"),
-    ("Om Sai Distributors", "small_trader", "Nashik", "Maharashtra", "27", "Sandeep Pawar"),
-    ("Fatima Traders", "small_trader", "Kozhikode", "Kerala", "32", "Abdul Rahman"),
+#: name, profile, city, state, GST state code, contact person, sector
+BUYER_SEEDS: tuple[tuple[str, str, str, str, str, str, str], ...] = (
+    ("Sundaram Auto Components Pvt Ltd", "corporate", "Coimbatore", "Tamil Nadu", "33", "Ramesh Iyer", "auto"),
+    ("Meridian Logistics India Pvt Ltd", "corporate", "Navi Mumbai", "Maharashtra", "27", "Farid Shaikh", "logistics"),
+    ("Kaveri Textiles Ltd", "corporate", "Tiruppur", "Tamil Nadu", "33", "Lakshmi Narayanan", "textiles"),
+    ("Northstar Engineering Pvt Ltd", "corporate", "Pune", "Maharashtra", "27", "Sneha Kulkarni", "engineering"),
+    ("Bharat Polymers Ltd", "corporate", "Vadodara", "Gujarat", "24", "Nilesh Patel", "polymers"),
+    ("Vistara Consumer Goods Pvt Ltd", "corporate", "Bengaluru", "Karnataka", "29", "Arun Prakash", "fmcg"),
+    ("Deccan Electricals Ltd", "corporate", "Hyderabad", "Telangana", "36", "Padmaja Rao", "electricals"),
+    ("Anand Precision Works Pvt Ltd", "corporate", "Gurugram", "Haryana", "06", "Vikas Ahuja", "precision"),
+    ("Orbit Retail Ventures Pvt Ltd", "corporate", "New Delhi", "Delhi", "07", "Tanvi Bhalla", "retail"),
+    ("Verma Hardware Stores", "small_trader", "Kanpur", "Uttar Pradesh", "09", "Suresh Verma", "hardware"),
+    ("Sharma Trading Co", "small_trader", "Ludhiana", "Punjab", "03", "Gopal Sharma", "general"),
+    ("New Ganesh Enterprises", "small_trader", "Nagpur", "Maharashtra", "27", "Mangesh Deshmukh", "general"),
+    ("Ravi Steel Traders", "small_trader", "Raipur", "Chhattisgarh", "22", "Ravi Agrawal", "steel"),
+    ("Jain Packaging Mart", "small_trader", "Indore", "Madhya Pradesh", "23", "Mahesh Jain", "packaging"),
+    ("Krishna Electricals", "small_trader", "Vijayawada", "Andhra Pradesh", "37", "Krishna Murthy", "electricals"),
+    ("Modern Tools and Spares", "small_trader", "Rajkot", "Gujarat", "24", "Jignesh Thakkar", "tools"),
+    ("Balaji Agencies", "small_trader", "Belagavi", "Karnataka", "29", "Shrikant Patil", "general"),
+    ("Sethi Brothers", "small_trader", "Jalandhar", "Punjab", "03", "Harpreet Sethi", "hardware"),
+    ("Om Sai Distributors", "small_trader", "Nashik", "Maharashtra", "27", "Sandeep Pawar", "fmcg"),
+    ("Fatima Traders", "small_trader", "Kozhikode", "Kerala", "32", "Abdul Rahman", "general"),
 )
 
+#: What each sector actually buys: item, unit, and a plausible per-unit rate
+#: band in paise. The quantity on an invoice is derived from its amount and the
+#: rate, so "Rs 9,600" never comes with "810 cases" attached -- a description
+#: that contradicts its own total is worse than no description at all.
+#:
+#: Item names never repeat the unit word, so nothing reads "480 rolls pallet
+#: wrap rolls".
+GOODS: dict[str, tuple[tuple[str, str, int, int], ...]] = {
+    "auto": (
+        ("brake pads", "sets", 45_000, 120_000),
+        ("clutch plates", "units", 30_000, 90_000),
+        ("wheel bearings", "units", 12_000, 60_000),
+    ),
+    "logistics": (
+        ("pallet wrap", "rolls", 9_000, 25_000),
+        ("corrugated cartons", "units", 1_800, 4_500),
+        ("strapping", "coils", 45_000, 120_000),
+    ),
+    "textiles": (
+        ("cotton yarn 30s", "kg", 21_000, 32_000),
+        ("dyed cotton fabric", "metres", 6_000, 18_000),
+        ("polyester blend fabric", "metres", 4_500, 12_000),
+    ),
+    "engineering": (
+        ("CNC machined flanges", "units", 35_000, 150_000),
+        ("mild steel brackets", "units", 4_000, 18_000),
+        ("gearbox housings", "units", 120_000, 600_000),
+    ),
+    "polymers": (
+        ("HDPE granules", "kg", 9_500, 13_000),
+        ("PP copolymer", "kg", 8_500, 14_000),
+        ("masterbatch pigment", "kg", 18_000, 60_000),
+    ),
+    "fmcg": (
+        ("detergent refill pouches", "cases", 35_000, 90_000),
+        ("packaged snack cartons", "cases", 40_000, 110_000),
+        ("shampoo sachets", "cases", 50_000, 140_000),
+    ),
+    "electricals": (
+        ("copper wire 1.5 sqmm", "coils", 90_000, 220_000),
+        ("LED panel lights", "units", 18_000, 65_000),
+        ("MCB distribution boards", "units", 45_000, 250_000),
+    ),
+    "precision": (
+        ("ground steel shafts", "units", 18_000, 90_000),
+        ("precision bushings", "units", 2_500, 14_000),
+        ("hardened dowel pins", "units", 600, 3_000),
+    ),
+    "retail": (
+        ("stainless steel cookware", "units", 25_000, 120_000),
+        ("plastic storage bins", "units", 8_000, 42_000),
+        ("assorted household goods", "cases", 30_000, 90_000),
+    ),
+    "hardware": (
+        ("galvanised hinges", "units", 2_000, 11_000),
+        ("cement screws", "boxes", 12_000, 50_000),
+        ("PVC pipe fittings", "units", 2_500, 16_000),
+    ),
+    "steel": (
+        ("MS angles 50x50", "kg", 5_200, 7_200),
+        ("TMT bars 12mm", "kg", 4_800, 6_800),
+        ("GI sheets", "bundles", 90_000, 260_000),
+    ),
+    "packaging": (
+        ("corrugated boxes 5-ply", "units", 2_200, 6_000),
+        ("BOPP tape", "rolls", 2_800, 7_500),
+        ("shrink film", "rolls", 60_000, 180_000),
+    ),
+    "tools": (
+        ("drill bits", "sets", 15_000, 70_000),
+        ("torque wrenches", "units", 90_000, 450_000),
+        ("abrasive cutting discs", "units", 1_800, 7_000),
+    ),
+    "general": (
+        ("assorted trading stock", "cases", 30_000, 120_000),
+        ("mixed consignment", "cases", 25_000, 100_000),
+        ("general merchandise", "cases", 20_000, 80_000),
+    ),
+}
+
+#: Dispute notes quote the goods, because a dispute is always about something
+#: specific. Formatted with the invoice description.
 DISPUTE_NOTES: tuple[str, ...] = (
-    "Buyer claims 12 units were damaged in transit and wants a credit note before paying.",
-    "Buyer disputes the quantity received against the delivery challan.",
-    "Buyer says the rate billed does not match the purchase order.",
-    "Buyer has raised a quality complaint and asked for an inspection.",
+    "Buyer reports transit damage on part of the {goods} and wants a credit note before paying.",
+    "Buyer disputes the quantity of {goods} received against the delivery challan.",
+    "Buyer says the rate billed for the {goods} does not match the purchase order.",
+    "Buyer has raised a quality complaint on the {goods} and asked for a joint inspection.",
 )
 
 
@@ -184,11 +266,11 @@ def _terms(rng: random.Random) -> tuple[bool, int | None]:
     if rng.random() < 0.30:
         return False, None
     roll = rng.random()
-    if roll < 0.35:
+    if roll < 0.30:
         return True, 30
-    if roll < 0.78:
+    if roll < 0.70:
         return True, 45
-    if roll < 0.93:
+    if roll < 0.90:
         return True, 60
     return True, 90
 
@@ -205,6 +287,47 @@ def _round_paise(value: float) -> int:
     return max(AMOUNT_STEP_PAISE, int(round(value / AMOUNT_STEP_PAISE)) * AMOUNT_STEP_PAISE)
 
 
+def _description(rng: random.Random, sector: str, amount_paise: int) -> str:
+    """What was actually sold, e.g. 4200 kg HDPE granules, batch B-2214.
+
+    The quantity is derived from the invoice amount at a plausible per-unit
+    rate, so the line and the total tell the same story.
+    """
+    item, unit, rate_low, rate_high = rng.choice(GOODS[sector])
+    rate = rng.randint(rate_low, rate_high)
+    quantity = max(1, round(amount_paise / rate))
+    if quantity > 500:
+        quantity = (quantity // 10) * 10
+    elif quantity > 100:
+        quantity = (quantity // 5) * 5
+    text = f"{quantity} {unit} {item}"
+    if rng.random() < 0.40:
+        text += f", batch B-{rng.randint(1000, 9999)}"
+    return text
+
+
+def _goods_label(description: str, sector: str) -> str:
+    """The bare item name out of a description, for quoting in a dispute note."""
+    for item, _unit, _rate_low, _rate_high in GOODS[sector]:
+        if item in description:
+            return item
+    return "consignment"
+
+
+def _po_number(rng: random.Random, issue: date, written_agreement: bool) -> str | None:
+    """A purchase order reference in the Indian financial-year format.
+
+    Not every order has one -- plenty of MSME trade runs on a phone call, and
+    an invoice with no written agreement is the likeliest to have no PO either.
+    That gap is part of why the supplier has no leverage without the Act.
+    """
+    if rng.random() < (0.20 if written_agreement else 0.55):
+        return None
+    fy_start = issue.year if issue.month >= 4 else issue.year - 1
+    fy = f"{fy_start % 100:02d}-{(fy_start + 1) % 100:02d}"
+    return f"PO/{fy}/{rng.randint(1, 99999):05d}"
+
+
 def _iso(day: date) -> str:
     return day.isoformat()
 
@@ -215,6 +338,8 @@ def _blank_invoice() -> dict[str, Any]:
         "invoice_id": "",
         "buyer_id": "",
         "cohort": "",
+        "description": "",
+        "po_number": None,
         "amount_paise": 0,
         "currency": "INR",
         "issue_date": "",
@@ -252,7 +377,7 @@ def _build_buyers(rng: random.Random, low_confidence: list[int]) -> list[dict[st
 
     buyers: list[dict[str, Any]] = []
     for position, seed_index in enumerate(order):
-        name, profile, city, state, state_code, contact = BUYER_SEEDS[seed_index]
+        name, profile, city, state, state_code, contact, sector = BUYER_SEEDS[seed_index]
         hinglish_chance = 0.10 if profile == "corporate" else 0.75
         email_chance = 0.85 if profile == "corporate" else 0.30
         # A buyer we have barely traded with has a short relationship.
@@ -265,6 +390,7 @@ def _build_buyers(rng: random.Random, low_confidence: list[int]) -> list[dict[st
                 "buyer_id": f"BUY-{position + 1:02d}",
                 "name": name,
                 "profile": profile,
+                "sector": sector,
                 "language_pref": "hinglish" if rng.random() < hinglish_chance else "english",
                 "contact_name": contact,
                 "contact_email": _email(contact, name),
@@ -329,6 +455,8 @@ def _build_history(
             invoice.update(
                 buyer_id=buyer["buyer_id"],
                 cohort="history",
+                description=_description(rng, buyer["sector"], amount),
+                po_number=_po_number(rng, issue, written),
                 amount_paise=amount,
                 issue_date=_iso(issue),
                 acceptance_date=_iso(acceptance),
@@ -345,7 +473,9 @@ def _build_history(
                 # A dispute raised and later settled. A historical fact for the
                 # score engine, not an open dispute for the brain.
                 invoice["disputed"] = True
-                invoice["dispute_note"] = rng.choice(DISPUTE_NOTES)
+                note = rng.choice(DISPUTE_NOTES)
+                goods = _goods_label(invoice["description"], buyer["sector"])
+                invoice["dispute_note"] = note.format(goods=goods)
 
             if rng.random() < 0.15:
                 first_amount = _round_paise(amount * rng.uniform(0.3, 0.6))
@@ -405,6 +535,8 @@ def _build_current(
             invoice.update(
                 buyer_id=buyer["buyer_id"],
                 cohort="current",
+                description=_description(rng, buyer["sector"], amount),
+                po_number=_po_number(rng, issue, written),
                 amount_paise=amount,
                 issue_date=_iso(issue),
                 acceptance_date=_iso(acceptance),
@@ -428,6 +560,7 @@ def _apply_mess(
 ) -> None:
     """Place the dispute, the partial payments and the opt-out on purpose."""
     persona_of = {buyers[i]["buyer_id"]: personas[i] for i in range(N_BUYERS)}
+    sector_of = {buyer["buyer_id"]: buyer["sector"] for buyer in buyers}
     overdue = [
         inv for inv in current
         if statutory_due_date(inv, no_agreement, ceiling) <= SIMULATION_START
@@ -438,7 +571,8 @@ def _apply_mess(
     disputed = rng.choice(candidates if candidates else overdue)
     disputed["status"] = "disputed"
     disputed["disputed"] = True
-    disputed["dispute_note"] = rng.choice(DISPUTE_NOTES)
+    goods = _goods_label(disputed["description"], sector_of[disputed["buyer_id"]])
+    disputed["dispute_note"] = rng.choice(DISPUTE_NOTES).format(goods=goods)
 
     # A handful of invoices where some money came in but not all of it.
     remaining = [inv for inv in overdue if inv is not disputed]
