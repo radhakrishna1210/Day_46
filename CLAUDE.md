@@ -86,17 +86,20 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 7 built (Aug 24, 2026): channels + promises, 473 tests. Audit run now
-  writes 292 entries (brain 90, writer 85, channels 117).
-- OUTSTANDING: the real-inbox send is UNCONFIRMED. Fill .env (TEST_INBOX_EMAIL,
-  SMTP_USER, SMTP_PASS - Gmail app password) then
-  `python main.py --seed 42 --send-email`. Add --ignore-quiet-hours after 21:00.
-- Email safety is four barriers; the envelope check compares against
-  os.getenv("TEST_INBOX_EMAIL") directly, NOT test_inbox(), because comparing
-  a value with itself could never fire. Tests make smtplib explode.
-- Promises: the model classifies, a RULE resolves the date. Never let the model
-  compute a date - "5 tarikh" on 26 Aug must be 5 Sep, not 5 Aug.
-- PARKED: live-mode LLM calibration (do early, own step); starting rung ignores
-  days_overdue; main.py passes history=[] so the ladder never climbs - fix with
-  the simulator on Day 8.
+- Provider is GEMINI now (Aug 24, 2026). engine/llm.py is the sole door;
+  a grep confirms nothing else imports a provider SDK. 494 tests.
+- OUTSTANDING, both need a key/creds in .env:
+  1. `python engine/llm.py --list-models` - the model ids in rules.yaml came
+     from pricing pages, NOT an authoritative list. Confirm before relying.
+  2. `python engine/llm.py --calibrate` - 6 calls, checks the guardrail
+     against real prose before the simulator is built on it.
+  3. `python main.py --seed 42 --send-email` - the real-inbox test.
+- Safety is BLOCK_ONLY_HIGH in rules.yaml, set explicitly, deliberately not
+  OFF. Rung 2/3 text about interest and tax deadlines can trip a generic
+  filter; our own guardrail is stricter and more specific.
+- LLMRefused vs LLMUnavailable are separate types. writer falls back to the
+  plain skeleton, promises degrades to noise, brain keeps the rule. Before
+  this, one blocked message would have aborted a 90-invoice run.
+- PARKED: starting rung ignores days_overdue; main.py passes history=[] so the
+  ladder never climbs - fix with the simulator on Day 8.
 - Next: Day 8-9 simulator + baseline experiment.
