@@ -80,22 +80,23 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 2: data factory
 - [x] Day 3: score engine + watchdog
 - [x] Day 4-5: law engine + tests + Samadhaan draft
-- [ ] Day 6: brain + writer
+- [~] Day 6: brain DONE (ladder + hard stops + audit); writer left
 - [ ] Day 7: channels (real email) + promise tracker
 - [ ] Day 8-9: simulator + baseline experiment
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 5 done (Aug 23, 2026): engine/rungs.py + engine/samadhaan.py, 273 tests.
-  Rung ids are SHARED with law.available_rung(), which returns a CEILING 1-4;
-  rung 0 is brain-only. Invariant: chosen == 0 OR 1 <= chosen <= ceiling.
-  Day 6 brain must enforce it.
-- config/supplier.yaml is NEW and holds a PLACEHOLDER Udyam number, so all 53
-  rung-4 drafts are BLOCKED by design. Replace it to unblock filing.
-- Ladder is data in rules.yaml: per-rung max_messages, min_days_between_contacts
-  and allowed_facts (keys into legal.yaml facts). Rung 1 allows none; rung 4
-  sends zero buyer messages.
-- VERIFIED 2026-08-23: RBI Bank Rate 5.50% -> 16.50% p.a. 43B(h) is now
-  Section 37(2)(g), Income-tax Act 2025. Re-verify the rate before submission.
-- Next: Day 6 brain + writer. Brain picks the rung under the ceiling and the
-  stop rules; writer humanises rungs.fact_skeleton without moving a digit.
+- Day 6 brain done (Aug 23, 2026): engine/brain.py, 319 tests. decide() takes
+  (invoice, buyer, score, legal_position, promises, history, config) and the
+  clock comes from legal_position["as_of"], never date.today().
+- Ceiling invariant is enforced by construction: chosen = min(desired, ceiling),
+  re-applied after the escalation walk. Exceeding it CAPS the rung (records
+  escalation_capped); it never forces rung 4.
+- Rung 4 branch MUST stay above every send gate -- rung 4 has max_messages 0,
+  so a per-rung check placed first makes the final rung unreachable. Three
+  tests guard this.
+- LLM is consulted only for partial-payment-plus-unclear-reply, and may only
+  soften a send into a wait. "escalate" is discarded and logged llm_ignored.
+- Next: Day 6 writer. It humanises rungs.fact_skeleton without moving a digit;
+  the skeleton's `forbidden` list is the guardrail. Quiet hours still owed in
+  channels.py on Day 7.
