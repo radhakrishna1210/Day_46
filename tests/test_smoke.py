@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 MODULES = [
     "data.generate",
+    "data.store",
     "engine.audit",
+    "engine.config",
     "engine.brain",
     "engine.channels",
     "engine.law",

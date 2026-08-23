@@ -1,0 +1,160 @@
+"""Tests for the watchdog.
+
+Pure date math, but the consequences are not: an invoice wrongly called overdue
+means chasing someone who does not owe anything yet, and a missed one means
+money left on the table.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from engine import watchdog
+
+TODAY = date(2026, 8, 24)
+
+
+def invoice(
+    *,
+    invoice_id: str = "INV-2026-0001",
+    acceptance: str = "2026-06-01",
+    agreed_days: int | None = 45,
+    written: bool = True,
+    status: str = "open",
+    amount: int = 50_000_000,
+    paid: int = 0,
+    agreed_due: str | None = None,
+) -> dict:
+    return {
+        "invoice_id": invoice_id,
+        "buyer_id": "BUY-01",
+        "acceptance_date": acceptance,
+        "written_agreement": written,
+        "agreed_days": agreed_days,
+        "agreed_due_date": agreed_due,
+        "status": status,
+        "amount_paise": amount,
+        "amount_paid_paise": paid,
+    }
+
+
+# --- what counts as still owing ------------------------------------------
+
+@pytest.mark.parametrize(("status", "expected"), [
+    ("open", True),
+    ("partially_paid", True),
+    ("disputed", True),
+    ("paid", False),
+])
+def test_unsettled_statuses(status: str, expected: bool) -> None:
+    assert watchdog.is_unsettled(invoice(status=status)) is expected
+
+
+def test_outstanding_subtracts_partial_payments() -> None:
+    assert watchdog.outstanding_paise(invoice(amount=50_000_000, paid=20_000_000)) == 30_000_000
+
+
+def test_outstanding_of_an_untouched_invoice_is_the_whole_amount() -> None:
+    assert watchdog.outstanding_paise(invoice(amount=50_000_000)) == 50_000_000
+
+
+# --- the date arithmetic --------------------------------------------------
+
+def test_days_overdue_counts_from_the_statutory_due_date() -> None:
+    """Accepted 2026-06-01 on 45-day terms: due 2026-07-16, so 39 days by 2026-08-24."""
+    assert watchdog.days_overdue(invoice(acceptance="2026-06-01", agreed_days=45), TODAY) == 39
+
+
+def test_days_overdue_is_negative_before_the_due_date() -> None:
+    assert watchdog.days_overdue(invoice(acceptance="2026-08-20", agreed_days=45), TODAY) == -41
+
+
+def test_an_invoice_due_today_is_not_yet_overdue() -> None:
+    """Payment is due on the day itself; chasing at 00:01 would be wrong."""
+    due_today = invoice(acceptance="2026-07-10", agreed_days=45)
+    assert watchdog.days_overdue(due_today, TODAY) == 0
+    assert watchdog.is_overdue(due_today, TODAY) is False
+
+
+def test_the_day_after_the_due_date_is_overdue() -> None:
+    assert watchdog.is_overdue(invoice(acceptance="2026-07-09", agreed_days=45), TODAY) is True
+
+
+def test_a_ninety_day_contract_goes_overdue_at_forty_five_days() -> None:
+    """The whole point of the law engine, seen from the queue."""
+    record = invoice(acceptance="2026-07-01", agreed_days=90)
+    assert watchdog.is_overdue(record, TODAY) is True
+    assert watchdog.days_overdue(record, TODAY) == 9
+
+
+# --- the queue ------------------------------------------------------------
+
+def test_paid_invoices_never_enter_the_queue() -> None:
+    settled = invoice(acceptance="2026-01-01", status="paid")
+    assert watchdog.overdue_invoices([settled], TODAY) == []
+
+
+def test_invoices_not_yet_due_stay_out_of_the_queue() -> None:
+    """The watchdog has to filter, not blast the whole table."""
+    early = invoice(invoice_id="INV-EARLY", acceptance="2026-08-20")
+    late = invoice(invoice_id="INV-LATE", acceptance="2026-06-01")
+    queue = watchdog.overdue_invoices([early, late], TODAY)
+    assert [inv["invoice_id"] for inv in queue] == ["INV-LATE"]
+
+
+def test_disputed_invoices_still_appear_in_the_queue() -> None:
+    """Finding it is the watchdog's job; handing it to a human is the brain's."""
+    disputed = invoice(status="disputed", acceptance="2026-06-01")
+    assert len(watchdog.overdue_invoices([disputed], TODAY)) == 1
+
+
+def test_queue_is_ordered_by_money_at_risk() -> None:
+    small = invoice(invoice_id="INV-SMALL", amount=1_000_000, acceptance="2026-01-01")
+    large = invoice(invoice_id="INV-LARGE", amount=90_000_000, acceptance="2026-06-01")
+    part = invoice(invoice_id="INV-PART", amount=95_000_000, paid=94_000_000, acceptance="2026-05-01")
+    queue = watchdog.overdue_invoices([small, large, part], TODAY)
+    assert [inv["invoice_id"] for inv in queue] == ["INV-LARGE", "INV-SMALL", "INV-PART"]
+
+
+def test_work_item_records_the_dates_it_reasoned_from() -> None:
+    """The audit trail needs the why, not just the what."""
+    item = watchdog.work_item(
+        invoice(acceptance="2026-06-01", agreed_days=90, agreed_due="2026-08-30"), TODAY
+    )
+    assert item["statutory_due_date"] == "2026-07-16"
+    assert item["days_overdue"] == 39
+    assert item["days_gained_by_law"] == 45
+
+
+# --- promises -------------------------------------------------------------
+
+def promise(promised: str, status: str = "open") -> dict:
+    return {"invoice_id": "INV-2026-0001", "promised_date": promised, "status": status}
+
+
+def test_a_promise_in_the_future_is_not_broken() -> None:
+    assert watchdog.is_promise_broken(promise("2026-09-05"), TODAY) is False
+
+
+def test_a_promise_due_today_is_not_broken_yet() -> None:
+    """They still have the whole day to pay."""
+    assert watchdog.is_promise_broken(promise("2026-08-24"), TODAY) is False
+
+
+def test_a_promise_past_its_date_is_broken() -> None:
+    assert watchdog.is_promise_broken(promise("2026-08-23"), TODAY) is True
+
+
+def test_a_kept_promise_is_never_broken() -> None:
+    assert watchdog.is_promise_broken(promise("2026-01-01", status="kept"), TODAY) is False
+
+
+def test_due_promises_returns_only_the_broken_ones() -> None:
+    promises = [
+        promise("2026-09-05"),
+        promise("2026-08-01"),
+        promise("2026-07-01", status="kept"),
+    ]
+    assert [p["promised_date"] for p in watchdog.due_promises(promises, TODAY)] == ["2026-08-01"]

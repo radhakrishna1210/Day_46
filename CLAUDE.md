@@ -78,7 +78,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 ## Current status (update at the end of every session)
 - [x] Day 1: repo scaffold, config files, empty main.py pipeline
 - [x] Day 2: data factory
-- [ ] Day 3: score engine + watchdog
+- [x] Day 3: score engine + watchdog
 - [ ] Day 4-5: law engine + tests + Samadhaan draft
 - [ ] Day 6: brain + writer
 - [ ] Day 7: channels (real email) + promise tracker
@@ -86,14 +86,16 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 2 complete (Aug 23, 2026): data/generate.py builds 20 buyers + ~250
-  invoices (100 current) from --seed; two seed-42 runs are byte-identical.
-  Invoices name the goods and a PO, so messages read like real documents.
-- Hidden personas in sim/hidden_personas.json (gitignored). Nothing under
-  engine/ may read it - a test asserts no persona tag reaches data/seed/.
-- Dataset is gitignored: run `python data/generate.py --seed 42` on a fresh
-  clone. SIMULATION_START is 2026-08-24, never date.today().
-- config/legal.yaml `rbi_bank_rate` is still null - set the verified rate
-  before Day 4 law math, and again before submission.
-- Next: Day 3 score engine + watchdog. Persona delay signal is clean
-  (forgetful ~1d, cash_tight ~19d, habitual ~42d, deadbeat ~103d).
+- Day 3 done (Aug 23, 2026): watchdog + score engine, 138 tests green.
+  Score separates the hidden personas it never saw: forgetful ~96,
+  cash_tight ~63, habitual ~19, deadbeat 0.
+- Section 15 (statutory_due_date) was pulled forward into engine/law.py with
+  tests, because score and watchdog both measure lateness against it.
+  Interest + 43B(h) + Samadhaan still to do on Day 4-5.
+- New infrastructure: engine/config.py (only reader of config/*.yaml) and
+  data/store.py (loads seed data, DatasetMissing if absent). main.py now
+  auto-generates the dataset when it is missing, so a fresh clone runs.
+- config/legal.yaml `rbi_bank_rate` is STILL null - Day 4 interest math is
+  blocked on setting the verified rate.
+- Next: Day 4 law engine - Section 16 compound interest (monthly rests,
+  3x bank rate) and Section 43B(h) buyer tax exposure, tests first.

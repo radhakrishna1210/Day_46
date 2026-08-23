@@ -32,6 +32,14 @@ Run `python data/generate.py --seed 42` before `main.py`. `buyers.json` and
 `invoices.json` are gitignored, so a fresh clone has no dataset until you
 generate one. The same seed always rebuilds byte-identical files.
 
+Inspect the pieces that are built:
+
+```bash
+python engine/watchdog.py                # today's overdue work queue
+python engine/score.py                   # every buyer scored, worst first
+python engine/score.py --explain BUY-01  # the arithmetic behind one score
+```
+
 No API key is required. `LLM_MODE=mock` gives deterministic canned responses, so
 the project runs end to end on a fresh clone.
 
