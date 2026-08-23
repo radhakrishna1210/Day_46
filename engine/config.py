@@ -18,6 +18,7 @@ RULES_PATH = ROOT / "config" / "rules.yaml"
 LEGAL_PATH = ROOT / "config" / "legal.yaml"
 SUPPLIER_PATH = ROOT / "config" / "supplier.yaml"
 MESSAGES_PATH = ROOT / "config" / "messages.yaml"
+REPLIES_PATH = ROOT / "config" / "replies.yaml"
 
 
 @lru_cache(maxsize=1)
@@ -48,9 +49,16 @@ def messages() -> dict[str, Any]:
     return yaml.safe_load(MESSAGES_PATH.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def replies() -> dict[str, Any]:
+    """Canned buyer replies for mock mode, keyed by fixture name."""
+    return yaml.safe_load(REPLIES_PATH.read_text(encoding="utf-8"))
+
+
 def reload() -> None:
     """Drop the cached config. For tests that edit the YAML on disk."""
     rules.cache_clear()
     legal.cache_clear()
     supplier.cache_clear()
     messages.cache_clear()
+    replies.cache_clear()

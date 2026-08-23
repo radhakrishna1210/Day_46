@@ -59,6 +59,17 @@ rung_one_banned_words:
   - "deduction"
   - "overdue"
 
+# --- referencing a promise that was made and missed -----------------------
+# Connective tissue, not a legal statement. The date and the words come from
+# the stored promise record, so nothing here is invented.
+promise_reference:
+  english: >-
+    On {promised_on} you committed to clearing this by {promised_date}
+    ("{promise_quote}"). That date has now passed.
+  hinglish: >-
+    {promised_on} ko aapne {promised_date} tak clear karne ko bola tha
+    ("{promise_quote}"). Woh date nikal gayi.
+
 # --- tone, by profile and score band --------------------------------------
 tone:
   corporate:
@@ -128,6 +139,8 @@ mock_drafts:
       Invoice {invoice_id} for {outstanding} ({goods}) was due on
       {statutory_due_date} and is now {days_overdue} days past that date.
 
+      {promise_reference}
+
       {fact_section_15}
 
       {fact_section_16} {fact_section_16_running}
@@ -147,6 +160,8 @@ mock_drafts:
       {invoice_id} ({outstanding}) ka payment {days_overdue} din se pending
       hai. Due date {statutory_due_date} thi.
 
+      {promise_reference}
+
       {fact_section_16} {fact_section_16_running}
 
       Request hai ki is hafte clear kar dein, taaki aur na badhe. Koi dikkat
@@ -162,6 +177,8 @@ mock_drafts:
 
       Invoice {invoice_id} for {outstanding} ({goods}) was due on
       {statutory_due_date} and is now {days_overdue} days past that date.
+
+      {promise_reference}
 
       {fact_section_15}
 
@@ -185,6 +202,8 @@ mock_drafts:
 
       {invoice_id} ({outstanding}) ka payment {days_overdue} din se pending
       hai. Due date {statutory_due_date} thi.
+
+      {promise_reference}
 
       {fact_section_16} {fact_section_16_running}
 

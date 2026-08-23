@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable
 
 from data import generate, store
@@ -36,6 +36,10 @@ class Context:
     positions: list[dict[str, Any]]
     actions: list[Any] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
+    deliveries: list[dict[str, Any]] = field(default_factory=list)
+    promises: list[dict[str, Any]] = field(default_factory=list)
+    send_email: bool = False
+    ignore_quiet_hours: bool = False
     dry_run: bool = False
 
 
@@ -170,6 +174,7 @@ def stage_writer(context: Context) -> str:
             log=not context.dry_run,
         )
         drafted["invoice_id"] = action.invoice_id
+        drafted["buyer_id"] = action.buyer_id
         drafted["rung"] = action.rung
         context.messages.append(drafted)
         fallbacks += drafted["fallback_used"]
@@ -199,6 +204,61 @@ def print_messages(context: Context, limit: int = 5) -> None:
             print(f"  {line}" if line else "")
 
 
+def stage_promises(context: Context) -> str:
+    """Sweep for broken promises so the next pass can escalate on them.
+
+    Buyer replies arrive from the simulator on Day 8; until then this is the
+    daily check that turns an unpaid commitment into a broken one.
+    """
+    broken = promises.sweep(context.promises, context.today,
+                            log=not context.dry_run)
+    still_open = sum(1 for p in context.promises if p["status"] == "open")
+    return (f"{len(context.promises)} promises on file, {still_open} open, "
+            f"{len(broken)} newly broken")
+
+
+def stage_post_office(context: Context) -> str:
+    by_id = {buyer["buyer_id"]: buyer for buyer in context.buyers}
+    context.deliveries = []
+
+    for drafted in context.messages:
+        buyer = by_id[drafted["buyer_id"]] if drafted.get("buyer_id") else None
+        buyer = buyer or next(
+            (b for b in context.buyers
+             if b["buyer_id"] == drafted.get("buyer_id")), None)
+        if buyer is None:
+            continue
+        channel = buyer.get("preferred_channel", "email")
+        for target in {channel, "email"}:
+            to = (buyer["contact_email"] if target == "email"
+                  else buyer.get("contact_phone", ""))
+            context.deliveries.append(channels.send(
+                target, to, drafted,
+                invoice_id=drafted["invoice_id"], buyer_id=buyer["buyer_id"],
+                rung=drafted["rung"], today=context.today,
+                # A real wall clock, so quiet hours actually apply to a real
+                # send today rather than waiting for the simulator to exist.
+                now=datetime.now(),
+                enabled=context.send_email,
+                ignore_quiet_hours=context.ignore_quiet_hours,
+                log=not context.dry_run,
+            ))
+
+    counts: dict[str, int] = {}
+    for delivery in context.deliveries:
+        counts[delivery["status"]] = counts.get(delivery["status"], 0) + 1
+    tally = ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
+    return f"{len(context.deliveries)} deliveries ({tally})"
+
+
+def print_deliveries(context: Context, limit: int = 6) -> None:
+    print()
+    for delivery in context.deliveries[:limit]:
+        print(f"  {channels.describe(delivery)}")
+    if len(context.deliveries) > limit:
+        print(f"  ... and {len(context.deliveries) - limit} more")
+
+
 def _pending(day: str) -> Callable[[Context], str]:
     """A stage that has not been built yet, and says so."""
     def run(_context: Context) -> str:
@@ -223,21 +283,24 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("law engine", "statutory due date, penal interest, buyer tax exposure", stage_law),
     Stage("brain", "pick one escalation rung, or stop", stage_brain),
     Stage("message writer", "draft the message for the chosen rung", stage_writer),
-    Stage("promise tracker", "read replies, remember and check promises", _pending("Day 7")),
-    Stage("post office", "send the email, log the stubbed channels", _pending("Day 7")),
+    Stage("promise tracker", "read replies, remember and check promises", stage_promises),
+    Stage("post office", "send the email, log the stubbed channels", stage_post_office),
     Stage("simulator", "run baseline and agent over the same seeded world", _pending("Day 8")),
     Stage("scoreboard", "build the comparison report and exceptions list", _pending("Day 10")),
 )
 
 
-def run(seed: int, dry_run: bool = False) -> int:
+def run(seed: int, dry_run: bool = False, send_email: bool = False,
+        ignore_quiet_hours: bool = False) -> int:
     """Walk the pipeline. Returns a process exit code."""
     enable_unicode_output()
     print(f"revenue recovery agent: starting (seed={seed}, llm_mode={llm.get_mode()})")
     if dry_run:
         audit.disable()
     context = Context(seed=seed, today=date.today(), buyers=[], invoices=[],
-                      queue=[], scores=[], positions=[], dry_run=dry_run)
+                      queue=[], scores=[], positions=[], dry_run=dry_run,
+                      send_email=send_email,
+                      ignore_quiet_hours=ignore_quiet_hours)
 
     for number, stage in enumerate(PIPELINE, start=1):
         print(f"step {number}: {stage.name} -- {stage.what}")
@@ -248,6 +311,8 @@ def run(seed: int, dry_run: bool = False) -> int:
             print_decisions(context)
         if stage.name == "message writer" and context.messages:
             print_messages(context)
+        if stage.name == "post office" and context.deliveries:
+            print_deliveries(context)
 
     built = sum(1 for stage in PIPELINE if not getattr(stage.run, "pending", False))
     print(f"audit trail ({audit.__name__}): {built} of {len(PIPELINE)} stages doing real work")
@@ -270,8 +335,21 @@ def main() -> int:
         action="store_true",
         help="decide and print, but write nothing to the audit trail",
     )
+    parser.add_argument(
+        "--send-email",
+        action="store_true",
+        help="actually deliver email, to TEST_INBOX_EMAIL and nowhere else "
+             "(off by default; nothing opens a socket without it)",
+    )
+    parser.add_argument(
+        "--ignore-quiet-hours",
+        action="store_true",
+        help="send even inside quiet hours. Recorded in the audit trail as an "
+             "explicit human override, not a silent skip.",
+    )
     args = parser.parse_args()
-    return run(args.seed, dry_run=args.dry_run)
+    return run(args.seed, dry_run=args.dry_run, send_email=args.send_email,
+               ignore_quiet_hours=args.ignore_quiet_hours)
 
 
 if __name__ == "__main__":

@@ -131,7 +131,25 @@ def _values(skeleton: dict[str, Any], invoice: dict[str, Any],
     for slot, candidates in FACT_SLOTS.items():
         values[slot] = next((by_key[key] for key in candidates if key in by_key), "")
     values["facts"] = "\n\n".join(skeleton.get("facts", []))
+    values["promise_reference"] = ""
     return values
+
+
+def promise_reference(promise: dict[str, Any] | None, language: str) -> str:
+    """One sentence naming a promise that was made and missed.
+
+    Every part of it -- the day it was made, the day promised, and the buyer's
+    own words -- comes from the stored record. The writer invents nothing, and
+    a case with no broken promise gets an empty string rather than a hedge.
+    """
+    if not promise:
+        return ""
+    template = messages()["promise_reference"][language]
+    return " ".join(template.format(
+        promised_on=promise.get("recorded_on", ""),
+        promised_date=promise.get("promised_date", ""),
+        promise_quote=promise.get("quote", ""),
+    ).split())
 
 
 def _fill(text: str, values: dict[str, str]) -> str:
@@ -354,6 +372,7 @@ def write_message(
     buyer: dict[str, Any],
     score: dict[str, Any] | None = None,
     promises: list[dict[str, Any]] | None = None,
+    broken_promise: dict[str, Any] | None = None,
     today: date | None = None,
     log: bool = True,
 ) -> dict[str, Any]:
@@ -386,6 +405,7 @@ def write_message(
 
     language = choose_language(buyer)
     values = _values(skeleton, invoice, buyer)
+    values["promise_reference"] = promise_reference(broken_promise, language)
     prompt = build_prompt(skeleton, values, buyer, score, language, promises)
     variant = f"rung{skeleton['rung']}_{language}"
     attempts_allowed = 1 + int(rules().get("writer", {}).get("regeneration_attempts", 1))

@@ -169,3 +169,16 @@ channels:
   email: real                   # actually sent, only to TEST_INBOX_EMAIL
   whatsapp: stub                # logs "would send"
   sms: stub                     # logs "would send"
+  # Host and port are configuration; the credentials are only ever in .env.
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  smtp_timeout_seconds: 20
+  # Why the stubs are stubs. Quoted verbatim into the audit trail so the scope
+  # call is recorded where a reviewer will actually see it.
+  stub_reasons:
+    whatsapp: >-
+      the WhatsApp Business API needs business verification, which is out of
+      scope for this build
+    sms: >-
+      an SMS gateway needs a registered sender ID and DLT templates, which is
+      out of scope for this build

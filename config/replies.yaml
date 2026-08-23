@@ -1,0 +1,132 @@
+# Canned buyer replies for LLM_MODE=mock.
+#
+# Intent extraction from messy Hinglish is the clearest case in this project
+# for using a model rather than rules, so these fixtures exist to exercise that
+# path deterministically without an API key.
+#
+# `response` is what the model returns. Note what it does NOT return: a date.
+# The model reports what it saw -- "the 5th", "next week" -- and a rule in
+# engine/promises.py resolves that against the simulation clock. Letting a
+# model do calendar arithmetic is how "5 tarikh" becomes a date in the past.
+#
+# date_hint grammar:
+#   day_of_month:5     the 5th, next occurrence from today
+#   relative_days:7    seven days from today
+#   iso:2026-09-05     an explicit date the buyer actually stated
+#   month_end          the last day of the current month
+#   null               no date offered
+
+version: 1
+
+fixtures:
+  - key: promise_tarikh_hinglish
+    reply: "boss thoda time do, 5 tarikh tak ho jayega"
+    response:
+      intent: promise
+      date_hint: "day_of_month:5"
+      amount: full
+      confidence: high
+      quote: "5 tarikh tak ho jayega"
+
+  - key: promise_explicit_english
+    reply: "Cash flow is tight this month, we will clear it by 5th September."
+    response:
+      intent: promise
+      date_hint: "day_of_month:5"
+      amount: full
+      confidence: high
+      quote: "we will clear it by 5th September"
+
+  - key: promise_partial_hinglish
+    reply: "aadha abhi bhej raha hoon, baaki agle hafte"
+    response:
+      intent: promise
+      date_hint: "relative_days:7"
+      amount: partial
+      confidence: medium
+      quote: "aadha abhi bhej raha hoon, baaki agle hafte"
+
+  - key: promise_month_end
+    reply: "Will settle at month end once collections come in."
+    response:
+      intent: promise
+      date_hint: "month_end"
+      amount: full
+      confidence: medium
+      quote: "Will settle at month end"
+
+  - key: dispute_damage_hinglish
+    reply: "material mein problem thi, 12 units damage the — pehle credit note bhejo"
+    response:
+      intent: dispute
+      date_hint: null
+      amount: null
+      confidence: high
+      quote: "12 units damage the -- pehle credit note bhejo"
+
+  - key: dispute_po_mismatch
+    reply: "Your invoice does not match our PO. Please check and revert."
+    response:
+      intent: dispute
+      date_hint: null
+      amount: null
+      confidence: high
+      quote: "Your invoice does not match our PO"
+
+  - key: refusal_hinglish
+    reply: "abhi nahi ho payega, budget nahi hai"
+    response:
+      intent: refusal
+      date_hint: null
+      amount: null
+      confidence: high
+      quote: "abhi nahi ho payega"
+
+  - key: question_unknown_invoice
+    reply: "kaunsa invoice? humein koi bill nahi mila"
+    response:
+      intent: question
+      date_hint: null
+      amount: null
+      confidence: high
+      quote: "humein koi bill nahi mila"
+
+  # A CLAIM of payment, not a promise. It asks us to confirm something, so it
+  # is a question: the right response is to reconcile, not to chase or to
+  # record a commitment that was never made.
+  - key: question_payment_claimed
+    reply: "Payment done, UTR 4432119. Please confirm receipt."
+    response:
+      intent: question
+      date_hint: null
+      amount: full
+      confidence: medium
+      quote: "Payment done, UTR 4432119"
+
+  - key: noise_ok
+    reply: "ok"
+    response:
+      intent: noise
+      date_hint: null
+      amount: null
+      confidence: high
+      quote: "ok"
+
+  # Deliberately malformed, to prove the parser does not trust the model.
+  - key: broken_unknown_intent
+    reply: "(a reply the model mislabels)"
+    response:
+      intent: escalate_immediately
+      date_hint: null
+      amount: null
+      confidence: low
+      quote: ""
+
+  - key: broken_past_date
+    reply: "(a promise the model dates in the past)"
+    response:
+      intent: promise
+      date_hint: "iso:2020-01-01"
+      amount: full
+      confidence: low
+      quote: "already paid last year"

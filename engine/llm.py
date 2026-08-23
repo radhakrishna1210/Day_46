@@ -98,6 +98,17 @@ def _mock_response(prompt: str, purpose: str, variant: str | None = None) -> str
     """
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
 
+    if purpose == "parse_reply" and variant:
+        from engine.config import replies
+
+        fixtures = {item["key"]: item for item in replies()["fixtures"]}
+        if variant not in fixtures:
+            raise KeyError(
+                f"no canned reply for variant {variant!r}; "
+                f"known variants: {sorted(fixtures)}"
+            )
+        return json.dumps(fixtures[variant]["response"], ensure_ascii=False)
+
     if purpose == "draft_message" and variant:
         from engine.config import messages
 
