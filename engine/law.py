@@ -313,6 +313,42 @@ def available_rung(invoice: dict[str, Any], today: date, fy_end: date) -> int:
     return rung
 
 
+def render_clauses(values: dict[str, Any]) -> dict[str, str]:
+    """Render the canonical legal statements from config/legal.yaml.
+
+    A clause may reference another clause by name, so this resolves repeatedly
+    until nothing more can be filled. Clauses whose placeholders the caller has
+    not supplied are simply left out -- the Samadhaan draft needs a different
+    subset from a message, and the surrounding template raises a KeyError if it
+    asks for one that could not be built.
+    """
+    templates = legal()["clauses"]
+    rendered: dict[str, str] = {}
+    for _ in range(len(templates) + 1):
+        progressed = False
+        for key, template in templates.items():
+            if key in rendered:
+                continue
+            try:
+                text = template.format(**{**values, **rendered})
+            except KeyError:
+                continue
+            rendered[key] = " ".join(text.split())
+            progressed = True
+        if not progressed or len(rendered) == len(templates):
+            break
+    return rendered
+
+
+def render(template: str, values: dict[str, Any]) -> str:
+    """Fill one template with the caller's values plus the canonical clauses.
+
+    The single door both engine/law.py and engine/samadhaan.py go through, so a
+    legal position is worded in exactly one place however it is quoted.
+    """
+    return " ".join(template.format(**{**values, **render_clauses(values)}).split())
+
+
 def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> dict[str, str]:
     """Render the citable one-liners for this position, keyed by config key.
 
@@ -371,7 +407,7 @@ def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> dict[str, str]:
     if rung >= 4:
         keys.append("samadhaan")
 
-    return {key: " ".join(templates[key].format(**values).split()) for key in keys}
+    return {key: render(templates[key], values) for key in keys}
 
 
 def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:

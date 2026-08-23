@@ -107,6 +107,28 @@ section_23_interest_not_deductible: true
 # Placeholders are filled by engine/law.py from the values above plus the
 # computed figures. Every sentence states a fact and cites its source.
 # NONE of them may threaten -- tests/test_law.py scans for that.
+# --- Canonical legal statements -------------------------------------------
+# ONE statement of each legal position, and only one. Both consumers compose
+# from these: the message facts below (rendered by engine/law.py) and the
+# Samadhaan draft (engine/samadhaan.py). Nothing else may restate a position --
+# two wordings of the same section is how a message and a draft end up
+# disagreeing in front of a buyer.
+#
+# A clause may reference another clause by name; engine.law.render_clauses
+# resolves them before the surrounding template is filled.
+clauses:
+  section_15_ceiling: >-
+    the agreed term of {agreed_days} days exceeds the {max_agreement_days}-day
+    ceiling set by Section 15 of the MSMED Act 2006
+  section_16_rate: >-
+    compound interest with monthly rests at {effective_rate_pct}% per annum,
+    being three times the RBI Bank Rate of {bank_rate_pct}%
+    (Section 16, MSMED Act 2006)
+  section_19_predeposit: >-
+    Under Section 19 of the MSMED Act 2006, an application to set aside a
+    decree, award or order of the Council is not entertained unless the buyer
+    deposits {predeposit_pct}% of the amount in terms of the award.
+
 facts:
   section_15_no_agreement: >-
     With no written agreement in place, payment fell due within
@@ -116,14 +138,10 @@ facts:
     Payment fell due on {statutory_due}, {statutory_term} days from acceptance
     of the goods (Section 15, MSMED Act 2006).
   section_15_capped: >-
-    The agreed term of {agreed_days} days exceeds the {max_agreement_days}-day
-    ceiling set by Section 15 of the MSMED Act 2006, so the statutory due date
-    was {statutory_due}.
+    As {section_15_ceiling}, the statutory due date was {statutory_due}.
   section_16: >-
-    Compound interest with monthly rests has accrued from {interest_from} at
-    {effective_rate_pct}% per annum, three times the RBI Bank Rate of
-    {bank_rate_pct}% (Section 16, MSMED Act 2006). Interest to date:
-    {interest}.
+    Interest has accrued from {interest_from} as {section_16_rate}.
+    Interest to date: {interest}.
   section_16_running: >-
     At the current rate this outstanding is adding about {per_day} each day;
     a further {horizon_days} days would add about {cost_of_waiting}.
@@ -147,9 +165,7 @@ facts:
     is worth about {tax_exposure}.
   samadhaan: >-
     Delayed payments may be referred to the {portal_name} portal at
-    {portal_url}. Under Section 19 of the MSMED Act 2006, a buyer challenging an
-    award of the Facilitation Council deposits {predeposit_pct}% of the amount
-    first.
+    {portal_url}. {section_19_predeposit}
 
 # --- MSME Samadhaan: the final rung --------------------------------------
 samadhaan:
@@ -164,19 +180,14 @@ samadhaan:
 reference_text:
   relief_sought: >-
     The Applicant seeks a direction to the Respondent to pay the principal
-    amount of {principal}, together with compound interest with monthly rests
-    under Section 16 of the MSMED Act 2006 at {effective_rate_pct}% per annum,
-    being three times the RBI Bank Rate of {bank_rate_pct}%, amounting to
+    amount of {principal}, together with {section_16_rate}, amounting to
     {interest} as at {as_of}, and continuing until payment is made.
     Total claimed as at {as_of}: {total}.
   jurisdiction: >-
     This reference is made under Section 18 of the MSMED Act 2006 to the
     {council_name}, the Micro and Small Enterprises Facilitation Council for
     the State in which the Applicant is located.
-  predeposit_note: >-
-    Under Section 19 of the MSMED Act 2006, an application to set aside any
-    decree, award or order of the Council is not entertained unless the
-    Respondent deposits {predeposit_pct}% of the amount in terms of the award.
+  predeposit_note: "{section_19_predeposit}"
   declaration: >-
     I declare that the facts stated above are true to the best of my knowledge
     and belief, that the Applicant is a registered micro or small enterprise
@@ -186,14 +197,13 @@ reference_text:
   heading_interest: "Interest computation (Section 16)"
   multiplier_label: "{multiplier}x (Section 16)"
   void_term_note: >-
-    The agreed term of {agreed_days} days exceeds the {ceiling}-day ceiling in
-    Section 15 and is void to that extent.
+    As {section_15_ceiling}, the term is void to that extent.
   no_acceptance_date: >-
     The invoice has no acceptance date, so the statutory clock under Section 15
     cannot be established.
   interest_preamble: >-
-    Compound interest with monthly rests at three times the RBI Bank Rate,
-    payable notwithstanding anything in the agreement between the parties.
+    Interest is claimed as {section_16_rate}, payable notwithstanding anything
+    contained in the agreement between the parties.
   draft_warning: >-
     THIS IS AN UNFILED DRAFT generated from recorded invoice data. It has not
     been reviewed by a legal practitioner and no reference has been made. Every

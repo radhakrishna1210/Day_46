@@ -148,3 +148,53 @@ def test_every_statutory_value_is_actually_present_in_config() -> None:
     assert FORBIDDEN_DAY_COUNTS == {15.0, 45.0, 30.0}
     assert _CONFIG["retrieved_on"] == "2026-08-23"
     assert "facts" in _CONFIG and len(_CONFIG["facts"]) >= 7
+
+
+# --- one statement per legal position ------------------------------------
+# The refactor that introduced config/legal.yaml `clauses` collapsed three
+# statements of the Section 16 rate, two of the Section 19 pre-deposit and two
+# of the Section 15 ceiling onto one each. These tests keep it that way: two
+# wordings of the same section is how a message and a draft end up disagreeing
+# in front of a buyer.
+
+def _config_body() -> str:
+    """legal.yaml with comment lines removed -- comments quote the Act on purpose."""
+    raw = LEGAL_CONFIG.read_text(encoding="utf-8")
+    return "\n".join(line for line in raw.splitlines() if not line.strip().startswith("#"))
+
+
+@pytest.mark.parametrize("phrase", [
+    "three times the RBI Bank Rate",
+    "ceiling set by Section 15",
+    "Section 19 of the MSMED Act",
+])
+def test_each_legal_position_is_worded_exactly_once(phrase: str) -> None:
+    occurrences = _config_body().count(phrase)
+    assert occurrences == 1, (
+        f"{phrase!r} appears {occurrences} times in legal.yaml. A legal position "
+        f"belongs in the clauses block once; everything else composes from it."
+    )
+
+
+def test_the_clauses_block_is_where_those_statements_live() -> None:
+    clauses = _CONFIG["clauses"]
+    assert "three times the RBI Bank Rate" in clauses["section_16_rate"]
+    assert "ceiling set by Section 15" in clauses["section_15_ceiling"]
+    assert "Section 19 of the MSMED Act" in clauses["section_19_predeposit"]
+
+
+def test_every_clause_reference_names_a_real_clause() -> None:
+    """A typo in a template would silently drop the legal position from a message."""
+    import re
+    known = set(_CONFIG["clauses"])
+    for block in ("facts", "reference_text"):
+        for key, template in _CONFIG[block].items():
+            for reference in re.findall(r"\{([a-z_0-9]+)\}", str(template)):
+                if reference.startswith("section_") and reference in known:
+                    continue
+                assert reference not in {f"{k}_MISSING" for k in known}, key
+    # and the composing templates really do reference them
+    composed = " ".join(str(v) for v in _CONFIG["facts"].values())
+    composed += " ".join(str(v) for v in _CONFIG["reference_text"].values())
+    for clause in known:
+        assert "{" + clause + "}" in composed, f"clause {clause} is never used"

@@ -239,3 +239,41 @@ def test_the_draft_writes_to_the_audit_drafts_folder(tmp_path) -> None:
 
 def test_the_default_output_location_is_under_audit() -> None:
     assert samadhaan.DEFAULT_DRAFT_DIR.parts[-2:] == ("audit", "drafts")
+
+
+# --- both consumers read from the single source --------------------------
+
+def test_the_draft_and_a_message_quote_identical_section_16_wording() -> None:
+    """The refactor's whole point: one wording, two consumers.
+
+    The clause is rendered once from config and must appear verbatim in both
+    the buyer-facing fact and the Samadhaan draft.
+    """
+    record = invoice()
+    position = law.legal_position(record, TODAY)
+    clause = law.render_clauses({
+        "effective_rate_pct": f"{law.effective_annual_rate() * 100:.2f}",
+        "bank_rate_pct": f"{float(law.legal()['rbi_bank_rate']) * 100:.2f}",
+    })["section_16_rate"]
+
+    message_fact = position["facts_by_key"]["section_16"]
+    draft = samadhaan.build_draft(record, BUYER, position, TODAY)["markdown"]
+
+    assert clause in message_fact, "the message does not use the canonical clause"
+    assert clause in draft, "the draft does not use the canonical clause"
+
+
+def test_the_draft_and_a_message_quote_identical_predeposit_wording() -> None:
+    record = invoice()
+    position = law.legal_position(record, TODAY)
+    clause = law.render_clauses({"predeposit_pct": "75"})["section_19_predeposit"]
+    assert clause in position["facts_by_key"]["samadhaan"]
+    assert clause in samadhaan.build_draft(record, BUYER, position, TODAY)["markdown"]
+
+
+def test_clauses_resolve_from_the_law_engine_value_set() -> None:
+    """Every clause must be buildable where messages are rendered."""
+    position = law.legal_position(invoice(), TODAY)
+    assert position["facts_by_key"], "no facts rendered at all"
+    for fact in position["facts_by_key"].values():
+        assert "{" not in fact, f"unresolved placeholder in: {fact}"

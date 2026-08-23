@@ -27,6 +27,7 @@ from typing import Any
 from engine.config import legal, rules, supplier
 from engine.law import (
     _as_date,
+    render,
     agreed_term_is_void,
     effective_annual_rate,
     financial_year_end,
@@ -177,6 +178,17 @@ def build_draft(
     council = supplier()["facilitation_council"]
     wording = config["reference_text"]
 
+    # Everything the canonical clauses in config/legal.yaml may need. The draft
+    # states no legal position of its own; it composes from the same source the
+    # buyer-facing messages use.
+    clause_values: dict[str, Any] = {
+        "effective_rate_pct": f"{effective_annual_rate() * 100:.2f}",
+        "bank_rate_pct": f"{float(config['rbi_bank_rate']) * 100:.2f}",
+        "predeposit_pct": f"{float(config['samadhaan']['challenge_predeposit_share']) * 100:.0f}",
+        "agreed_days": invoice.get("agreed_days"),
+        "max_agreement_days": config["max_agreement_days"],
+    }
+
     blockers, warnings = _blockers_and_warnings(invoice, buyer, position, today)
     ready = not blockers
 
@@ -256,11 +268,7 @@ def build_draft(
             f"{invoice.get('agreed_days') if invoice.get('agreed_days') else 'none stated'} days |")
         add(f"| Statutory term applied | {term} days from acceptance |")
         if agreed_term_is_void(invoice):
-            note = " ".join(wording["void_term_note"].format(
-                agreed_days=invoice["agreed_days"],
-                ceiling=config["max_agreement_days"],
-            ).split())
-            add(f"| Note | {note} |")
+            add(f"| Note | {render(wording['void_term_note'], clause_values)} |")
         add(f"| Statutory due date | **{position['statutory_due_date']}** |")
         add(f"| Days overdue as at {position['as_of']} | **{position['days_overdue']}** |")
     else:
@@ -271,7 +279,7 @@ def build_draft(
     add(f"## 5. {wording['heading_interest']}")
     add("")
     if position:
-        add(" ".join(wording["interest_preamble"].split()))
+        add(render(wording["interest_preamble"], clause_values))
         add("")
         add("| Input | Value |")
         add("|---|---|")
@@ -303,20 +311,17 @@ def build_draft(
     add("")
     if position:
         values = {
+            **clause_values,
             "principal": format_inr(position["principal_paise"]),
             "interest": format_inr(position["interest_paise"], decimals=True),
             "total": format_inr(position["total_payable_paise"], decimals=True),
-            "effective_rate_pct": f"{effective_annual_rate() * 100:.2f}",
-            "bank_rate_pct": f"{float(config['rbi_bank_rate']) * 100:.2f}",
             "as_of": position["as_of"],
         }
-        add(" ".join(wording["relief_sought"].format(**values).split()))
+        add(render(wording["relief_sought"], values))
         add("")
         add(" ".join(wording["jurisdiction"].format(council_name=council["name"]).split()))
         add("")
-        add(" ".join(wording["predeposit_note"].format(
-            predeposit_pct=f"{float(config['samadhaan']['challenge_predeposit_share']) * 100:.0f}"
-        ).split()))
+        add(render(wording["predeposit_note"], clause_values))
     else:
         add("Not computable.")
     add("")
