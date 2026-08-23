@@ -81,22 +81,22 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 3: score engine + watchdog
 - [x] Day 4-5: law engine + tests + Samadhaan draft
 - [x] Day 6: brain + writer
-- [ ] Day 7: channels (real email) + promise tracker
+- [~] Day 7: channels + promises DONE; real-inbox send unconfirmed
 - [ ] Day 8-9: simulator + baseline experiment
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 6 done (Aug 24, 2026): brain + writer, 398 tests. Dry run drafts 85
-  messages, 36 Hinglish, 0 fallbacks. `python main.py --seed 42 --dry-run`.
-- NO legal wording in config/messages.yaml -- templates hold connective tissue
-  and interpolate {fact_*} from the skeleton. A test enforces it (no %, no
-  currency, no citations). Hinglish keeps legal sentences in English.
-- Ceiling invariant (chosen == 0 OR 1 <= chosen <= available_rung) and the
-  rung-4-above-send-gates ordering both still guarded by tests. Do not reorder.
-- Messages quote interest_per_day_AVERAGE_paise, not the exact daily
-  difference, which is legitimately zero one day per 31-day month.
-- PARKED: (a) starting rung ignores days_overdue, so a 146-day-overdue first
-  contact opens at rung 1; (b) main.py passes history=[] so the ladder never
-  climbs across runs -- seed it from audit.entries_for() with the simulator.
-- Next: Day 7 channels (real email to TEST_INBOX_EMAIL only, quiet hours owed
-  here) + promise tracker.
+- Day 7 built (Aug 24, 2026): channels + promises, 473 tests. Audit run now
+  writes 292 entries (brain 90, writer 85, channels 117).
+- OUTSTANDING: the real-inbox send is UNCONFIRMED. Fill .env (TEST_INBOX_EMAIL,
+  SMTP_USER, SMTP_PASS - Gmail app password) then
+  `python main.py --seed 42 --send-email`. Add --ignore-quiet-hours after 21:00.
+- Email safety is four barriers; the envelope check compares against
+  os.getenv("TEST_INBOX_EMAIL") directly, NOT test_inbox(), because comparing
+  a value with itself could never fire. Tests make smtplib explode.
+- Promises: the model classifies, a RULE resolves the date. Never let the model
+  compute a date - "5 tarikh" on 26 Aug must be 5 Sep, not 5 Aug.
+- PARKED: live-mode LLM calibration (do early, own step); starting rung ignores
+  days_overdue; main.py passes history=[] so the ladder never climbs - fix with
+  the simulator on Day 8.
+- Next: Day 8-9 simulator + baseline experiment.
