@@ -85,3 +85,81 @@ def test_main_runs_clean_and_prints_every_step() -> None:
 
     for number in range(1, len(PIPELINE) + 1):
         assert f"step {number}:" in result.stdout
+
+
+# --- live mode, exercised without spending anything ----------------------
+
+def test_live_mode_builds_the_right_request(monkeypatch) -> None:
+    """The request shape is checked with a fake SDK, so no credits are spent.
+
+    Three things must hold: the model is the one config names for that purpose,
+    the key is passed explicitly rather than left to an ambient credential, and
+    effort is omitted where the model would reject it.
+    """
+    import sys
+    import types
+
+    from engine import llm
+    from engine.config import rules
+
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            block = types.SimpleNamespace(type="text", text="drafted")
+            usage = types.SimpleNamespace(input_tokens=11, output_tokens=22)
+            return types.SimpleNamespace(content=[block], usage=usage)
+
+    class FakeAnthropic:
+        def __init__(self, api_key=None):
+            captured["api_key"] = api_key
+            self.messages = FakeMessages()
+
+    monkeypatch.setitem(sys.modules, "anthropic",
+                        types.SimpleNamespace(Anthropic=FakeAnthropic))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("LLM_MODE", "live")
+
+    assert llm.llm("draft this", purpose="draft_message") == "drafted"
+    config = rules()["llm"]
+    assert captured["model"] == config["models"]["draft_message"]
+    assert captured["max_tokens"] == config["max_tokens"]["draft_message"]
+    assert captured["api_key"] == "sk-test-not-a-real-key"
+    assert captured["output_config"] == {"effort": "medium"}
+    assert llm.last_usage["input_tokens"] == 11
+
+
+def test_live_mode_omits_effort_where_the_model_rejects_it(monkeypatch) -> None:
+    """Haiku 4.5 returns an error for output_config.effort, so it must not be sent."""
+    import sys
+    import types
+
+    from engine import llm
+
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return types.SimpleNamespace(
+                content=[types.SimpleNamespace(type="text", text="{}")],
+                usage=types.SimpleNamespace(input_tokens=1, output_tokens=1))
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(
+        Anthropic=lambda api_key=None: types.SimpleNamespace(messages=FakeMessages())))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_MODE", "live")
+
+    llm.llm("classify this", purpose="parse_reply")
+    assert "output_config" not in captured
+    assert captured["model"] == "claude-haiku-4-5"
+
+
+def test_live_mode_refuses_without_a_key(monkeypatch) -> None:
+    from engine import llm
+
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        llm.llm("anything", purpose="draft_message")

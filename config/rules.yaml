@@ -153,6 +153,26 @@ law_gates:
   # forward is the price of the next decision.
   waiting_horizon_days: 7
 
+# --- Which model answers which question (engine/llm.py) -------------------
+# ARCHITECTURE.md makes this call explicitly: a cheaper model for high-volume
+# reply parsing, a stronger one for writing messages a buyer will read.
+# Credentials never appear here -- only in .env.
+llm:
+  models:
+    draft_message: "claude-sonnet-5"
+    parse_reply: "claude-haiku-4-5"
+    judgment_call: "claude-sonnet-5"
+  max_tokens:
+    draft_message: 2000
+    parse_reply: 600
+    judgment_call: 600
+  # Thinking effort. Haiku 4.5 rejects output_config.effort, so it is null
+  # there rather than a lower setting.
+  effort:
+    draft_message: medium
+    parse_reply: null
+    judgment_call: low
+
 # --- Message writer (engine/writer.py) ------------------------------------
 writer:
   # Hinglish is offered only to these buyer profiles. A corporate accounts
