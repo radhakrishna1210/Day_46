@@ -75,7 +75,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
   a working simple version beats a broken clever one.
 
 ## Current status (update at the end of every session)
-- [ ] Day 1: repo scaffold, config files, empty main.py pipeline
+- [x] Day 1: repo scaffold, config files, empty main.py pipeline
 - [ ] Day 2: data factory
 - [ ] Day 3: score engine + watchdog
 - [ ] Day 4-5: law engine + tests + Samadhaan draft
@@ -85,3 +85,11 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
+- Day 1 done (Aug 23, 2026): scaffold committed, `python main.py --seed 42`
+  walks 10 stages, `pytest -q` green (19 tests). Repo initialised on `main`.
+- ARCHITECTURE.md.md was renamed to ARCHITECTURE.md.
+- engine/audit.py added (not in the original layout) so non-negotiable #1
+  has one home from the start.
+- config/legal.yaml `rbi_bank_rate` is still null - set the verified rate
+  before Day 4 law math, and again before submission.
+- Next: Day 2 data factory (data/generate.py --seed 42), messy on purpose.
