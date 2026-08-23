@@ -1,0 +1,264 @@
+# Message scaffolding for engine/writer.py.
+#
+# ############################################################################
+# #  NO LEGAL PROSE AND NO LEGAL FIGURES BELONG IN THIS FILE.                #
+# #                                                                          #
+# #  Every legal sentence arrives as a {fact_*} placeholder, already          #
+# #  rendered from the clauses block of config/legal.yaml -- the same         #
+# #  wording the Samadhaan draft uses. Templates here carry only connective   #
+# #  tissue: greetings, framing, closings.                                    #
+# #                                                                          #
+# #  tests/test_writer.py fails this file if it contains a percentage, a      #
+# #  currency figure, or a statute citation.                                  #
+# ############################################################################
+
+version: 1
+
+# --- what a message may never say ----------------------------------------
+# Checked case-insensitively against the drafted body. The agent states facts;
+# it does not threaten. This is the last automated barrier before a message
+# would reach a buyer.
+threat_words:
+  - "legal action"
+  - "take action against"
+  - "sue"
+  - "lawsuit"
+  - "court"
+  - "litigation"
+  - "police"
+  - "criminal"
+  - "blacklist"
+  - "defaulter"
+  - "credit rating"
+  - "credit score"
+  - "recovery agent"
+  - "seize"
+  - "confiscate"
+  - "penalty"
+  # "fine" is deliberately absent: "we would be fine with a part payment"
+  # is a sentence we want, and a false rejection pushes the message down to
+  # the plainer fallback. "penalty" covers the meaning that matters.
+  - "consequences"
+  - "failure to comply"
+  - "final warning"
+  - "last warning"
+  - "or else"
+  - "liable to"
+  - "we will be forced"
+  - "failing which"
+  - "immediately or"
+
+# --- what a rung 1 courtesy nudge may never say --------------------------
+# A reminder that mentions the Act is not a courtesy reminder. These are
+# checked in addition to the citation patterns the guardrail applies.
+rung_one_banned_words:
+  - "interest"
+  - "statutory"
+  - "legal"
+  - "tax"
+  - "deduction"
+  - "overdue"
+
+# --- tone, by profile and score band --------------------------------------
+tone:
+  corporate:
+    good: "businesslike and courteous; assume this is an oversight in their payables run"
+    medium: "businesslike and direct"
+    poor: "businesslike and firm, still entirely respectful"
+  small_trader:
+    good: "warm and personal; assume this simply slipped"
+    medium: "friendly but direct"
+    poor: "direct and firm, still respectful"
+
+language_instruction:
+  english: >-
+    Write in plain professional Indian business English. Short paragraphs.
+  hinglish: >-
+    Write in natural Hinglish as used in Indian business WhatsApp -- Roman
+    script, Hindi sentence structure, English for business and legal terms.
+    Address the reader as Sir. Keep it short and warm. Do NOT translate any
+    sentence that has been supplied to you as a fact; reproduce those in
+    English exactly as given.
+
+# --- mock model output, one per rung and language -------------------------
+# What the model "returns" when LLM_MODE=mock. Placeholders are substituted by
+# engine/writer.py after the call, so mock output travels the same guardrail
+# path as a live draft.
+#
+# Available: {invoice_id} {goods} {outstanding} {days_overdue}
+#            {statutory_due_date} {interest} {per_day} {tax_exposure}
+#            {contact_name} {buyer_name} {supplier_name} {supplier_contact}
+#            {fact_section_15} {fact_section_16} {fact_section_16_running}
+#            {fact_section_22} {fact_section_23} {fact_tax}
+mock_drafts:
+  rung1_english:
+    subject: "Invoice {invoice_id} — payment reminder"
+    body: |
+      Dear {contact_name},
+
+      I hope you are well. Our invoice {invoice_id} for {outstanding}
+      ({goods}) is still showing as outstanding on our side.
+
+      Could you let me know when we might expect it, or if anything is holding
+      it up? Happy to resend paperwork if that helps.
+
+      Thanks very much,
+      {supplier_contact}
+      {supplier_name}
+
+  rung1_hinglish:
+    subject: "Invoice {invoice_id} ka payment — reminder"
+    body: |
+      Sir,
+
+      {invoice_id} ka payment {outstanding} abhi tak pending hai ({goods}).
+      Aap ek baar check karwa lijiye.
+
+      Koi issue ho to bata dijiye, hum dekh lenge. Paperwork dobara bhejna ho
+      to bhi bol dijiye.
+
+      Dhanyavaad,
+      {supplier_contact}
+
+  rung2_english:
+    subject: "Invoice {invoice_id} — {days_overdue} days overdue"
+    body: |
+      Dear {contact_name},
+
+      Invoice {invoice_id} for {outstanding} ({goods}) was due on
+      {statutory_due_date} and is now {days_overdue} days past that date.
+
+      {fact_section_15}
+
+      {fact_section_16} {fact_section_16_running}
+
+      We would much rather settle this before it grows further. Could you
+      confirm a date you can work to?
+
+      Regards,
+      {supplier_contact}
+      {supplier_name}
+
+  rung2_hinglish:
+    subject: "{invoice_id} — payment {days_overdue} din se pending"
+    body: |
+      Sir,
+
+      {invoice_id} ({outstanding}) ka payment {days_overdue} din se pending
+      hai. Due date {statutory_due_date} thi.
+
+      {fact_section_16} {fact_section_16_running}
+
+      Request hai ki is hafte clear kar dein, taaki aur na badhe. Koi dikkat
+      ho to phone kar lijiye.
+
+      Dhanyavaad,
+      {supplier_contact}
+
+  rung3_english:
+    subject: "Invoice {invoice_id} — {days_overdue} days overdue, {outstanding} outstanding"
+    body: |
+      Dear {contact_name},
+
+      Invoice {invoice_id} for {outstanding} ({goods}) was due on
+      {statutory_due_date} and is now {days_overdue} days past that date.
+
+      {fact_section_15}
+
+      {fact_section_16} {fact_section_16_running}
+
+      There is also a cost to you in holding it. {fact_tax}
+
+      {fact_section_22} {fact_section_23}
+
+      None of this is where either of us wants to be. If you can confirm a
+      payment date this week, that closes it.
+
+      Regards,
+      {supplier_contact}
+      {supplier_name}
+
+  rung3_hinglish:
+    subject: "{invoice_id} — {outstanding} pending, {days_overdue} din"
+    body: |
+      Sir,
+
+      {invoice_id} ({outstanding}) ka payment {days_overdue} din se pending
+      hai. Due date {statutory_due_date} thi.
+
+      {fact_section_16} {fact_section_16_running}
+
+      Ek baat aur — is delay ka kharcha aapko bhi padta hai. {fact_tax}
+
+      {fact_section_22}
+
+      Hum dono ke liye behtar yehi hai ki yeh settle ho jaaye. Is hafte ek
+      date confirm kar dijiye to baat khatam.
+
+      Dhanyavaad,
+      {supplier_contact}
+
+# --- the fallback ---------------------------------------------------------
+# Used when a drafted message fails the guardrail twice. Deliberately plain:
+# it assembles only the skeleton's own content, so it cannot fail the checks
+# that the drafted version failed. Every use is logged to the audit trail.
+fallback:
+  english:
+    # Rung 1: no legal content, so nothing that would fail a courtesy check.
+    courtesy:
+      subject: "Invoice {invoice_id} — {outstanding}"
+      body: |
+        Dear {contact_name},
+
+        This is a reminder about invoice {invoice_id} for {outstanding}
+        ({goods}), which is still showing as unpaid on our side.
+
+        Please let us know when we can expect it.
+
+        Regards,
+        {supplier_contact}
+        {supplier_name}
+    # Rung 2 and above: must carry every figure the guardrail requires.
+    factual:
+      subject: "Invoice {invoice_id} — {outstanding}, {days_overdue} days past due"
+      body: |
+        Dear {contact_name},
+
+        This is regarding invoice {invoice_id} for {outstanding} ({goods}),
+        which was due on {statutory_due_date} and is now {days_overdue} days
+        past that date.
+
+        {facts}
+
+        Please let us know when payment can be expected.
+
+        Regards,
+        {supplier_contact}
+        {supplier_name}
+  hinglish:
+    courtesy:
+      subject: "Invoice {invoice_id} — {outstanding}"
+      body: |
+        Sir,
+
+        {invoice_id} ({outstanding}) ka payment abhi tak pending hai
+        ({goods}).
+
+        Kab tak ho payega, bata dijiye.
+
+        Dhanyavaad,
+        {supplier_contact}
+    factual:
+      subject: "Invoice {invoice_id} — {outstanding}, {days_overdue} din"
+      body: |
+        Sir,
+
+        Yeh invoice {invoice_id} ({outstanding}) ke baare mein hai ({goods}).
+        Due date {statutory_due_date} thi, aur {days_overdue} din ho chuke hain.
+
+        {facts}
+
+        Payment kab tak ho payega, bata dijiye.
+
+        Dhanyavaad,
+        {supplier_contact}

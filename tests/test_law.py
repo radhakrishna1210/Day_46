@@ -729,3 +729,36 @@ def test_a_not_yet_due_position_has_no_forward_looking_cost() -> None:
 def test_the_running_cost_is_stated_as_a_fact() -> None:
     facts = " ".join(law.legal_position(overdue_invoice(), date(2026, 8, 16))["facts"])
     assert "248.74" in facts or "each day" in facts
+
+
+def test_the_daily_rate_quoted_to_a_buyer_is_never_zero_while_interest_runs() -> None:
+    """Calendar rests plus a 30-day stub basis make one day a year flat.
+
+    On the day a 30-day stub rolls into a fresh monthly rest the two factors
+    coincide exactly, so the one-day difference is genuinely zero. That is
+    true and useless: "this is adding about Rs 0.00 each day" is not a
+    sentence worth sending. The averaged figure is what a message quotes.
+    """
+    record = invoice(written=False, agreed_days=None, acceptance="2026-05-09",
+                     amount=109_960_000)
+    flat_day = date(2026, 8, 24)
+    assert law.interest_per_day_paise(record, flat_day) == 0, "fixture no longer flat"
+    assert law.interest_per_day_average_paise(record, flat_day) > 0
+
+    position = law.legal_position(record, flat_day)
+    assert position["interest_per_day_average_paise"] > 0
+    assert "0.00 each day" not in " ".join(position["facts"])
+
+
+def test_the_averaged_rate_matches_the_week_it_averages() -> None:
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    when = date(2026, 8, 16)
+    week = law.cost_of_waiting_paise(record, when)
+    assert law.interest_per_day_average_paise(record, when) == round(week / 7)
+
+
+def test_the_exact_daily_figure_is_still_recorded_for_audit() -> None:
+    """The averaged number is for prose; the exact one stays in the position."""
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    position = law.legal_position(record, date(2026, 8, 16))
+    assert position["interest_per_day_paise"] == 24_874

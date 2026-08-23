@@ -245,6 +245,24 @@ def cost_of_waiting_paise(invoice: dict[str, Any], today: date, days: int | None
             - interest_owed_paise(invoice, today))
 
 
+def interest_per_day_average_paise(invoice: dict[str, Any], today: date,
+                                  days: int | None = None) -> int:
+    """The average daily accrual over the coming horizon, in integer paise.
+
+    This is the figure a message should quote, not the exact one-day
+    difference. Calendar-month rests combined with a 30-day stub basis mean
+    that on the day a 30-day stub rolls into a new rest the two factors
+    coincide exactly and the one-day increment is zero -- true, but "this is
+    adding about Rs 0.00 each day" is a useless thing to tell a buyer. The
+    average over the next week is stable, still accurate to "about", and never
+    zero while interest is running.
+    """
+    if days is None:
+        days = int(rules()["law_gates"]["waiting_horizon_days"])
+    total = cost_of_waiting_paise(invoice, today, days)
+    return round_paise(total / days) if days else 0
+
+
 # --------------------------------------------------------------------------
 # Section 37(2)(g), Income-tax Act 2025 (formerly s.43B(h), 1961)
 # --------------------------------------------------------------------------
@@ -372,7 +390,7 @@ def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> dict[str, str]:
         "effective_rate_pct": f"{effective_annual_rate() * 100:.2f}",
         "bank_rate_pct": f"{float(config['rbi_bank_rate']) * 100:.2f}",
         "interest": format_inr(position["interest_paise"], decimals=True),
-        "per_day": format_inr(position["interest_per_day_paise"], decimals=True),
+        "per_day": format_inr(position["interest_per_day_average_paise"], decimals=True),
         "cost_of_waiting": format_inr(position["cost_of_waiting_paise"], decimals=True),
         "horizon_days": position["waiting_horizon_days"],
         "outstanding": format_inr(position["principal_paise"]),
@@ -435,6 +453,7 @@ def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:
         "interest_paise": interest,
         "total_payable_paise": principal + interest,
         "interest_per_day_paise": interest_per_day_paise(invoice, today),
+        "interest_per_day_average_paise": interest_per_day_average_paise(invoice, today),
         "cost_of_waiting_paise": cost_of_waiting_paise(invoice, today),
         "waiting_horizon_days": int(rules()["law_gates"]["waiting_horizon_days"]),
         "tax_exposure_paise": buyer_tax_exposure_paise(invoice, today),

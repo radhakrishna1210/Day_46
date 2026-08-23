@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RULES_PATH = ROOT / "config" / "rules.yaml"
 LEGAL_PATH = ROOT / "config" / "legal.yaml"
 SUPPLIER_PATH = ROOT / "config" / "supplier.yaml"
+MESSAGES_PATH = ROOT / "config" / "messages.yaml"
 
 
 @lru_cache(maxsize=1)
@@ -37,8 +38,19 @@ def supplier() -> dict[str, Any]:
     return yaml.safe_load(SUPPLIER_PATH.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def messages() -> dict[str, Any]:
+    """Message scaffolding: tone, mock drafts, fallback wording, threat words.
+
+    Carries no legal prose and no legal figures -- those arrive already
+    rendered from config/legal.yaml. A test enforces it.
+    """
+    return yaml.safe_load(MESSAGES_PATH.read_text(encoding="utf-8"))
+
+
 def reload() -> None:
     """Drop the cached config. For tests that edit the YAML on disk."""
     rules.cache_clear()
     legal.cache_clear()
     supplier.cache_clear()
+    messages.cache_clear()

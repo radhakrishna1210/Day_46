@@ -35,6 +35,7 @@ class Context:
     scores: list[dict[str, Any]]
     positions: list[dict[str, Any]]
     actions: list[Any] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
     dry_run: bool = False
 
 
@@ -152,6 +153,46 @@ def print_decisions(context: Context, limit: int = 10) -> None:
         print(f"  ... and {len(context.actions) - limit} more")
 
 
+def stage_writer(context: Context) -> str:
+    by_id = {buyer["buyer_id"]: buyer for buyer in context.buyers}
+    scores = {item["buyer_id"]: item for item in context.scores}
+    invoices = {inv["invoice_id"]: inv for inv in context.queue}
+
+    context.messages = []
+    fallbacks = 0
+    for action in context.actions:
+        if action.kind != "send" or not action.skeleton:
+            continue
+        invoice = invoices[action.invoice_id]
+        drafted = writer.write_message(
+            action.skeleton, invoice=invoice, buyer=by_id[action.buyer_id],
+            score=scores[action.buyer_id], today=context.today,
+            log=not context.dry_run,
+        )
+        drafted["invoice_id"] = action.invoice_id
+        drafted["rung"] = action.rung
+        context.messages.append(drafted)
+        fallbacks += drafted["fallback_used"]
+
+    hinglish = sum(1 for m in context.messages if m["language"] == "hinglish")
+    return (f"{len(context.messages)} messages drafted, {hinglish} in Hinglish, "
+            f"{fallbacks} fell back to the plain skeleton")
+
+
+def print_messages(context: Context, limit: int = 5) -> None:
+    """Full drafted messages, so they can be read rather than counted."""
+    for drafted in context.messages[:limit]:
+        print()
+        print("  " + "-" * 74)
+        print(f"  {drafted['invoice_id']}  rung {drafted['rung']}  "
+              f"{drafted['language']}  guardrail: {drafted['guardrail']}")
+        print("  " + "-" * 74)
+        print(f"  Subject: {drafted['subject']}")
+        print()
+        for line in drafted["body"].splitlines():
+            print(f"  {line}" if line else "")
+
+
 def _pending(day: str) -> Callable[[Context], str]:
     """A stage that has not been built yet, and says so."""
     def run(_context: Context) -> str:
@@ -175,7 +216,7 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("score engine", "score each buyer from their payment history", stage_score),
     Stage("law engine", "statutory due date, penal interest, buyer tax exposure", stage_law),
     Stage("brain", "pick one escalation rung, or stop", stage_brain),
-    Stage("message writer", "draft the message for the chosen rung", _pending("Day 6")),
+    Stage("message writer", "draft the message for the chosen rung", stage_writer),
     Stage("promise tracker", "read replies, remember and check promises", _pending("Day 7")),
     Stage("post office", "send the email, log the stubbed channels", _pending("Day 7")),
     Stage("simulator", "run baseline and agent over the same seeded world", _pending("Day 8")),
@@ -199,6 +240,8 @@ def run(seed: int, dry_run: bool = False) -> int:
             print_legal_detail(context)
         if stage.name == "brain" and context.actions:
             print_decisions(context)
+        if stage.name == "message writer" and context.messages:
+            print_messages(context)
 
     built = sum(1 for stage in PIPELINE if not getattr(stage.run, "pending", False))
     print(f"audit trail ({audit.__name__}): {built} of {len(PIPELINE)} stages doing real work")

@@ -38,6 +38,7 @@ LEGAL_NUMBER_KEYS = (
     "statutory_due_date", "interest_from", "days_overdue", "principal_paise",
     "interest_paise", "total_payable_paise", "interest_per_day_paise",
     "cost_of_waiting_paise", "waiting_horizon_days", "tax_exposure_paise",
+    "interest_per_day_average_paise",
     "fy_end", "days_gained_by_law",
 )
 
@@ -157,6 +158,9 @@ def fact_skeleton(
         "numbers": _numbers(rung_id, position, invoice) if not held else {},
         "allowed_fact_keys": allowed_keys,
         "facts": facts,
+        # Keyed as well as listed, so a message template can address one
+        # sentence by name and interpolate it rather than restating it.
+        "facts_by_key": {key: by_key[key] for key in allowed_keys if key in by_key},
         "forbidden": forbidden,
         "basis": {
             "as_of": position["as_of"],

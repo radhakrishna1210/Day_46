@@ -153,6 +153,17 @@ law_gates:
   # forward is the price of the next decision.
   waiting_horizon_days: 7
 
+# --- Message writer (engine/writer.py) ------------------------------------
+writer:
+  # Hinglish is offered only to these buyer profiles. A corporate accounts
+  # desk gets English whatever the stated preference: a WhatsApp register to
+  # a finance team reads as unprofessional, not friendly.
+  hinglish_profiles:
+    - small_trader
+  # How many times a draft may be regenerated after failing the guardrail
+  # before we fall back to the plain factual skeleton.
+  regeneration_attempts: 1
+
 # --- Channels (engine/channels.py) ----------------------------------------
 channels:
   email: real                   # actually sent, only to TEST_INBOX_EMAIL

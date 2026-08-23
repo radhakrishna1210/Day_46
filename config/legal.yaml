@@ -99,6 +99,13 @@ financial_year_end: "03-31"     # MM-DD; the deduction cliff
 section_22_disclosure: true
 section_23_interest_not_deductible: true
 
+# --- Detecting a citation in our own output -------------------------------
+# Used by engine/writer.py to confirm that a courtesy reminder contains no
+# statutory reference at all. It detects citations rather than stating one,
+# but it lives here so that engine/ stays free of statute names entirely and
+# the AST guard can stay absolute rather than carrying an exemption.
+citation_pattern: 'Section\s*\d|MSMED|Income-tax|Samadhaan|43B|37\(2\)\(g\)'
+
 # --- The exact sentences the agent is allowed to state --------------------
 # Legal prose lives here, never in engine code, for two reasons: every legal
 # number stays in one reviewable file, and a lawyer can read and correct the

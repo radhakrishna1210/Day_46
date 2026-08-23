@@ -13,6 +13,7 @@ Mode is read from ``LLM_MODE`` in ``.env``:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from typing import Final
 
@@ -48,13 +49,16 @@ def get_mode() -> str:
     return os.getenv("LLM_MODE", MOCK).strip().lower() or MOCK
 
 
-def llm(prompt: str, purpose: str) -> str:
+def llm(prompt: str, purpose: str, variant: str | None = None) -> str:
     """Ask the model for something and get text back.
 
     Args:
         prompt: The fully rendered prompt.
         purpose: One of :data:`PURPOSES`. Chooses the canned response in mock
             mode and (later) the model and system prompt in live mode.
+        variant: Mock mode only. Selects which canned response to return where
+            one purpose has several shapes -- a message draft differs by rung
+            and language. Live mode ignores it entirely.
 
     Returns:
         The model's text response.
@@ -69,7 +73,7 @@ def llm(prompt: str, purpose: str) -> str:
 
     mode = get_mode()
     if mode == MOCK:
-        return _mock_response(prompt, purpose)
+        return _mock_response(prompt, purpose, variant)
     if mode == LIVE:
         raise NotImplementedError(
             "LLM_MODE=live is not implemented yet (planned for Day 6). "
@@ -78,12 +82,36 @@ def llm(prompt: str, purpose: str) -> str:
     raise RuntimeError(f"LLM_MODE={mode!r} is not recognised; expected {MOCK!r} or {LIVE!r}")
 
 
-def _mock_response(prompt: str, purpose: str) -> str:
+def _mock_response(prompt: str, purpose: str, variant: str | None = None) -> str:
     """Canned response, tagged with a stable digest of the prompt.
 
     The digest makes it obvious in logs which call produced which line, while
     staying byte-for-byte reproducible across runs -- so mock-mode simulations
     are as repeatable as the seeded random data.
+
+    Message drafts come from config/messages.yaml rather than from this file.
+    They are content a human should be able to review and retune without
+    touching Python, and they carry no legal prose of their own: every legal
+    sentence reaches them already rendered from config/legal.yaml. The
+    placeholders they contain are substituted by engine/writer.py after the
+    call, so a mock draft travels the same guardrail path as a live one.
     """
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
+
+    if purpose == "draft_message" and variant:
+        from engine.config import messages
+
+        drafts = messages()["mock_drafts"]
+        if variant not in drafts:
+            raise KeyError(
+                f"no mock draft for variant {variant!r}; "
+                f"known variants: {sorted(drafts)}"
+            )
+        draft = drafts[variant]
+        return json.dumps(
+            {"subject": draft["subject"], "body": draft["body"].strip(),
+             "mock": f"{purpose}:{variant}:{digest}"},
+            ensure_ascii=False,
+        )
+
     return f"[mock:{purpose}:{digest}] {_CANNED[purpose]}"
