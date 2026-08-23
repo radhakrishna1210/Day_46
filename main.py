@@ -10,13 +10,13 @@ pipeline that pretends to have run is worse than one that admits it has not.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable
 
 from data import generate, store
 from engine.money import enable_unicode_output, format_inr
-from engine import audit, brain, channels, law, llm, promises, score, watchdog, writer
+from engine import audit, brain, channels, law, llm, promises, rungs, samadhaan, score, watchdog, writer
 from report import build_report
 from sim import personas, run_sim
 
@@ -34,6 +34,8 @@ class Context:
     queue: list[dict[str, Any]]
     scores: list[dict[str, Any]]
     positions: list[dict[str, Any]]
+    actions: list[Any] = field(default_factory=list)
+    dry_run: bool = False
 
 
 def _ensure_dataset(seed: int) -> None:
@@ -120,6 +122,36 @@ def print_legal_detail(context: Context, limit: int = 5) -> None:
         print(f"    - {fact}")
 
 
+def stage_brain(context: Context) -> str:
+    by_id = {buyer["buyer_id"]: buyer for buyer in context.buyers}
+    scores = {item["buyer_id"]: item for item in context.scores}
+
+    context.actions = []
+    for invoice, position in zip(context.queue, context.positions):
+        context.actions.append(brain.decide(
+            invoice, by_id[invoice["buyer_id"]], scores[invoice["buyer_id"]],
+            position, promises=[], history=[], log=not context.dry_run,
+        ))
+
+    counts: dict[str, int] = {}
+    for action in context.actions:
+        counts[action.kind] = counts.get(action.kind, 0) + 1
+    tally = ", ".join(f"{count} {kind}" for kind, count in sorted(counts.items()))
+    where = "dry run, nothing logged" if context.dry_run else f"logged to {audit.LOG_PATH.name}"
+    return f"{len(context.actions)} decisions ({tally}); {where}"
+
+
+def print_decisions(context: Context, limit: int = 10) -> None:
+    """One line per decision, with the reason. This is the dry-run output."""
+    print()
+    print(f"  {'invoice':<16}{'buyer':<9}{'kind':<9}{'rung':>5}{'src':>6}  reason")
+    for action in context.actions[:limit]:
+        print(f"  {action.invoice_id:<16}{action.buyer_id:<9}{action.kind:<9}"
+              f"{action.rung:>5}{action.source:>6}  {action.reason}")
+    if len(context.actions) > limit:
+        print(f"  ... and {len(context.actions) - limit} more")
+
+
 def _pending(day: str) -> Callable[[Context], str]:
     """A stage that has not been built yet, and says so."""
     def run(_context: Context) -> str:
@@ -142,7 +174,7 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("watchdog", "find the invoices that are overdue today", stage_watchdog),
     Stage("score engine", "score each buyer from their payment history", stage_score),
     Stage("law engine", "statutory due date, penal interest, buyer tax exposure", stage_law),
-    Stage("brain", "pick one escalation rung, or stop", _pending("Day 6")),
+    Stage("brain", "pick one escalation rung, or stop", stage_brain),
     Stage("message writer", "draft the message for the chosen rung", _pending("Day 6")),
     Stage("promise tracker", "read replies, remember and check promises", _pending("Day 7")),
     Stage("post office", "send the email, log the stubbed channels", _pending("Day 7")),
@@ -151,18 +183,22 @@ PIPELINE: tuple[Stage, ...] = (
 )
 
 
-def run(seed: int) -> int:
+def run(seed: int, dry_run: bool = False) -> int:
     """Walk the pipeline. Returns a process exit code."""
     enable_unicode_output()
     print(f"revenue recovery agent: starting (seed={seed}, llm_mode={llm.get_mode()})")
+    if dry_run:
+        audit.disable()
     context = Context(seed=seed, today=date.today(), buyers=[], invoices=[],
-                      queue=[], scores=[], positions=[])
+                      queue=[], scores=[], positions=[], dry_run=dry_run)
 
     for number, stage in enumerate(PIPELINE, start=1):
         print(f"step {number}: {stage.name} -- {stage.what}")
         print(f"  {stage.run(context)}")
         if stage.name == "law engine" and context.positions:
             print_legal_detail(context)
+        if stage.name == "brain" and context.actions:
+            print_decisions(context)
 
     built = sum(1 for stage in PIPELINE if not getattr(stage.run, "pending", False))
     print(f"audit trail ({audit.__name__}): {built} of {len(PIPELINE)} stages doing real work")
@@ -180,8 +216,13 @@ def main() -> int:
         default=DEFAULT_SEED,
         help=f"random seed, for reproducible runs (default: {DEFAULT_SEED})",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="decide and print, but write nothing to the audit trail",
+    )
     args = parser.parse_args()
-    return run(args.seed)
+    return run(args.seed, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
