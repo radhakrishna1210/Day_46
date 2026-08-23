@@ -277,10 +277,28 @@ def buyer_tax_exposure_paise(invoice: dict[str, Any], today: date) -> int:
 # --------------------------------------------------------------------------
 
 def available_rung(invoice: dict[str, Any], today: date, fy_end: date) -> int:
-    """The highest escalation rung whose facts are materially true today.
+    """The CEILING: the highest rung whose facts are materially true today.
 
-    This says what the law supports, not what we will actually do -- the brain
-    owns pacing, via the ladder in config/rules.yaml.
+    This answers "what may we truthfully say?", never "what will we do?". The
+    brain owns the second question, via the ladder in config/rules.yaml, and
+    enforces:
+
+        chosen == 0   OR   1 <= chosen <= available_rung(...)
+
+    The ceiling never forces escalation. A good-score buyer three days overdue
+    has a ceiling of 2 and the brain may still choose 1.
+
+    Returns 1-4 only. Rung 0 (WAIT, an active promise not yet fallen due) is a
+    brain state, not a legal one -- waiting is always permitted whatever the
+    law allows -- so this function never returns it.
+
+    Rung ids are labelled here by the CONSTRAINT they express, not by the
+    action they permit:
+
+        1  nothing legal may be stated yet (the invoice is not overdue)
+        2  Section 16 interest is accruing and can be stated
+        3  the deduction cliff is material, so the tax point is live
+        4  the delay is long enough for a Samadhaan reference
     """
     overdue = days_overdue(invoice, today)
     if overdue <= 0:
@@ -295,14 +313,18 @@ def available_rung(invoice: dict[str, Any], today: date, fy_end: date) -> int:
     return rung
 
 
-def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> list[str]:
-    """Render the citable one-liners for this position, from config templates."""
+def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> dict[str, str]:
+    """Render the citable one-liners for this position, keyed by config key.
+
+    Keyed rather than a bare list so engine/rungs.py can select the subset a
+    given rung is allowed to state without re-parsing the sentences.
+    """
     config = legal()
     templates = config["facts"]
     rung = position["available_rung"]
 
     if position["days_overdue"] <= 0:
-        return []
+        return {}
 
     values = {
         "no_agreement_days": config["no_agreement_days"],
@@ -349,7 +371,7 @@ def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> list[str]:
     if rung >= 4:
         keys.append("samadhaan")
 
-    return [" ".join(templates[key].format(**values).split()) for key in keys]
+    return {key: " ".join(templates[key].format(**values).split()) for key in keys}
 
 
 def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:
@@ -402,7 +424,9 @@ def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:
         },
     }
     position["available_rung"] = available_rung(invoice, today, fy_end)
-    position["facts"] = _facts(invoice, position)
+    by_key = _facts(invoice, position)
+    position["facts_by_key"] = by_key
+    position["facts"] = list(by_key.values())
     return position
 
 

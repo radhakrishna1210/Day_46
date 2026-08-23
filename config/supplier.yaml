@@ -1,0 +1,45 @@
+# Who WE are -- the MSME doing the chasing.
+#
+# A Samadhaan reference is filed BY the supplier, so the draft generator needs
+# our own identity. Nothing here is a tunable and nothing is statutory; it is
+# the business profile of whoever runs this agent.
+#
+# ############################################################################
+# #  PLACEHOLDER VALUES. The Udyam registration number below is NOT REAL.    #
+# #  engine/samadhaan.py refuses to mark any draft READY TO FILE while it    #
+# #  still starts with UDYAM-XX. Replace with the real registration before   #
+# #  any draft is used for anything.                                         #
+# ############################################################################
+
+version: 1
+
+# The placeholder prefix the readiness check looks for. Any Udyam number
+# starting with this is treated as not yet supplied.
+placeholder_udyam_prefix: "UDYAM-XX"
+
+supplier:
+  legal_name: "Example Precision Works Private Limited"
+  # Format is UDYAM-<state>-<district>-<7 digits>. This one is deliberately
+  # invalid so it cannot be mistaken for a real registration.
+  udyam_registration: "UDYAM-XX-00-0000000"
+  enterprise_class: "small"        # micro | small -- Section 43B(h)/37(2)(g)
+                                   # only covers micro and small, not medium
+  address_line1: "Plot 14, Phase II Industrial Estate"
+  address_line2: "Peenya"
+  city: "Bengaluru"
+  state: "Karnataka"
+  pincode: "560058"
+  gstin: "29AAXCE0000X1Z0"          # synthetic, format-shaped only
+  pan: "AAXCE0000X"                 # synthetic
+  contact_name: "A. Placeholder"
+  contact_email: "owner@example.invalid"
+  contact_phone: "+91-90000-99999"
+  bank_account_name: "Example Precision Works Private Limited"
+  bank_account_number: "000000000000"
+  bank_ifsc: "XXXX0000000"
+
+# Which Facilitation Council a reference would go to. Under Section 18 this
+# follows the supplier's location, not the buyer's.
+facilitation_council:
+  name: "Karnataka Micro and Small Enterprises Facilitation Council"
+  state: "Karnataka"

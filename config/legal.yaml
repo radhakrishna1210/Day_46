@@ -158,6 +158,48 @@ samadhaan:
   # Section 19: a buyer challenging an award must first deposit this share.
   challenge_predeposit_share: 0.75
 
+# --- Samadhaan reference wording ------------------------------------------
+# Used only by engine/samadhaan.py when drafting a complaint. Kept here with
+# the other legal prose so a lawyer can review every sentence in one file.
+reference_text:
+  relief_sought: >-
+    The Applicant seeks a direction to the Respondent to pay the principal
+    amount of {principal}, together with compound interest with monthly rests
+    under Section 16 of the MSMED Act 2006 at {effective_rate_pct}% per annum,
+    being three times the RBI Bank Rate of {bank_rate_pct}%, amounting to
+    {interest} as at {as_of}, and continuing until payment is made.
+    Total claimed as at {as_of}: {total}.
+  jurisdiction: >-
+    This reference is made under Section 18 of the MSMED Act 2006 to the
+    {council_name}, the Micro and Small Enterprises Facilitation Council for
+    the State in which the Applicant is located.
+  predeposit_note: >-
+    Under Section 19 of the MSMED Act 2006, an application to set aside any
+    decree, award or order of the Council is not entertained unless the
+    Respondent deposits {predeposit_pct}% of the amount in terms of the award.
+  declaration: >-
+    I declare that the facts stated above are true to the best of my knowledge
+    and belief, that the Applicant is a registered micro or small enterprise
+    under the MSMED Act 2006, and that no other proceeding in respect of the
+    same claim is pending before any other forum.
+  title: "Reference under Section 18, MSMED Act 2006 — DRAFT"
+  heading_interest: "Interest computation (Section 16)"
+  multiplier_label: "{multiplier}x (Section 16)"
+  void_term_note: >-
+    The agreed term of {agreed_days} days exceeds the {ceiling}-day ceiling in
+    Section 15 and is void to that extent.
+  no_acceptance_date: >-
+    The invoice has no acceptance date, so the statutory clock under Section 15
+    cannot be established.
+  interest_preamble: >-
+    Compound interest with monthly rests at three times the RBI Bank Rate,
+    payable notwithstanding anything in the agreement between the parties.
+  draft_warning: >-
+    THIS IS AN UNFILED DRAFT generated from recorded invoice data. It has not
+    been reviewed by a legal practitioner and no reference has been made. Every
+    figure should be checked, and the supporting documents listed below
+    attached, before this is used for any purpose.
+
 # Anything null or stale here is a submission blocker.
 verify_before_submission:
   - rbi_bank_rate

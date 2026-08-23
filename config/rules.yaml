@@ -31,12 +31,77 @@ score:
 # --- Escalation ladder (engine/brain.py) ----------------------------------
 # Rung 0 WAIT | 1 SOFT NUDGE | 2 FIRM | 3 LEGAL FACTS | 4 STOP + HANDOFF
 ladder:
+  # Rung ids are SHARED with engine/law.py available_rung(), which returns a
+  # CEILING of 1-4. Rung 0 is brain-only and is never returned by law.
+  # Invariant enforced in engine/brain.py:
+  #     chosen == 0   OR   1 <= chosen <= law.available_rung()
+  # The ceiling never forces escalation: a good-score buyer three days overdue
+  # has a ceiling of 2 and the brain may still choose 1.
+  #
+  # allowed_facts names keys in the facts block of config/legal.yaml. A rung
+  # may state those and nothing else.
   rungs:
-    0: wait
-    1: soft_nudge
-    2: firm
-    3: legal_facts
-    4: stop_handoff
+    - id: 0
+      name: wait
+      intent: "an active promise has not yet fallen due; say nothing"
+      max_messages: 0
+      min_days_between_contacts: 0
+      allowed_facts: []
+
+    - id: 1
+      name: soft_nudge
+      intent: "courtesy reminder; no legal content of any kind"
+      max_messages: 2
+      min_days_between_contacts: 5
+      allowed_facts: []
+
+    - id: 2
+      name: firm
+      intent: "state the statutory due date and the interest now accruing"
+      max_messages: 3
+      min_days_between_contacts: 4
+      allowed_facts:
+        - section_15_no_agreement
+        - section_15_agreed
+        - section_15_capped
+        - section_16
+        - section_16_running
+
+    - id: 3
+      name: legal_facts
+      intent: "add the buyer's own tax cost and their disclosure obligation"
+      max_messages: 3
+      min_days_between_contacts: 4
+      allowed_facts:
+        - section_15_no_agreement
+        - section_15_agreed
+        - section_15_capped
+        - section_16
+        - section_16_running
+        - section_22
+        - section_23
+        - tax_deduction_upcoming
+        - tax_deduction_crystallised
+
+    - id: 4
+      name: stop_handoff
+      intent: "stop contacting the buyer; draft the reference, flag a human"
+      # Zero: no message goes to the buyer at this rung. The facts below are
+      # for the Samadhaan draft and the handoff note only.
+      max_messages: 0
+      min_days_between_contacts: 0
+      allowed_facts:
+        - section_15_no_agreement
+        - section_15_agreed
+        - section_15_capped
+        - section_16
+        - section_16_running
+        - section_22
+        - section_23
+        - tax_deduction_upcoming
+        - tax_deduction_crystallised
+        - samadhaan
+
   # Starting rung and days between rungs, by score band.
   pacing:
     good:                       # score >= score.bands.good_from
