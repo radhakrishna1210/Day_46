@@ -1,0 +1,51 @@
+# Indian MSMED Act / Income Tax figures used by engine/law.py.
+# SIMPLIFIED FOR A DEMO. NOT LEGAL ADVICE.
+# Every number here must be verified before submission (see: verify_before_submission).
+
+version: 1
+as_of: "2026-08"
+disclaimer: >-
+  Simplified for demonstration purposes, current as of Aug 2026, and not legal
+  advice. Figures should be verified against the current RBI bank rate and the
+  prevailing text of the MSMED Act 2006 and the Income Tax Act.
+
+# --- MSMED Act 2006, Section 15: statutory payment window -----------------
+# No written agreement -> 15 days from acceptance of goods/services.
+# With a written agreement -> whatever it says, but 45 days is an absolute
+# ceiling; any agreed term beyond 45 days is void.
+no_agreement_days: 15
+max_agreement_days: 45
+
+# --- MSMED Act 2006, Section 16: penal interest ---------------------------
+# On delay the buyer owes compound interest with MONTHLY rests at
+# bank_rate_multiplier x the RBI notified bank rate, automatically,
+# even if the contract says otherwise.
+rbi_bank_rate: null             # TODO: set the verified RBI bank rate (e.g. 0.065) before submission
+bank_rate_multiplier: 3
+compounding: monthly
+
+# --- Income Tax Act, Section 43B(h): the buyer's own tax cost -------------
+# A buyer who pays a registered MSME late cannot deduct that expense in the
+# same financial year. buyer_tax_rate is the assumed corporate rate used to
+# express that as a rupee figure.
+buyer_tax_rate: 0.30
+financial_year_end: "03-31"     # MM-DD; the deduction cliff
+
+# --- Facts stated (never threatened) in escalated messages ----------------
+# Section 22: unpaid MSME dues are disclosable in the buyer's annual accounts.
+# Section 23: the penal interest the buyer pays is not tax-deductible for them.
+section_22_disclosure: true
+section_23_interest_not_deductible: true
+
+# --- MSME Samadhaan: the final rung --------------------------------------
+samadhaan:
+  portal_name: "MSME Samadhaan"
+  portal_url: "https://samadhaan.msme.gov.in"
+  # A buyer challenging an award must first deposit this share of it.
+  challenge_predeposit_share: 0.75
+
+# Anything null or stale here is a submission blocker.
+verify_before_submission:
+  - rbi_bank_rate
+  - buyer_tax_rate
+  - as_of

@@ -1,0 +1,21 @@
+# secrets
+.env
+
+# generated audit logs (keep the folder, ignore its contents)
+audit/*
+!audit/.gitkeep
+
+# generated seed data
+data/seed/*
+!data/seed/.gitkeep
+
+# generated reports
+report/out/
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/

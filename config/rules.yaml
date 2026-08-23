@@ -1,0 +1,71 @@
+# Tunables for the Revenue Recovery Agent.
+# Code reads these values; code never embeds them.
+# Day 1: placeholder values. Tune during Day 3 (score) and Day 6 (brain).
+
+version: 1
+
+# --- Buyer score weights (engine/score.py) --------------------------------
+# score = base - (avg_delay_days * avg_delay_penalty)
+#              - (broken_promises * broken_promise_penalty)
+#              - (disputes_raised * dispute_penalty)
+#              + (on_time_streak * on_time_bonus)
+# clamped to [min, max]
+score:
+  base: 100
+  min: 0
+  max: 100
+  weights:
+    avg_delay_penalty: 1.2
+    broken_promise_penalty: 8
+    dispute_penalty: 5
+    on_time_bonus: 2
+  # Confidence depends on how much history the buyer has.
+  confidence:
+    low_below_invoices: 3       # fewer than 3 paid invoices -> low
+    high_from_invoices: 10      # 10 or more -> high; in between -> medium
+  # Score bands used by the brain to pick a starting rung and pacing.
+  bands:
+    good_from: 80
+    poor_below: 50
+
+# --- Escalation ladder (engine/brain.py) ----------------------------------
+# Rung 0 WAIT | 1 SOFT NUDGE | 2 FIRM | 3 LEGAL FACTS | 4 STOP + HANDOFF
+ladder:
+  rungs:
+    0: wait
+    1: soft_nudge
+    2: firm
+    3: legal_facts
+    4: stop_handoff
+  # Starting rung and days between rungs, by score band.
+  pacing:
+    good:                       # score >= score.bands.good_from
+      start_rung: 1
+      days_between_rungs: 7
+    medium:
+      start_rung: 1
+      days_between_rungs: 5
+    poor:                       # score < score.bands.poor_below
+      start_rung: 2
+      days_between_rungs: 4
+  # A promise that comes and goes unpaid moves the case up one rung.
+  broken_promise_rung_jump: 1
+  # Days of silence after a fresh promise before we speak again.
+  promise_grace_days: 1
+
+# --- Hard stopping rules (enforced in code, never by the LLM) -------------
+stop_rules:
+  max_per_rung: 3
+  max_total: 5
+  quiet_hours:
+    start: "21:00"              # no messages from 21:00 ...
+    end: "09:00"                # ... until 09:00, buyer local time
+  send_on_weekends: false
+  opt_out_stops_everything: true
+  dispute_triggers_handoff: true
+
+# --- Channels (engine/channels.py) ----------------------------------------
+channels:
+  email: real                   # actually sent, only to TEST_INBOX_EMAIL
+  whatsapp: stub                # logs "would send"
+  sms: stub                     # logs "would send"
