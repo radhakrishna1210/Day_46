@@ -310,10 +310,18 @@ def test_the_handoff_draft_reports_its_own_readiness() -> None:
 # --- the LLM boundary -----------------------------------------------------
 
 def ambiguous_case() -> tuple[dict, dict, list]:
+    """Part of the money in, and a reply nobody could classify.
+
+    The partial payment is established ONLY by the invoice itself -- there is
+    deliberately no "partial_payment" marker in the contact history, so this
+    fixture cannot pass by way of a history flag. It exercises the comparison
+    of outstanding principal against the invoice amount and nothing else.
+    """
     record = invoice(payments=[{"date": "2026-08-01", "amount_paise": 20_000_000}],
                      status="partially_paid")
     position = law.legal_position(record, TODAY)
-    history = [contact("2026-08-01", 2, outcome="partial_payment"),
+    assert position["principal_paise"] < record["amount_paise"], "fixture is not part-paid"
+    history = [contact("2026-08-01", 2),
                contact("2026-08-10", 2, outcome="unclear_reply",
                        reply="boss thoda dekhte hain, kuch adjust karna padega")]
     return record, position, history
@@ -493,3 +501,45 @@ def test_the_clamp_does_not_touch_the_ceiling() -> None:
     position = law.legal_position(fresh, TODAY)
     action = brain.decide(fresh, buyer(), thin(20), position, [], [])
     assert action.rung == 0 or 1 <= action.rung <= position["available_rung"]
+
+
+def test_an_unclear_reply_alone_is_not_ambiguous() -> None:
+    """The negative control.
+
+    Same confusing reply, but nothing has been paid. The rules can settle this
+    perfectly well -- an unpaid invoice with a vague answer is just an unpaid
+    invoice -- so the model must not be consulted. Without this test, a bug
+    that made _is_ambiguous always true would still pass every other test here.
+    """
+    record = invoice()                      # nothing paid at all
+    position = law.legal_position(record, TODAY)
+    assert position["principal_paise"] == record["amount_paise"]
+    history = [contact("2026-08-10", 2, outcome="unclear_reply",
+                       reply="boss thoda dekhte hain")]
+    action = brain.decide(record, buyer(), score(55), position, [], history)
+    assert action.source == "rule"
+
+
+def test_a_partial_payment_alone_is_not_ambiguous() -> None:
+    """The other half of the control: part-paid, but the reply was clear."""
+    record = invoice(payments=[{"date": "2026-08-01", "amount_paise": 20_000_000}],
+                     status="partially_paid")
+    position = law.legal_position(record, TODAY)
+    history = [contact("2026-08-10", 2, outcome="sent")]
+    action = brain.decide(record, buyer(), score(55), position, [], history)
+    assert action.source == "rule"
+
+
+def test_ambiguity_is_decided_by_the_invoice_amount_not_a_history_flag() -> None:
+    """Pins _is_ambiguous to the comparison it actually makes.
+
+    A history entry claiming a partial payment must NOT make a fully unpaid
+    invoice ambiguous. This is the fallback path the old implementation relied
+    on, and it is no longer load-bearing.
+    """
+    record = invoice()                      # fully unpaid
+    position = law.legal_position(record, TODAY)
+    history = [contact("2026-08-01", 2, outcome="partial_payment"),
+               contact("2026-08-10", 2, outcome="unclear_reply", reply="hmm")]
+    action = brain.decide(record, buyer(), score(55), position, [], history)
+    assert action.source == "rule", "a history flag revived the old fallback path"
