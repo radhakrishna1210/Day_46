@@ -64,6 +64,18 @@ stop_rules:
   opt_out_stops_everything: true
   dispute_triggers_handoff: true
 
+# --- When a legal fact becomes worth stating (engine/law.py) --------------
+# These are OUR conservatism policy, not statute, which is why they live here
+# and not in config/legal.yaml -- that file stays purely statutory so it can be
+# audited as such. Legally a delayed-payment reference can be made as soon as
+# payment is overdue; we wait longer.
+law_gates:
+  # How close the 31 March deduction cliff has to be before the tax point is
+  # material enough to raise. Also satisfied once the year end has passed.
+  tax_horizon_days: 90
+  # How overdue an invoice must be before we will mention Samadhaan at all.
+  samadhaan_after_days: 45
+
 # --- Channels (engine/channels.py) ----------------------------------------
 channels:
   email: real                   # actually sent, only to TEST_INBOX_EMAIL

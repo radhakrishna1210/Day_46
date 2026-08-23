@@ -40,6 +40,13 @@ from typing import Any
 
 import yaml
 
+# Allow running this file directly as a script as well as importing it, by
+# putting the repo root on the path when there is no enclosing package.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from engine.money import enable_unicode_output, format_inr
+
 SCHEMA_VERSION = 1
 DEFAULT_SEED = 42
 
@@ -673,37 +680,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def _rupee() -> str:
-    """The rupee sign, or Rs where the console cannot encode it."""
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError, OSError):
-        pass
-    encoding = getattr(sys.stdout, "encoding", None) or "ascii"
-    try:
-        "₹".encode(encoding)
-    except (UnicodeEncodeError, LookupError):
-        return "Rs "
-    return "₹"
-
-
-def format_inr(paise: int, symbol: str = "₹") -> str:
-    """Format paise as rupees with Indian digit grouping: 12500000 -> Rs 1,25,000."""
-    rupees = abs(paise) // 100
-    digits = str(rupees)
-    if len(digits) > 3:
-        head, tail = digits[:-3], digits[-3:]
-        groups: list[str] = []
-        while len(head) > 2:
-            groups.insert(0, head[-2:])
-            head = head[:-2]
-        if head:
-            groups.insert(0, head)
-        digits = ",".join(groups) + "," + tail
-    sign = "-" if paise < 0 else ""
-    return f"{sign}{symbol}{digits}"
-
-
 def _display_path(path: Path) -> str:
     """Repo-relative when it can be, absolute otherwise (--out-dir may point anywhere)."""
     try:
@@ -715,7 +691,7 @@ def _display_path(path: Path) -> str:
 def print_summary(world: dict[str, Any], paths: dict[str, Path]) -> None:
     """A sanity table. One fact per line, no emoji."""
     no_agreement, ceiling = _load_statutory_terms()
-    symbol = _rupee()
+    symbol = enable_unicode_output()
     buyers = world["buyers"]["buyers"]
     invoices = world["invoices"]["invoices"]
     current = [inv for inv in invoices if inv["cohort"] == "current"]

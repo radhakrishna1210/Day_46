@@ -15,7 +15,7 @@ from datetime import date
 from typing import Any, Callable
 
 from data import generate, store
-from data.generate import format_inr
+from engine.money import enable_unicode_output, format_inr
 from engine import audit, brain, channels, law, llm, promises, score, watchdog, writer
 from report import build_report
 from sim import personas, run_sim
@@ -33,6 +33,7 @@ class Context:
     invoices: list[dict[str, Any]]
     queue: list[dict[str, Any]]
     scores: list[dict[str, Any]]
+    positions: list[dict[str, Any]]
 
 
 def _ensure_dataset(seed: int) -> None:
@@ -85,12 +86,38 @@ def stage_score(context: Context) -> str:
 
 
 def stage_law(context: Context) -> str:
-    void = [inv for inv in context.queue if law.agreed_term_is_void(inv)]
-    gained = sum(law.days_gained_by_law(inv) for inv in void)
+    context.positions = [law.legal_position(inv, context.today) for inv in context.queue]
+    interest = sum(p["interest_paise"] for p in context.positions)
+    tax = sum(p["tax_exposure_paise"] for p in context.positions)
+    void = [p for p in context.positions if p["agreed_term_void"]]
+    held = [p for p in context.positions if p["dispute_hold"]]
+    rate = law.effective_annual_rate() * 100
     return (
-        f"{len(void)} overdue invoices had void terms, worth {gained} days of "
-        f"leverage; interest and 43B(h) math land on Day 4"
+        f"{format_inr(interest, 'Rs ', decimals=True)} interest accrued at {rate:.2f}% "
+        f"({len(void)} void terms), {format_inr(tax, 'Rs ')} of buyer tax exposure, "
+        f"{len(held)} held for dispute"
     )
+
+
+def print_legal_detail(context: Context, limit: int = 5) -> None:
+    """The per-invoice legal position, largest exposure first."""
+    ranked = sorted(context.positions, key=lambda p: -p["interest_paise"])[:limit]
+    print()
+    print(f"  {'invoice':<16}{'overdue':>8}{'principal':>14}{'interest':>14}"
+          f"{'tax exposure':>15}{'rung':>6}")
+    for position in ranked:
+        print(
+            f"  {position['invoice_id']:<16}{position['days_overdue']:>7}d"
+            f"{format_inr(position['principal_paise'], 'Rs '):>14}"
+            f"{format_inr(position['interest_paise'], 'Rs ', decimals=True):>14}"
+            f"{format_inr(position['tax_exposure_paise'], 'Rs '):>15}"
+            f"{position['available_rung']:>6}"
+        )
+    worst = ranked[0]
+    print()
+    print(f"  what the agent may state about {worst['invoice_id']}:")
+    for fact in worst["facts"]:
+        print(f"    - {fact}")
 
 
 def _pending(day: str) -> Callable[[Context], str]:
@@ -114,7 +141,7 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("data factory", "load or build the synthetic world", stage_data),
     Stage("watchdog", "find the invoices that are overdue today", stage_watchdog),
     Stage("score engine", "score each buyer from their payment history", stage_score),
-    Stage("law engine", "statutory due dates, interest, tax exposure", stage_law),
+    Stage("law engine", "statutory due date, penal interest, buyer tax exposure", stage_law),
     Stage("brain", "pick one escalation rung, or stop", _pending("Day 6")),
     Stage("message writer", "draft the message for the chosen rung", _pending("Day 6")),
     Stage("promise tracker", "read replies, remember and check promises", _pending("Day 7")),
@@ -126,12 +153,16 @@ PIPELINE: tuple[Stage, ...] = (
 
 def run(seed: int) -> int:
     """Walk the pipeline. Returns a process exit code."""
+    enable_unicode_output()
     print(f"revenue recovery agent: starting (seed={seed}, llm_mode={llm.get_mode()})")
-    context = Context(seed=seed, today=date.today(), buyers=[], invoices=[], queue=[], scores=[])
+    context = Context(seed=seed, today=date.today(), buyers=[], invoices=[],
+                      queue=[], scores=[], positions=[])
 
     for number, stage in enumerate(PIPELINE, start=1):
         print(f"step {number}: {stage.name} -- {stage.what}")
         print(f"  {stage.run(context)}")
+        if stage.name == "law engine" and context.positions:
+            print_legal_detail(context)
 
     built = sum(1 for stage in PIPELINE if not getattr(stage.run, "pending", False))
     print(f"audit trail ({audit.__name__}): {built} of {len(PIPELINE)} stages doing real work")

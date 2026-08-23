@@ -25,8 +25,15 @@ evidence, and the brain is expected to tread carefully when it says "low".
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
+
+# Allow running this file directly as a script as well as importing it, by
+# putting the repo root on the path when there is no enclosing package.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.config import rules
 from engine.law import _as_date, statutory_due_date
@@ -244,6 +251,9 @@ def explain(scored: dict[str, Any]) -> str:
 def main() -> int:
     from data import store
 
+    from engine.money import enable_unicode_output
+
+    enable_unicode_output()
     parser = argparse.ArgumentParser(description="Score every buyer from payment history.")
     parser.add_argument("--as-of", type=date.fromisoformat, default=None,
                         help="simulation date (default: the dataset's simulation_start)")

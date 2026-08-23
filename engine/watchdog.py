@@ -13,8 +13,15 @@ difference between chasing on day 91 and chasing on day 46.
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import date
+from pathlib import Path
 from typing import Any
+
+# Allow running this file directly as a script as well as importing it, by
+# putting the repo root on the path when there is no enclosing package.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.law import _as_date, days_gained_by_law, statutory_due_date
 
@@ -86,8 +93,10 @@ def due_promises(promises: list[dict[str, Any]], today: date) -> list[dict[str, 
 
 def main() -> int:
     from data import store
-    from data.generate import format_inr
 
+    from engine.money import enable_unicode_output, format_inr
+
+    enable_unicode_output()
     parser = argparse.ArgumentParser(description="Show today's overdue work queue.")
     parser.add_argument("--as-of", type=date.fromisoformat, default=None,
                         help="simulation date (default: the dataset's simulation_start)")

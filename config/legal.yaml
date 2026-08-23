@@ -1,47 +1,158 @@
 # Indian MSMED Act / Income Tax figures used by engine/law.py.
 # SIMPLIFIED FOR A DEMO. NOT LEGAL ADVICE.
-# Every number here must be verified before submission (see: verify_before_submission).
+#
+# Every number in this file was verified against a primary source on the
+# retrieval date recorded beside it. engine/law.py contains no legal constants
+# of its own -- if a figure is wrong, it is wrong here and nowhere else.
 
-version: 1
+version: 2
 as_of: "2026-08"
+retrieved_on: "2026-08-23"
 disclaimer: >-
-  Simplified for demonstration purposes, current as of Aug 2026, and not legal
-  advice. Figures should be verified against the current RBI bank rate and the
-  prevailing text of the MSMED Act 2006 and the Income Tax Act.
+  Simplified for demonstration purposes, verified as of 23 Aug 2026, and not
+  legal advice. Figures should be re-verified against the current RBI Bank Rate
+  and the prevailing text of the MSMED Act 2006 and the Income-tax Act 2025
+  before being relied on.
 
 # --- MSMED Act 2006, Section 15: statutory payment window -----------------
-# No written agreement -> 15 days from acceptance of goods/services.
-# With a written agreement -> whatever it says, but 45 days is an absolute
-# ceiling; any agreed term beyond 45 days is void.
+# "Where any supplier supplies any goods or renders any services to any buyer,
+#  the buyer shall make payment therefor on or before the date agreed upon
+#  between him and the supplier in writing or, where there is no agreement in
+#  this behalf, before the appointed day ... in no case the period agreed upon
+#  between the supplier and the buyer in writing shall exceed forty-five days
+#  from the day of acceptance or the day of deemed acceptance."
+#
+# Source: https://ibclaw.in/section-15-liability-of-buyer-to-make-payment/
+# Retrieved: 2026-08-23
 no_agreement_days: 15
 max_agreement_days: 45
 
 # --- MSMED Act 2006, Section 16: penal interest ---------------------------
-# On delay the buyer owes compound interest with MONTHLY rests at
-# bank_rate_multiplier x the RBI notified bank rate, automatically,
-# even if the contract says otherwise.
-rbi_bank_rate: null             # TODO: set the verified RBI bank rate (e.g. 0.065) before submission
+# "Where any buyer fails to make payment of the amount to the supplier, as
+#  required under section 15, the buyer shall, notwithstanding anything
+#  contained in any agreement between the buyer and the supplier or in any law
+#  for the time being in force, be liable to pay compound interest with monthly
+#  rests to the supplier on that amount from the appointed day or, as the case
+#  may be, from the date immediately following the date agreed upon, at three
+#  times of the bank rate notified by the Reserve Bank."
+#
+# Source: https://indiankanoon.org/doc/1723683/
+# Retrieved: 2026-08-23
+#
+# Note the two consequences the engine must honour:
+#   1. "notwithstanding anything contained in any agreement" -- a contract
+#      saying "no interest on late payment" does not survive this section.
+#   2. interest runs from the day IMMEDIATELY FOLLOWING the due date, not
+#      from the due date itself.
+
+# RBI Bank Rate (NOT the repo rate -- Section 16 says "bank rate").
+# Value: 5.50% per annum.
+# Source: https://www.rbi.org.in/ (Current Rates panel)
+# Retrieved: 2026-08-23, showing rates as at 2026-08-21
+# Cross-check: repo 5.25%, SDF 5.00%, MSF 5.50%, Bank Rate 5.50%
+# RE-VERIFY BEFORE SUBMISSION -- the MPC meets roughly every two months.
+rbi_bank_rate: 0.0550
 bank_rate_multiplier: 3
+# Effective statutory rate: 0.0550 x 3 = 0.1650 = 16.50% per annum,
+# compounded with monthly rests.
 compounding: monthly
 
-# --- Income Tax Act, Section 43B(h): the buyer's own tax cost -------------
-# A buyer who pays a registered MSME late cannot deduct that expense in the
-# same financial year. buyer_tax_rate is the assumed corporate rate used to
-# express that as a rupee figure.
+# Convention for the incomplete month at the end of the accrual period.
+# The Act says "monthly rests" but does not prescribe a day-count for the
+# stub period; 30 days is the common commercial convention and is applied
+# as simple interest on the final part-month. Documented, not statutory.
+partial_month_day_basis: 30
+
+# --- Income-tax: the buyer's own tax cost ---------------------------------
+# Old Section 43B(h) of the Income-tax Act 1961: a sum payable to a micro or
+# small enterprise beyond the Section 15 time limit is deductible only in the
+# previous year in which payment is actually made.
+#
+# IMPORTANT: the Income-tax Act 2025 came into force on 1 April 2026 and
+# renumbered this provision to Section 37(2)(g). The substance is unchanged
+# and there is no pay-before-return-filing relief for this clause. For
+# Tax Year 2026-27 onward (which is where this simulation sits) the correct
+# citation is Section 37(2)(g) of the Income-tax Act 2025; 43B(h) remains the
+# familiar name and applies to FY 2025-26 and earlier.
+#
+# Sources: https://cleartax.in/s/section-43bh-of-income-tax-act
+#          https://taxupdate.in/income-tax/771/cbdt-faq-deep-dive-7-section-43b-43bh-msme-section-37-income-tax-act-2025-actual-payment-tax-audit/
+# Retrieved: 2026-08-23
+tax_provision_current: "Section 37(2)(g), Income-tax Act 2025"
+tax_provision_legacy: "Section 43B(h), Income-tax Act 1961"
+tax_provision_effective_from: "2026-04-01"
+
+# Assumed buyer tax rate used to express the lost deduction in rupees.
+# This is an ASSUMPTION about the buyer, not a statutory figure: 30% is the
+# common headline corporate rate before surcharge and cess. Messages must say
+# "at a 30% rate" rather than stating it as the buyer's actual rate.
 buyer_tax_rate: 0.30
 financial_year_end: "03-31"     # MM-DD; the deduction cliff
 
 # --- Facts stated (never threatened) in escalated messages ----------------
-# Section 22: unpaid MSME dues are disclosable in the buyer's annual accounts.
-# Section 23: the penal interest the buyer pays is not tax-deductible for them.
+# MSMED Act Section 22: buyers must disclose the unpaid principal and interest
+#   in their annual statement of accounts.
+#   Source: https://ibclaw.in/section-22-requirement-to-specify-unpaid-amount-with-interest-in-the-annual-statement-of-accounts/
+# MSMED Act Section 23: interest payable or paid under the Act is NOT allowed
+#   as a deduction when computing the buyer's income.
+#   Retrieved: 2026-08-23
 section_22_disclosure: true
 section_23_interest_not_deductible: true
+
+# --- The exact sentences the agent is allowed to state --------------------
+# Legal prose lives here, never in engine code, for two reasons: every legal
+# number stays in one reviewable file, and a lawyer can read and correct the
+# wording without touching Python.
+#
+# Placeholders are filled by engine/law.py from the values above plus the
+# computed figures. Every sentence states a fact and cites its source.
+# NONE of them may threaten -- tests/test_law.py scans for that.
+facts:
+  section_15_no_agreement: >-
+    With no written agreement in place, payment fell due within
+    {no_agreement_days} days of acceptance, on {statutory_due}
+    (Section 15, MSMED Act 2006).
+  section_15_agreed: >-
+    Payment fell due on {statutory_due}, {statutory_term} days from acceptance
+    of the goods (Section 15, MSMED Act 2006).
+  section_15_capped: >-
+    The agreed term of {agreed_days} days exceeds the {max_agreement_days}-day
+    ceiling set by Section 15 of the MSMED Act 2006, so the statutory due date
+    was {statutory_due}.
+  section_16: >-
+    Compound interest with monthly rests has accrued from {interest_from} at
+    {effective_rate_pct}% per annum, three times the RBI Bank Rate of
+    {bank_rate_pct}% (Section 16, MSMED Act 2006). Interest to date:
+    {interest}.
+  section_22: >-
+    Unpaid dues to a micro or small enterprise, together with the interest on
+    them, are required to be disclosed in the annual statement of accounts
+    (Section 22, MSMED Act 2006).
+  section_23: >-
+    Interest paid under the MSMED Act is not allowed as a deduction when
+    computing income (Section 23, MSMED Act 2006).
+  tax_deduction_upcoming: >-
+    Under {tax_provision_current} (formerly {tax_provision_legacy}), a sum
+    payable to a micro or small enterprise beyond the Section 15 window is
+    deductible only in the year the payment is actually made. If {outstanding}
+    is still outstanding on {fy_end}, that deduction moves to a later year,
+    which at a {tax_rate_pct}% rate is worth about {tax_exposure}.
+  tax_deduction_crystallised: >-
+    Under {tax_provision_current} (formerly {tax_provision_legacy}), the
+    deduction on {outstanding} has already moved to the year of actual payment,
+    the financial year having ended on {fy_end}. At a {tax_rate_pct}% rate that
+    is worth about {tax_exposure}.
+  samadhaan: >-
+    Delayed payments may be referred to the {portal_name} portal at
+    {portal_url}. Under Section 19 of the MSMED Act 2006, a buyer challenging an
+    award of the Facilitation Council deposits {predeposit_pct}% of the amount
+    first.
 
 # --- MSME Samadhaan: the final rung --------------------------------------
 samadhaan:
   portal_name: "MSME Samadhaan"
   portal_url: "https://samadhaan.msme.gov.in"
-  # A buyer challenging an award must first deposit this share of it.
+  # Section 19: a buyer challenging an award must first deposit this share.
   challenge_predeposit_share: 0.75
 
 # Anything null or stale here is a submission blocker.
@@ -49,3 +160,4 @@ verify_before_submission:
   - rbi_bank_rate
   - buyer_tax_rate
   - as_of
+  - retrieved_on
