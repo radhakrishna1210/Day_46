@@ -9,6 +9,9 @@ audit/*
 data/seed/*
 !data/seed/.gitkeep
 
+# generated hidden personas (simulator only, never committed)
+sim/hidden_personas.json
+
 # generated reports
 report/out/
 

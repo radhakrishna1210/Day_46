@@ -23,9 +23,14 @@ the reason behind it.
 ```bash
 pip install -r requirements.txt
 cp .env.example .env          # defaults to LLM_MODE=mock; no API key needed
+python data/generate.py --seed 42   # required first: the dataset is generated, not committed
 python main.py --seed 42
 pytest -q
 ```
+
+Run `python data/generate.py --seed 42` before `main.py`. `buyers.json` and
+`invoices.json` are gitignored, so a fresh clone has no dataset until you
+generate one. The same seed always rebuilds byte-identical files.
 
 No API key is required. `LLM_MODE=mock` gives deterministic canned responses, so
 the project runs end to end on a fresh clone.

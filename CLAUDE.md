@@ -35,7 +35,8 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
   stop limits) and config/legal.yaml (15/45 day rule, RBI bank rate,
   tax rate, marked "as of Aug 2026"). Code reads config; code never
   embeds these numbers.
-- Data layer is SQLite (stdlib sqlite3) or JSON in data/seed/. No servers.
+- Data layer is JSON in data/seed/. The audit trail is append-only JSONL
+  in audit/. No database, no servers.
 - Randomness in data generation and simulation must accept a --seed flag
   so experiments are reproducible.
 
@@ -76,7 +77,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 
 ## Current status (update at the end of every session)
 - [x] Day 1: repo scaffold, config files, empty main.py pipeline
-- [ ] Day 2: data factory
+- [x] Day 2: data factory
 - [ ] Day 3: score engine + watchdog
 - [ ] Day 4-5: law engine + tests + Samadhaan draft
 - [ ] Day 6: brain + writer
@@ -85,11 +86,13 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 1 done (Aug 23, 2026): scaffold committed, `python main.py --seed 42`
-  walks 10 stages, `pytest -q` green (19 tests). Repo initialised on `main`.
-- ARCHITECTURE.md.md was renamed to ARCHITECTURE.md.
-- engine/audit.py added (not in the original layout) so non-negotiable #1
-  has one home from the start.
+- Day 2 done (Aug 23, 2026): data/generate.py builds 20 buyers + 279 invoices
+  (179 history, 100 current) from --seed; two seed-42 runs are byte-identical.
+- Hidden personas live in sim/hidden_personas.json (gitignored). Nothing under
+  engine/ may read it - a test asserts no persona tag reaches data/seed/.
+- Dataset is gitignored, so run `python data/generate.py --seed 42` first on
+  any fresh clone. SIMULATION_START is 2026-08-24, never date.today().
 - config/legal.yaml `rbi_bank_rate` is still null - set the verified rate
   before Day 4 law math, and again before submission.
-- Next: Day 2 data factory (data/generate.py --seed 42), messy on purpose.
+- Next: Day 3 score engine + watchdog. Persona delay signal is clean
+  (forgetful ~1d, cash_tight ~19d, habitual ~42d, deadbeat ~103d).
