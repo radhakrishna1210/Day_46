@@ -187,6 +187,12 @@ def print_messages(context: Context, limit: int = 5) -> None:
         print(f"  {drafted['invoice_id']}  rung {drafted['rung']}  "
               f"{drafted['language']}  guardrail: {drafted['guardrail']}")
         print("  " + "-" * 74)
+        for refused in drafted.get("rejected_drafts", []):
+            print(f"  REFUSED (attempt {refused['attempt']}) -- "
+                  f"{'; '.join(refused['failures'])}")
+            for line in refused["body"].splitlines():
+                print(f"  | {line}" if line else "  |")
+            print("  SENT INSTEAD:")
         print(f"  Subject: {drafted['subject']}")
         print()
         for line in drafted["body"].splitlines():

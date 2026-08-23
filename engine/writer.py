@@ -297,6 +297,56 @@ def fallback_message(values: dict[str, str], language: str, rung: int) -> dict[s
             "body": _fill(template["body"], values)}
 
 
+def _log_outcome(result: dict[str, Any], skeleton: dict[str, Any],
+                 invoice: dict[str, Any], when: date, log: bool) -> None:
+    """Record what was written, or what was refused and written instead.
+
+    Non-negotiable #1 is about money-related actions, and here the message IS
+    the action -- so the words go in, not merely a verdict. Where a draft was
+    refused, the rejected text is kept beside its replacement: a reviewer
+    should be able to read what the model wanted to say and why we would not
+    send it.
+    """
+    if not log:
+        return
+
+    fell_back = result["fallback_used"]
+    detail: dict[str, Any] = {
+        "rung": skeleton["rung"],
+        "language": result["language"],
+        "subject": result["subject"],
+        "body": result["body"],
+        "guardrail": result["guardrail"],
+        "attempts": result["attempts"],
+        "fallback_used": fell_back,
+    }
+    if result["rejected_drafts"]:
+        detail["rejected_drafts"] = result["rejected_drafts"]
+    if fell_back:
+        detail["fallback_failures"] = result.get("fallback_failures", [])
+        refused = "; ".join(
+            failure
+            for draft in result["rejected_drafts"]
+            for failure in draft["failures"]
+        )
+        reason = (f"the drafted message was refused after {result['attempts']} "
+                  f"attempts and the plain skeleton was sent instead: {refused}")
+    else:
+        reason = (f"rung {skeleton['rung']} message drafted in {result['language']} "
+                  f"and passed the guardrail on attempt {result['attempts']}")
+
+    audit.record(
+        invoice_id=invoice.get("invoice_id"),
+        action="writer_fallback" if fell_back else "message_drafted",
+        reason=reason,
+        source=result["source"],
+        today=when,
+        buyer_id=invoice.get("buyer_id"),
+        actor="writer",
+        detail=detail,
+    )
+
+
 def write_message(
     skeleton: dict[str, Any],
     *,
@@ -340,7 +390,10 @@ def write_message(
     variant = f"rung{skeleton['rung']}_{language}"
     attempts_allowed = 1 + int(rules().get("writer", {}).get("regeneration_attempts", 1))
 
+    when = today or date.today()
     failures: list[str] = []
+    rejected: list[dict[str, Any]] = []
+
     for attempt in range(1, attempts_allowed + 1):
         raw = llm(prompt if attempt == 1 else f"{prompt}\n\nYour previous draft was "
                   f"rejected: {'; '.join(failures)}. Fix it.",
@@ -350,25 +403,22 @@ def write_message(
                    "body": _fill(message["body"], values)}
         ok, failures = passes_guardrail(message, skeleton, values)
         if ok:
-            return {**message, "language": language, "guardrail": "passed",
-                    "attempts": attempt, "fallback_used": False, "source": "llm"}
+            result = {**message, "language": language, "guardrail": "passed",
+                      "attempts": attempt, "fallback_used": False,
+                      "source": "llm", "rejected_drafts": rejected}
+            _log_outcome(result, skeleton, invoice, when, log)
+            return result
+        # Keep what was refused. "Here is what the model wrote, here is why we
+        # would not send it" is the most useful thing this trail can show.
+        rejected.append({"attempt": attempt, "subject": message["subject"],
+                         "body": message["body"], "failures": failures})
 
     message = fallback_message(values, language, skeleton["rung"])
     ok, fallback_failures = passes_guardrail(message, skeleton, values)
-    if log:
-        audit.record(
-            invoice_id=invoice.get("invoice_id"),
-            action="writer_fallback",
-            reason=("the drafted message failed the guardrail after "
-                    f"{attempts_allowed} attempts: {'; '.join(failures)}"),
-            source="rule",
-            today=today or date.today(),
-            buyer_id=invoice.get("buyer_id"),
-            actor="writer",
-            detail={"rung": skeleton["rung"], "language": language,
-                    "draft_failures": failures,
-                    "fallback_clean": ok, "fallback_failures": fallback_failures},
-        )
-    return {**message, "language": language,
-            "guardrail": "failed" if not ok else "passed (fallback)",
-            "attempts": attempts_allowed, "fallback_used": True, "source": "rule"}
+    result = {**message, "language": language,
+              "guardrail": "failed" if not ok else "passed (fallback)",
+              "attempts": attempts_allowed, "fallback_used": True,
+              "source": "rule", "rejected_drafts": rejected,
+              "fallback_failures": fallback_failures}
+    _log_outcome(result, skeleton, invoice, when, log)
+    return result

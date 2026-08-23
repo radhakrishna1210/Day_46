@@ -281,7 +281,9 @@ def test_the_fallback_is_logged_with_the_reason(monkeypatch: pytest.MonkeyPatch)
     draft(2)
     entries = audit.entries_for("INV-2026-0204")
     assert entries and entries[-1]["action"] == "writer_fallback"
-    assert entries[-1]["detail"]["draft_failures"]
+    detail = entries[-1]["detail"]
+    assert detail["rejected_drafts"]
+    assert detail["rejected_drafts"][0]["failures"]
 
 
 def test_regeneration_is_attempted_before_falling_back(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -349,3 +351,92 @@ def test_an_amount_followed_by_punctuation_is_read_correctly(text: str) -> None:
     assert found
     for token in found:
         assert not token.endswith((",", ".")), f"punctuation swallowed: {token!r}"
+
+
+# --- the audit trail records what was written, and what was refused ------
+
+def test_every_drafted_message_is_logged() -> None:
+    """A judge asking "what did it actually say to this buyer" needs an answer."""
+    message = draft(2)
+    entries = audit.entries_for("INV-2026-0204")
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["action"] == "message_drafted"
+    assert entry["actor"] == "writer"
+    assert entry["source"] == "llm"
+
+
+def test_the_log_carries_subject_rung_language_and_verdict() -> None:
+    message = draft(2)
+    detail = audit.entries_for("INV-2026-0204")[0]["detail"]
+    assert detail["subject"] == message["subject"]
+    assert detail["rung"] == 2
+    assert detail["language"] == message["language"]
+    assert detail["guardrail"] == "passed"
+    assert detail["attempts"] == 1
+    assert detail["fallback_used"] is False
+
+
+def test_the_log_carries_the_words_themselves() -> None:
+    """The message is the money-related action, so the words are the record."""
+    message = draft(2)
+    assert audit.entries_for("INV-2026-0204")[0]["detail"]["body"] == message["body"]
+
+
+def test_a_clean_draft_records_no_rejected_text() -> None:
+    draft(2)
+    assert "rejected_drafts" not in audit.entries_for("INV-2026-0204")[0]["detail"]
+    assert draft(2)["rejected_drafts"] == []
+
+
+def test_a_refused_draft_is_kept_beside_its_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The most persuasive artefact this system produces about its own safety."""
+    force_failure(monkeypatch)
+    message = draft(2)
+    detail = audit.entries_for("INV-2026-0204")[0]["detail"]
+
+    rejected = detail["rejected_drafts"]
+    assert len(rejected) == 2, "both attempts should be recorded"
+    assert "or else" in rejected[0]["body"].lower(), "the refused text is not kept"
+    assert any("threatening" in f for f in rejected[0]["failures"])
+
+    # and the replacement sits in the same entry
+    assert detail["body"] == message["body"]
+    assert "or else" not in detail["body"].lower()
+
+
+def test_the_reason_names_why_the_draft_was_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    force_failure(monkeypatch)
+    draft(2)
+    reason = audit.entries_for("INV-2026-0204")[0]["reason"]
+    assert "refused" in reason
+    assert "threatening" in reason
+
+
+def test_the_returned_message_exposes_the_rejected_drafts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """So a dry run can show them without re-reading the log."""
+    force_failure(monkeypatch)
+    message = draft(2)
+    assert len(message["rejected_drafts"]) == 2
+    assert message["rejected_drafts"][0]["failures"]
+
+
+def test_a_dry_run_writes_nothing() -> None:
+    draft(2, log=False)
+    assert audit.entries() == []
+
+
+def test_the_log_lines_stay_valid_json() -> None:
+    import json
+    draft(1)
+    draft(2)
+    for line in audit.LOG_PATH.read_text(encoding="utf-8").strip().splitlines():
+        entry = json.loads(line)
+        assert entry["actor"] == "writer"
+        assert entry["detail"]["subject"]
