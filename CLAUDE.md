@@ -86,17 +86,18 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 6 brain done (Aug 23, 2026): engine/brain.py, 319 tests. decide() takes
-  (invoice, buyer, score, legal_position, promises, history, config) and the
-  clock comes from legal_position["as_of"], never date.today().
-- Ceiling invariant is enforced by construction: chosen = min(desired, ceiling),
-  re-applied after the escalation walk. Exceeding it CAPS the rung (records
-  escalation_capped); it never forces rung 4.
+- Day 6 brain done (Aug 23, 2026): engine/brain.py, 327 tests. Ceiling
+  invariant enforced by construction: chosen = min(desired, ceiling), applied
+  again after the escalation walk. Exceeding it CAPS the rung, never forces 4.
 - Rung 4 branch MUST stay above every send gate -- rung 4 has max_messages 0,
-  so a per-rung check placed first makes the final rung unreachable. Three
-  tests guard this.
-- LLM is consulted only for partial-payment-plus-unclear-reply, and may only
-  soften a send into a wait. "escalate" is discarded and logged llm_ignored.
-- Next: Day 6 writer. It humanises rungs.fact_skeleton without moving a digit;
-  the skeleton's `forbidden` list is the guardrail. Quiet hours still owed in
+  so a per-rung check placed first makes the final rung unreachable.
+- Low confidence clamps pacing to the medium band both ways
+  (rules.yaml ladder.low_confidence_band, null to disable).
+- PARKED (revisit after the writer, once simulator needs are clear): the
+  starting rung ignores days_overdue, so a 146-day-overdue FIRST contact still
+  opens at rung 1. Would need an overdue->rung floor table, ceiling-capped.
+- PARKED (Day 8 scope): main.py passes history=[] so the ladder never climbs
+  across runs. Seed contact history from audit.entries_for() with the simulator.
+- Next: Day 6 writer. Humanises rungs.fact_skeleton without moving a digit;
+  the skeleton's `forbidden` list is the guardrail. Quiet hours owed in
   channels.py on Day 7.
