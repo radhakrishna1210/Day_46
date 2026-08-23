@@ -94,43 +94,154 @@ def llm(prompt: str, purpose: str, variant: str | None = None) -> str:
 last_usage: dict[str, Any] = {}
 
 
+class LLMError(RuntimeError):
+    """Base for anything that stops the model answering."""
+
+
+class LLMUnavailable(LLMError):
+    """Configuration or transport failure -- no key, network down, bad model id."""
+
+
+class LLMRefused(LLMError):
+    """Content safety blocked the prompt or the response.
+
+    Distinct from LLMUnavailable on purpose: a refusal is about what was asked,
+    and callers respond to it differently -- the writer falls back to the plain
+    factual message rather than retrying an identical request.
+    """
+
+
+#: The response contract for each purpose. Gemini enforces these server-side,
+#: so a malformed answer is impossible rather than merely unlikely. The parsers
+#: downstream still validate, because a schema is the model's contract and not
+#: a guarantee.
+SCHEMAS: Final[dict[str, dict[str, Any]]] = {
+    "draft_message": {
+        "type": "object",
+        "properties": {"subject": {"type": "string"}, "body": {"type": "string"}},
+        "required": ["subject", "body"],
+    },
+    "parse_reply": {
+        "type": "object",
+        "properties": {
+            "intent": {"type": "string",
+                       "enum": ["promise", "dispute", "refusal", "question", "noise"]},
+            "date_hint": {"type": ["string", "null"]},
+            "amount": {"type": ["string", "null"], "enum": ["full", "partial", None]},
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+            "quote": {"type": "string"},
+        },
+        "required": ["intent", "confidence", "quote"],
+    },
+    "judgment_call": {
+        "type": "object",
+        "properties": {
+            "decision": {"type": "string", "enum": ["wait", "proceed"]},
+            "reason": {"type": "string"},
+        },
+        "required": ["decision", "reason"],
+    },
+}
+
+
+def _safety_settings(types: Any) -> list[Any]:
+    """Thresholds from config, never the SDK defaults.
+
+    Left at default, a message stating statutory interest and a tax deadline is
+    the shape of text a generic filter reads as coercive.
+    """
+    from engine.config import rules
+
+    return [
+        types.SafetySetting(category=category, threshold=threshold)
+        for category, threshold in (rules()["llm"].get("safety") or {}).items()
+    ]
+
+
+def _record_usage(response: Any, purpose: str, model: str) -> None:
+    """Capture token counts defensively -- a renamed field must not break a call."""
+    usage = getattr(response, "usage_metadata", None)
+    last_usage.clear()
+    last_usage.update({
+        "purpose": purpose,
+        "model": model,
+        "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
+        "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
+    })
+
+
+def _text_or_refusal(response: Any, purpose: str) -> str:
+    """Pull the text out, or raise a refusal that names why.
+
+    Checked in this order because an input-side block produces no candidates at
+    all, and reading .text first could raise a less informative error.
+    """
+    feedback = getattr(response, "prompt_feedback", None)
+    blocked = getattr(feedback, "block_reason", None) if feedback else None
+    if blocked:
+        raise LLMRefused(f"the prompt was blocked by content safety ({blocked})")
+
+    candidates = list(getattr(response, "candidates", None) or [])
+    finish = getattr(candidates[0], "finish_reason", None) if candidates else None
+    if finish and str(finish).upper().endswith("SAFETY"):
+        ratings = getattr(candidates[0], "safety_ratings", None) or []
+        detail = ", ".join(
+            f"{getattr(r, 'category', '?')}={getattr(r, 'probability', '?')}"
+            for r in ratings
+        )
+        raise LLMRefused(f"the response was blocked by content safety ({detail or finish})")
+
+    try:
+        text = response.text
+    except Exception as exc:                     # some SDKs raise on empty parts
+        raise LLMRefused(f"no usable response ({type(exc).__name__}: {exc})") from exc
+
+    if not text or not text.strip():
+        raise LLMRefused(f"the model returned no text (finish_reason={finish})")
+    return text
+
+
+def _client(key: str) -> Any:
+    from google import genai
+
+    # Explicit api_key: the SDK also honours GOOGLE_API_KEY, which takes
+    # precedence, and an ambient credential must not decide who gets billed.
+    return genai.Client(api_key=key)
+
+
 def _live_response(prompt: str, purpose: str) -> str:
-    """Call the real API. Model and limits come from config, the key from .env."""
-    import anthropic
+    """Call the real API. Model, limits and safety come from config; key from .env."""
+    from google.genai import types
 
     from engine.config import rules
 
-    key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    key = (os.getenv("GEMINI_API_KEY") or "").strip()
     if not key:
-        raise RuntimeError(
-            "LLM_MODE=live but ANTHROPIC_API_KEY is empty in .env. "
+        raise LLMUnavailable(
+            "LLM_MODE=live but GEMINI_API_KEY is empty in .env. "
             "Put the key there, not in your shell."
         )
 
     config = rules()["llm"]
     model = config["models"][purpose]
-    request: dict[str, Any] = {
-        "model": model,
-        "max_tokens": int(config["max_tokens"][purpose]),
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    effort = (config.get("effort") or {}).get(purpose)
-    if effort:
-        request["output_config"] = {"effort": effort}
+    try:
+        response = _client(key).models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=int(config["max_tokens"][purpose]),
+                response_mime_type="application/json",
+                response_json_schema=SCHEMAS[purpose],
+                safety_settings=_safety_settings(types),
+            ),
+        )
+    except LLMError:
+        raise
+    except Exception as exc:
+        raise LLMUnavailable(f"{type(exc).__name__}: {exc}") from exc
 
-    # Explicit api_key: without it the SDK would fall back to an ambient
-    # credential and bill something other than this project's key.
-    client = anthropic.Anthropic(api_key=key)
-    response = client.messages.create(**request)
-
-    last_usage.clear()
-    last_usage.update({
-        "purpose": purpose,
-        "model": model,
-        "input_tokens": response.usage.input_tokens,
-        "output_tokens": response.usage.output_tokens,
-    })
-    return "".join(block.text for block in response.content if block.type == "text")
+    _record_usage(response, purpose, model)
+    return _text_or_refusal(response, purpose)
 
 
 def _mock_response(prompt: str, purpose: str, variant: str | None = None) -> str:
@@ -278,15 +389,55 @@ def calibrate() -> int:
     return 0
 
 
+def list_models() -> int:
+    """Print the models this key can actually reach.
+
+    The ids in config/rules.yaml were taken from published pricing pages, not
+    from an authoritative list, so they need confirming before a real run.
+    """
+    from engine.config import rules
+    from engine.money import enable_unicode_output
+
+    enable_unicode_output()
+    key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not key:
+        print("GEMINI_API_KEY is empty in .env. Put the key there, not in your shell.")
+        return 1
+
+    try:
+        available = list(_client(key).models.list())
+    except Exception as exc:
+        print(f"could not list models: {type(exc).__name__}: {exc}")
+        return 1
+
+    names = sorted(
+        (getattr(m, "name", "") or "").removeprefix("models/") for m in available
+    )
+    print(f"{len(names)} models reachable with this key:")
+    for name in names:
+        print(f"  {name}")
+
+    print()
+    print("configured in config/rules.yaml:")
+    for purpose, model in rules()["llm"]["models"].items():
+        mark = "ok" if model in names else "NOT IN THE LIST ABOVE"
+        print(f"  {purpose:<16}{model:<28}{mark}")
+    return 0
+
+
 def main() -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Check the live model against the guardrail.")
     parser.add_argument("--calibrate", action="store_true",
                         help="draft 3 messages and parse 3 replies against the real API")
+    parser.add_argument("--list-models", action="store_true",
+                        help="print the model ids this key can reach, and check config")
     args = parser.parse_args()
+    if args.list_models:
+        return list_models()
     if not args.calibrate:
-        print(f"LLM_MODE={get_mode()}. Run with --calibrate to test against the real API.")
+        print(f"LLM_MODE={get_mode()}. Run with --calibrate or --list-models.")
         return 0
     return calibrate()
 

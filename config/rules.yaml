@@ -154,24 +154,37 @@ law_gates:
   waiting_horizon_days: 7
 
 # --- Which model answers which question (engine/llm.py) -------------------
-# ARCHITECTURE.md makes this call explicitly: a cheaper model for high-volume
-# reply parsing, a stronger one for writing messages a buyer will read.
+# ARCHITECTURE.md makes this call explicitly: a cheaper, faster model for
+# high-volume reply parsing, a stronger one for prose a buyer will read.
 # Credentials never appear here -- only in .env.
+#
+# CONFIRM THESE IDS with `python engine/llm.py --list-models` before relying
+# on them. They were taken from published pricing pages, not from the model
+# list your key can actually reach.
 llm:
   models:
-    draft_message: "claude-sonnet-5"
-    parse_reply: "claude-haiku-4-5"
-    judgment_call: "claude-sonnet-5"
+    draft_message: "gemini-3.1-pro"
+    judgment_call: "gemini-3.1-pro"
+    parse_reply: "gemini-3.7-flash"
   max_tokens:
     draft_message: 2000
     parse_reply: 600
     judgment_call: 600
-  # Thinking effort. Haiku 4.5 rejects output_config.effort, so it is null
-  # there rather than a lower setting.
-  effort:
-    draft_message: medium
-    parse_reply: null
-    judgment_call: low
+
+  # Content-safety thresholds, set explicitly rather than left at default.
+  # A rung 3 message states statutory interest, a tax-deduction deadline and a
+  # Facilitation Council reference -- entirely legitimate, and exactly the
+  # shape of text a generic filter can read as coercive.
+  #
+  # BLOCK_ONLY_HIGH, deliberately NOT off. Our own guardrail is stricter and
+  # far more specific than a generic filter: it bans threatening phrases
+  # outright and rejects any figure that did not come from the law engine.
+  # This is the loosest setting that still catches something genuinely wrong.
+  safety:
+    HARM_CATEGORY_HARASSMENT: BLOCK_ONLY_HIGH
+    HARM_CATEGORY_HATE_SPEECH: BLOCK_ONLY_HIGH
+    HARM_CATEGORY_SEXUALLY_EXPLICIT: BLOCK_ONLY_HIGH
+    HARM_CATEGORY_DANGEROUS: BLOCK_ONLY_HIGH
 
 # --- Message writer (engine/writer.py) ------------------------------------
 writer:

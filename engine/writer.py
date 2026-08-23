@@ -31,7 +31,7 @@ from typing import Any
 
 from engine import audit
 from engine.config import legal, messages, rules, supplier
-from engine.llm import llm
+from engine.llm import LLMError, llm
 from engine.money import format_inr
 
 
@@ -415,9 +415,19 @@ def write_message(
     rejected: list[dict[str, Any]] = []
 
     for attempt in range(1, attempts_allowed + 1):
-        raw = llm(prompt if attempt == 1 else f"{prompt}\n\nYour previous draft was "
-                  f"rejected: {'; '.join(failures)}. Fix it.",
-                  purpose="draft_message", variant=variant)
+        try:
+            raw = llm(prompt if attempt == 1 else f"{prompt}\n\nYour previous draft was "
+                      f"rejected: {'; '.join(failures)}. Fix it.",
+                      purpose="draft_message", variant=variant)
+        except LLMError as exc:
+            # A content-safety block or a dead network must not abort a run of
+            # ninety invoices. Record it like any other reason a draft could not
+            # be trusted and let the loop fall through to the plain factual
+            # message, which needs no model at all.
+            failures = [f"the model produced nothing usable: {exc}"]
+            rejected.append({"attempt": attempt, "subject": "", "body": "",
+                             "failures": failures})
+            continue
         message = _parse(raw)
         message = {"subject": _fill(message["subject"], values),
                    "body": _fill(message["body"], values)}

@@ -36,7 +36,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from engine import audit
-from engine.llm import llm
+from engine.llm import LLMError, llm
 
 #: The only intents the rest of the system understands.
 INTENTS = ("promise", "dispute", "refusal", "question", "noise")
@@ -133,11 +133,17 @@ def parse_reply(
         "null), confidence (high, medium, low) and quote (the words that "
         "carried the intent)."
     )
-    raw = llm(prompt, purpose="parse_reply", variant=variant)
-    parsed = _load(raw)
+    downgraded: list[str] = []
+    try:
+        parsed = _load(llm(prompt, purpose="parse_reply", variant=variant))
+    except LLMError as exc:
+        # Treat an unreadable reply as noise rather than losing the whole
+        # sweep. Noise is the safe default: it changes nothing and leaves the
+        # case exactly where it was.
+        parsed = {}
+        downgraded.append(f"the model could not read this reply: {exc}")
 
     intent = str(parsed.get("intent", "")).lower()
-    downgraded: list[str] = []
 
     if intent not in INTENTS:
         downgraded.append(f"unknown intent {intent!r} treated as noise")

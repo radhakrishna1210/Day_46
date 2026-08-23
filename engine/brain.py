@@ -38,7 +38,7 @@ from typing import Any
 
 from engine import audit, rungs, samadhaan
 from engine.config import rules
-from engine.llm import llm
+from engine.llm import LLMError, llm
 
 #: Kinds of action. `wait` is recoverable, `stop` is terminal, `handoff` gives
 #: the case to a human, `send` is the only one that produces a message.
@@ -153,7 +153,12 @@ def _ask_llm(invoice: dict[str, Any], legal_position: dict[str, Any],
         f"The rules propose to {proposed}. Should we wait instead? "
         f"Answer with a JSON object containing decision (wait or proceed) and reason."
     )
-    raw = llm(prompt, purpose="judgment_call")
+    try:
+        raw = llm(prompt, purpose="judgment_call")
+    except LLMError as exc:
+        # The model may only ever make us gentler, so losing it costs nothing:
+        # the rules have already decided and their decision stands.
+        return "proceed", f"the model was unavailable, so the rule stands: {exc}"
     match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
     decision, reasoning = "proceed", raw.strip()
     if match:
