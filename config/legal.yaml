@@ -124,6 +124,9 @@ facts:
     {effective_rate_pct}% per annum, three times the RBI Bank Rate of
     {bank_rate_pct}% (Section 16, MSMED Act 2006). Interest to date:
     {interest}.
+  section_16_running: >-
+    At the current rate this outstanding is adding about {per_day} each day;
+    a further {horizon_days} days would add about {cost_of_waiting}.
   section_22: >-
     Unpaid dues to a micro or small enterprise, together with the interest on
     them, are required to be disclosed in the annual statement of accounts

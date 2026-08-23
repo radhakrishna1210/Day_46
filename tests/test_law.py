@@ -20,12 +20,12 @@ Reference values used throughout (from config/legal.yaml):
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from engine import law
-from engine.config import legal
+from engine.config import legal, rules
 
 MONTHLY_RATE = 0.165 / 12          # 0.01375, restated here so the tests are
                                    # independent of the implementation
@@ -610,3 +610,122 @@ def test_an_undisputed_invoice_is_not_held() -> None:
 def test_samadhaan_draft_is_not_built_yet() -> None:
     with pytest.raises(NotImplementedError):
         law.samadhaan_draft(invoice(), {"buyer_id": "BUY-01"}, date(2026, 8, 24))
+
+
+# ==========================================================================
+# Forward-looking interest -- what the NEXT week of delay costs
+# ==========================================================================
+# A static "interest to date" figure reads as a fine for the past. The same
+# arithmetic run one day and one week forward reframes it as the price of the
+# next decision, which is the number a buyer with a payment queue acts on.
+# Pure derivative of the tested formula: I(t+n) - I(t).
+
+def test_one_more_day_of_delay_has_a_price() -> None:
+    """MANUAL MATH
+
+      Rs 5,00,000, 45-day terms, accepted 2026-01-01, valued 2026-08-16.
+      interest at 2026-08-16 (6 rests, 0 stub)  = 4,269,423 paise
+      interest at 2026-08-17 (6 rests, 1 stub day):
+        factor = 1.01375^6 x (1 + 0.01375 x 1/30) - 1
+               = 1.0853884688 x 1.0004583333 - 1 = 0.0858859375
+        50,000,000 x 0.0858859375 = 4,294,296.87 -> 4,294,297 paise
+      per day = 4,294,297 - 4,269,423 = 24,874 paise = Rs 248.74
+    """
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    assert law.interest_per_day_paise(record, date(2026, 8, 16)) == 24_874
+
+
+def test_the_daily_cost_compounds_on_the_grown_balance() -> None:
+    """It exceeds a naive principal x r / 30, because six rests already landed.
+
+      naive:  50,000,000 x 0.01375 / 30 = 22,916.67 paise
+      actual: 24,874 paise -- the difference IS the compounding
+    """
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    naive = 50_000_000 * (0.165 / 12) / 30
+    assert law.interest_per_day_paise(record, date(2026, 8, 16)) > naive
+
+
+def test_the_cost_of_waiting_another_week() -> None:
+    """MANUAL MATH
+
+      interest at 2026-08-23 (6 rests, 7 stub days):
+        factor = 1.01375^6 x (1 + 0.01375 x 7/30) - 1
+               = 1.0853884688 x 1.0032083333 - 1 = 0.0888707576
+        50,000,000 x 0.0888707576 = 4,443,537.88 -> 4,443,538 paise
+      cost of waiting = 4,443,538 - 4,269,423 = 174,115 paise = Rs 1,741.15
+    """
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    assert law.cost_of_waiting_paise(record, date(2026, 8, 16)) == 174_115
+
+
+def test_daily_costs_add_up_to_the_weekly_cost() -> None:
+    """Telescoping check: seven single days should equal one seven-day jump.
+
+    Rounding each day separately can drift a few paise from rounding once, so
+    this allows a small tolerance rather than demanding exact equality.
+    """
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    start = date(2026, 8, 16)
+    daily = sum(
+        law.interest_per_day_paise(record, start + timedelta(days=offset))
+        for offset in range(7)
+    )
+    assert abs(daily - law.cost_of_waiting_paise(record, start)) <= 10
+
+
+def test_nothing_is_accruing_before_the_invoice_is_overdue() -> None:
+    """There is no cost of waiting on an invoice that is not yet late."""
+    record = invoice(acceptance="2026-08-10", written=False, agreed_days=None)
+    assert law.interest_per_day_paise(record, date(2026, 8, 16)) == 0
+    assert law.cost_of_waiting_paise(record, date(2026, 8, 16)) == 0
+
+
+def test_a_part_paid_invoice_accrues_less_per_day() -> None:
+    """Paying something down visibly slows the meter -- the point of saying it."""
+    full = invoice(written=False, agreed_days=None, acceptance="2026-01-01",
+                   amount=100_000_000)
+    part_paid = invoice(
+        written=False, agreed_days=None, acceptance="2026-01-01", amount=100_000_000,
+        payments=[{"date": "2026-04-17", "amount_paise": 40_000_000}],
+        status="partially_paid",
+    )
+    when = date(2026, 7, 17)
+    assert law.interest_per_day_paise(part_paid, when) < law.interest_per_day_paise(full, when)
+
+
+def test_the_waiting_horizon_comes_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seven days is our framing choice, not statute, so it lives in rules.yaml."""
+    tweaked = {"law_gates": dict(rules()["law_gates"], waiting_horizon_days=14)}
+    monkeypatch.setattr(law, "rules", lambda: tweaked)
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    at_today = law.interest_owed_paise(record, date(2026, 8, 16))
+    at_plus14 = law.interest_owed_paise(record, date(2026, 8, 30))
+    assert law.cost_of_waiting_paise(record, date(2026, 8, 16)) == at_plus14 - at_today
+
+
+def test_an_explicit_horizon_overrides_the_configured_one() -> None:
+    record = invoice(acceptance="2026-01-01", agreed_days=45)
+    one_day = law.cost_of_waiting_paise(record, date(2026, 8, 16), days=1)
+    assert one_day == law.interest_per_day_paise(record, date(2026, 8, 16))
+
+
+def test_legal_position_carries_the_forward_looking_figures() -> None:
+    position = law.legal_position(overdue_invoice(), date(2026, 8, 16))
+    assert position["interest_per_day_paise"] == 24_874
+    assert position["cost_of_waiting_paise"] == 174_115
+    assert position["waiting_horizon_days"] == 7
+
+
+def test_a_not_yet_due_position_has_no_forward_looking_cost() -> None:
+    position = law.legal_position(
+        invoice(acceptance="2026-08-10", written=False, agreed_days=None),
+        date(2026, 8, 16),
+    )
+    assert position["interest_per_day_paise"] == 0
+    assert position["cost_of_waiting_paise"] == 0
+
+
+def test_the_running_cost_is_stated_as_a_fact() -> None:
+    facts = " ".join(law.legal_position(overdue_invoice(), date(2026, 8, 16))["facts"])
+    assert "248.74" in facts or "each day" in facts

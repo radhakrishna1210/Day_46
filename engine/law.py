@@ -214,6 +214,37 @@ def interest_owed_paise(invoice: dict[str, Any], today: date) -> int:
     return round_paise(total)
 
 
+def interest_per_day_paise(invoice: dict[str, Any], today: date) -> int:
+    """What one more day of delay adds, in integer paise.
+
+    A pure derivative of interest_owed_paise: I(t+1) - I(t). Because the stub
+    period accrues on a balance that has already compounded, this is larger
+    than a naive principal x rate / 30 -- which is precisely the fact worth
+    stating.
+
+    Zero while the invoice is not yet overdue: there is no cost of continuing
+    to wait when nothing is late.
+    """
+    if days_overdue(invoice, today) <= 0:
+        return 0
+    return (interest_owed_paise(invoice, today + timedelta(days=1))
+            - interest_owed_paise(invoice, today))
+
+
+def cost_of_waiting_paise(invoice: dict[str, Any], today: date, days: int | None = None) -> int:
+    """What continuing to wait would add over the next `days`, in integer paise.
+
+    Defaults to the horizon in config/rules.yaml. That horizon is our framing
+    choice, not statute, which is why it lives there and not in legal.yaml.
+    """
+    if days is None:
+        days = int(rules()["law_gates"]["waiting_horizon_days"])
+    if days_overdue(invoice, today) <= 0:
+        return 0
+    return (interest_owed_paise(invoice, today + timedelta(days=days))
+            - interest_owed_paise(invoice, today))
+
+
 # --------------------------------------------------------------------------
 # Section 37(2)(g), Income-tax Act 2025 (formerly s.43B(h), 1961)
 # --------------------------------------------------------------------------
@@ -283,6 +314,9 @@ def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> list[str]:
         "effective_rate_pct": f"{effective_annual_rate() * 100:.2f}",
         "bank_rate_pct": f"{float(config['rbi_bank_rate']) * 100:.2f}",
         "interest": format_inr(position["interest_paise"], decimals=True),
+        "per_day": format_inr(position["interest_per_day_paise"], decimals=True),
+        "cost_of_waiting": format_inr(position["cost_of_waiting_paise"], decimals=True),
+        "horizon_days": position["waiting_horizon_days"],
         "outstanding": format_inr(position["principal_paise"]),
         "tax_exposure": format_inr(position["tax_exposure_paise"]),
         "tax_rate_pct": f"{float(config['buyer_tax_rate']) * 100:.0f}",
@@ -302,6 +336,7 @@ def _facts(invoice: dict[str, Any], position: dict[str, Any]) -> list[str]:
     else:
         keys.append("section_15_agreed")
     keys.append("section_16")
+    keys.append("section_16_running")
 
     if rung >= 3:
         keys.append("section_22")
@@ -341,6 +376,9 @@ def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:
         "principal_paise": principal,
         "interest_paise": interest,
         "total_payable_paise": principal + interest,
+        "interest_per_day_paise": interest_per_day_paise(invoice, today),
+        "cost_of_waiting_paise": cost_of_waiting_paise(invoice, today),
+        "waiting_horizon_days": int(rules()["law_gates"]["waiting_horizon_days"]),
         "tax_exposure_paise": buyer_tax_exposure_paise(invoice, today),
         "fy_end": fy_end.isoformat(),
         "tax_deduction_crystallised": fy_end < today and overdue > 0 and principal > 0,

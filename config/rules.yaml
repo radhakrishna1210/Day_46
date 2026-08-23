@@ -75,6 +75,10 @@ law_gates:
   tax_horizon_days: 90
   # How overdue an invoice must be before we will mention Samadhaan at all.
   samadhaan_after_days: 45
+  # How far forward to quote the cost of continuing to wait. A static
+  # interest figure reads as a fine for the past; the same arithmetic run
+  # forward is the price of the next decision.
+  waiting_horizon_days: 7
 
 # --- Channels (engine/channels.py) ----------------------------------------
 channels:
