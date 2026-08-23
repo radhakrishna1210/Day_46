@@ -80,24 +80,23 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 2: data factory
 - [x] Day 3: score engine + watchdog
 - [x] Day 4-5: law engine + tests + Samadhaan draft
-- [~] Day 6: brain DONE (ladder + hard stops + audit); writer left
+- [x] Day 6: brain + writer
 - [ ] Day 7: channels (real email) + promise tracker
 - [ ] Day 8-9: simulator + baseline experiment
 - [ ] Day 10: report, README, ARCHITECTURE.md polish
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 6 brain done (Aug 23, 2026): engine/brain.py, 327 tests. Ceiling
-  invariant enforced by construction: chosen = min(desired, ceiling), applied
-  again after the escalation walk. Exceeding it CAPS the rung, never forces 4.
-- Rung 4 branch MUST stay above every send gate -- rung 4 has max_messages 0,
-  so a per-rung check placed first makes the final rung unreachable.
-- Low confidence clamps pacing to the medium band both ways
-  (rules.yaml ladder.low_confidence_band, null to disable).
-- PARKED (revisit after the writer, once simulator needs are clear): the
-  starting rung ignores days_overdue, so a 146-day-overdue FIRST contact still
-  opens at rung 1. Would need an overdue->rung floor table, ceiling-capped.
-- PARKED (Day 8 scope): main.py passes history=[] so the ladder never climbs
-  across runs. Seed contact history from audit.entries_for() with the simulator.
-- Next: Day 6 writer. Humanises rungs.fact_skeleton without moving a digit;
-  the skeleton's `forbidden` list is the guardrail. Quiet hours owed in
-  channels.py on Day 7.
+- Day 6 done (Aug 24, 2026): brain + writer, 398 tests. Dry run drafts 85
+  messages, 36 Hinglish, 0 fallbacks. `python main.py --seed 42 --dry-run`.
+- NO legal wording in config/messages.yaml -- templates hold connective tissue
+  and interpolate {fact_*} from the skeleton. A test enforces it (no %, no
+  currency, no citations). Hinglish keeps legal sentences in English.
+- Ceiling invariant (chosen == 0 OR 1 <= chosen <= available_rung) and the
+  rung-4-above-send-gates ordering both still guarded by tests. Do not reorder.
+- Messages quote interest_per_day_AVERAGE_paise, not the exact daily
+  difference, which is legitimately zero one day per 31-day month.
+- PARKED: (a) starting rung ignores days_overdue, so a 146-day-overdue first
+  contact opens at rung 1; (b) main.py passes history=[] so the ladder never
+  climbs across runs -- seed it from audit.entries_for() with the simulator.
+- Next: Day 7 channels (real email to TEST_INBOX_EMAIL only, quiet hours owed
+  here) + promise tracker.
