@@ -77,6 +77,7 @@ def test_output_carries_no_wall_clock_timestamp(world: dict) -> None:
             assert key in {
                 "schema_version", "seed", "buyer_count", "simulation_start",
                 "current_invoice_count", "history_invoice_count", "warning",
+                "with_malformed",
             }
 
     # Every date is YYYY-MM-DD. An ISO datetime would mean the clock got in.
@@ -383,3 +384,9 @@ def test_print_summary_does_not_crash_on_malformed_fixtures(capsys) -> None:
     world = gen.generate(SEED, with_malformed=True)
     gen.print_summary(world, {"buyers": gen.DEFAULT_SEED_DIR / "buyers.json"})
     assert "malformed" in capsys.readouterr().out
+
+
+def test_with_malformed_is_recorded_in_the_invoices_meta() -> None:
+    """The dataset on disk is self-describing -- see data.store.load_meta()."""
+    assert gen.generate(SEED)["invoices"]["meta"]["with_malformed"] is False
+    assert gen.generate(SEED, with_malformed=True)["invoices"]["meta"]["with_malformed"] is True

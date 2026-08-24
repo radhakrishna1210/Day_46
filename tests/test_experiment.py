@@ -161,6 +161,39 @@ def test_every_exception_row_has_a_reason_and_a_known_status(results_payload) ->
         assert row["outstanding_paise"] >= 0
 
 
+# --------------------------------------------------------------------------
+# reply safety net -- docs/edge_cases.md TC-032 / TC-036
+# --------------------------------------------------------------------------
+
+def test_trip_wire_rows_reads_the_full_audit_trail_not_just_the_excerpt(monkeypatch) -> None:
+    """Either action could easily fall outside build_report.AUDIT_EXCERPT_LINES."""
+    from engine import audit
+
+    fake_entries = [
+        {"action": "reply_parsed", "invoice_id": "X", "detail": {}},
+        {"action": "promise_may_contain_a_dispute", "invoice_id": "INV-1",
+         "detail": {"reply": "goods damaged but I'll pay Friday"}},
+        {"action": "promise_may_contain_multiple_amounts", "invoice_id": "INV-2",
+         "detail": {"reply": "1 lakh Friday, 4 lakh next month"}},
+    ]
+    monkeypatch.setattr(audit, "entries", lambda: fake_entries)
+    rows = build_report._trip_wire_rows()
+    assert [r["invoice_id"] for r in rows] == ["INV-1", "INV-2"]
+    assert "possible dispute" in rows[0]["flag"]
+    assert "more than one amount" in rows[1]["flag"]
+
+
+def test_trip_wire_rows_empty_when_nothing_flagged(monkeypatch) -> None:
+    from engine import audit
+
+    monkeypatch.setattr(audit, "entries", lambda: [{"action": "reply_parsed", "detail": {}}])
+    assert build_report._trip_wire_rows() == []
+
+
+def test_view_carries_trip_wires_for_the_template(results_payload) -> None:
+    assert "trip_wires" in build_report._view(results_payload)
+
+
 def test_build_report_writes_a_readable_html_file(results_payload, tmp_path) -> None:
     out = tmp_path / "report.html"
     path = build_report.build(results_payload, str(out))

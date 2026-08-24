@@ -207,6 +207,31 @@ def _audit_excerpt() -> list[dict[str, Any]]:
     return entries[-AUDIT_EXCERPT_LINES:]
 
 
+#: engine/promises.py's coarse, rule-based trip-wires (never the model, never
+#: a change to intent/date/amount) -- see docs/edge_cases.md TC-032 (dispute
+#: language alongside a tracked promise) and TC-036 (more than one amount/date
+#: named in one reply). Scanned over the FULL trail, not just the excerpt
+#: above, since either could easily fall outside the last 20 lines.
+_TRIP_WIRE_LABELS: dict[str, str] = {
+    "promise_may_contain_a_dispute": "possible dispute alongside the promise",
+    "promise_may_contain_multiple_amounts": "more than one amount/date named",
+}
+
+
+def _trip_wire_rows() -> list[dict[str, Any]]:
+    rows = []
+    for entry in audit.entries():
+        label = _TRIP_WIRE_LABELS.get(entry["action"])
+        if not label:
+            continue
+        rows.append({
+            "invoice_id": entry.get("invoice_id"),
+            "flag": label,
+            "reply": (entry.get("detail") or {}).get("reply", ""),
+        })
+    return rows
+
+
 def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
     """The credibility table: did the agent win on more than one world?
 
@@ -247,6 +272,7 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "per_rung": _per_rung_rows(results),
         "per_attempt": _per_attempt_rows(results),
         "exceptions": _exception_rows(results),
+        "trip_wires": _trip_wire_rows(),
         "handoff_reasons": sorted(handoff_reasons.items()),
         "stop_reasons": sorted(stop_reasons.items()),
         "audit_excerpt": _audit_excerpt(),

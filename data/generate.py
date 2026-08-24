@@ -711,6 +711,12 @@ def generate(seed: int, with_malformed: bool = False) -> dict[str, Any]:
                 "simulation_start": _iso(SIMULATION_START),
                 "current_invoice_count": len(current) + len(malformed),
                 "history_invoice_count": len(history),
+                # Self-describing on disk: nothing else distinguishes a
+                # malformed seed-42 dataset from a plain one except the
+                # INV-MALFORMED- ids themselves. data/store.load_meta() is
+                # what every entry point already calls to read this file's
+                # header, so this is visible for free wherever that is.
+                "with_malformed": with_malformed,
             },
             "invoices": invoices,
         },

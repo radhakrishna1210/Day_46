@@ -200,6 +200,34 @@
   <p class="empty">Every invoice was recovered in this run.</p>
   {% endif %}
 
+  <h2>Reply safety net -- possible multi-intent replies</h2>
+  <p class="reasons">
+    One intent is tracked per buyer reply -- a dispute always takes precedence
+    over a promise, and the earliest instalment wins over a later one
+    (docs/edge_cases.md TC-032, TC-036). These replies still looked, to a
+    coarse rule-based check, like they might carry more than that. Nothing
+    here changed the recorded intent, date or amount -- it only flags the
+    reply for a human to double check.
+  </p>
+  {% if trip_wires %}
+  <table>
+    <thead>
+      <tr><th>Invoice</th><th>Flag</th><th>Reply text</th></tr>
+    </thead>
+    <tbody>
+      {% for row in trip_wires %}
+      <tr>
+        <td>{{ row.invoice_id }}</td>
+        <td>{{ row.flag }}</td>
+        <td class="reason">{{ row.reply }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No reply in this run's window tripped the dispute/multiple-amount safety net.</p>
+  {% endif %}
+
   <h2>Audit trail excerpt (last {{ audit_excerpt | length }} entries)</h2>
   {% if audit_excerpt %}
   <div class="card">
