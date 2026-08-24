@@ -118,9 +118,12 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   agent goes after them too. On the matched set both runs actually
   recovered, the agent is faster (97.7d vs 101.2d). Per your call, the report
   and results.json show BOTH numbers, clearly labeled -- see
-  sim.run_sim.matched_avg_days_to_pay's docstring. The multi-seed test
-  (tests/test_experiment.py) asserts against the fair matched number, not
-  the raw one, and passes on seeds 42, 7 and 2024.
+  sim.run_sim.matched_avg_days_to_pay's docstring -- and report.html now also
+  carries a one-sentence prose note directly under the headline table
+  reconciling the two figures for a reader (build_report._days_to_pay_note,
+  only rendered when the raw numbers could actually look contradictory). The
+  multi-seed test (tests/test_experiment.py) asserts against the fair
+  matched number, not the raw one, and passes on seeds 42, 7 and 2024.
 - Razorpay Payment Links reminders confirmed via live web search (not
   memory): cap at 3, scheduled off the link's date not buyer behaviour, no
   personalisation -- our baseline already matched this; cited in
