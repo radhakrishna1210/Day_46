@@ -126,6 +126,30 @@ ladder:
   # Days of silence after a fresh promise before we speak again.
   promise_grace_days: 1
 
+# --- Promise sanity bounds (engine/promises.py) ----------------------------
+# A structurally valid promise can still be semantically absurd -- see
+# docs/edge_cases.md TC-001, TC-002, TC-011, TC-043. These bounds catch that
+# before a promise is ever stored. Neither invents nor corrects the buyer's
+# words: a promise that fails a bound is downgraded to a question, the same
+# way an unresolvable or already-past date already is -- never silently
+# dropped, never assumed on the buyer's behalf.
+promises:
+  # A promise dated further out than this is not a commitment worth
+  # tracking -- it would buy the buyer years of silence for no more
+  # information than an unresolvable date already gives. Set comfortably
+  # past every other horizon in this file (tax_horizon_days 90,
+  # samadhaan_after_days 45, sim/run_sim.py's own 120-day run) so a genuine
+  # "next quarter" MSME promise still clears it.
+  max_horizon_days: 120
+  # A stated amount at or above this multiple of what is actually
+  # outstanding is treated as implausible rather than trusted at face value.
+  # Deliberately coarse: free-text lakh/crore/Rs parsing (engine/promises.py
+  # _extract_amount_paise) is a trip-wire for wild disproportion, not a
+  # ledger-grade balance check, so the margin above 1.0 exists only to
+  # tolerate genuine noise (e.g. a buyer folding in accrued interest), not
+  # to wave through a figure that is actually implausible.
+  amount_implausible_multiple: 1.2
+
 # --- Hard stopping rules (enforced in code, never by the LLM) -------------
 stop_rules:
   max_per_rung: 3

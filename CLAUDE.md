@@ -85,7 +85,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       the send idempotency guard (_already_sent, commit a67455e)
 - [x] Day 8: simulator + persona reaction table + P2 fix
 - [x] Day 9: experiment + honest report (results.json, report.html)
-- [ ] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
+- [x] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
 - [ ] E2 - Tier 2 edge cases: invoice/input validation
 - [ ] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
 - [ ] E4 - TC-141 end-to-end scenario fixture

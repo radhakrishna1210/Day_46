@@ -107,6 +107,13 @@ Ideas that came up during the build and were deliberately **not** built:
   the law engine's leverage. The most direct answer to "how much of this is
   really the legal argument" a skeptical judge could ask -- not built for
   Day 9 because it's a third full pipeline variant, not a report tweak.
+- A reply that arrives during an LLM outage (`engine.promises.parse_reply`
+  catching `LLMError`) is safe -- nothing is fabricated -- but is silently
+  recorded as noise, so a genuine promise or dispute said while the model was
+  down is lost rather than merely delayed. Found while building the E1
+  promise sanity bounds (TC-135, docs/edge_cases.md); out of scope for that
+  round because retrying or queuing the reply for a later pass is a
+  different kind of fix from a rule-based sanity bound.
 
 ## Legal disclaimer
 

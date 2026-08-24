@@ -36,6 +36,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from engine import audit
+from engine.config import rules
 from engine.llm import LLMError, llm
 
 #: The only intents the rest of the system understands.
@@ -99,6 +100,51 @@ def resolve_date(hint: str | None, today: date) -> date | None:
 
 
 # --------------------------------------------------------------------------
+# a coarse, rule-based amount scan -- for the sanity bound only, never for
+# recording a figure the model itself does not report
+# --------------------------------------------------------------------------
+
+_AMOUNT_UNITS = {
+    "lakh": 100_000, "lakhs": 100_000, "lac": 100_000, "lacs": 100_000,
+    "crore": 1_00_00_000, "crores": 1_00_00_000, "cr": 1_00_00_000,
+}
+
+#: Only fires on an explicit currency mark or an explicit lakh/crore unit,
+#: never on a bare number -- so a day-of-month or any other incidental digit
+#: in the reply is never mistaken for money.
+_AMOUNT_PATTERNS = (
+    re.compile(r"(?:₹|\brs\.?\b|\binr\b)\s*(\d[\d,]*(?:\.\d+)?)"
+               r"\s*(lakh|lakhs|lac|lacs|crore|crores|cr)?\b", re.IGNORECASE),
+    re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*\b(lakh|lakhs|lac|lacs|crore|crores|cr)\b",
+               re.IGNORECASE),
+)
+
+
+def _extract_amount_paise(text: str) -> int | None:
+    """The largest rupee figure explicitly named in free text, in paise.
+
+    Not ledger-grade parsing -- a rule, used only to sanity-check a promised
+    amount against what is actually outstanding (config/rules.yaml
+    promises.amount_implausible_multiple). Returns None when nothing that
+    looks like a stated amount is found.
+    """
+    best: int | None = None
+    for pattern in _AMOUNT_PATTERNS:
+        for match in pattern.finditer(text):
+            try:
+                value = float(match.group(1).replace(",", ""))
+            except ValueError:
+                continue
+            unit = (match.group(2) or "").lower()
+            if unit:
+                value *= _AMOUNT_UNITS[unit]
+            paise = int(round(value * 100))
+            if best is None or paise > best:
+                best = paise
+    return best
+
+
+# --------------------------------------------------------------------------
 # reading a reply
 # --------------------------------------------------------------------------
 
@@ -109,6 +155,8 @@ def parse_reply(
     variant: str | None = None,
     invoice_id: str | None = None,
     buyer_id: str | None = None,
+    outstanding_paise: int | None = None,
+    config: dict[str, Any] | None = None,
     log: bool = True,
 ) -> dict[str, Any]:
     """Turn a free-text buyer reply into a structured intent, via engine.llm.
@@ -117,11 +165,22 @@ def parse_reply(
         text: what the buyer wrote.
         today: the simulation clock, which every date resolves against.
         variant: mock-mode fixture key from config/replies.yaml.
+        outstanding_paise: what is actually still owed on this invoice, if
+            known (see engine.law.outstanding_paise). Used only to sanity-
+            check a promised amount against config/rules.yaml
+            promises.amount_implausible_multiple; omit it (the default) to
+            skip that check.
+        config: rules; defaults to config/rules.yaml.
 
     Returns:
         intent, date, amount, confidence, quote, source -- plus `downgraded`
         and `raw` when we did not take the model at its word.
     """
+    config = config or rules()
+    bounds = config["promises"]
+    max_horizon_days = int(bounds["max_horizon_days"])
+    amount_multiple = float(bounds["amount_implausible_multiple"])
+
     prompt = (
         "A buyer has replied to a payment reminder. Classify the reply and "
         "report what it says about payment.\n\n"
@@ -150,6 +209,7 @@ def parse_reply(
         intent = "noise"
 
     when = resolve_date(parsed.get("date_hint"), today)
+    rejected_by_rule: str | None = None
     if intent == "promise":
         if when is None:
             downgraded.append("a promise with no date we could resolve; asking instead")
@@ -157,6 +217,29 @@ def parse_reply(
         elif when <= today:
             downgraded.append(f"a promise dated {when.isoformat()}, which is not in the future")
             intent, when = "question", None
+        elif (when - today).days > max_horizon_days:
+            days_out = (when - today).days
+            downgraded.append(
+                f"a promise dated {when.isoformat()}, {days_out} days out, beyond "
+                f"the {max_horizon_days}-day sanity horizon"
+            )
+            rejected_by_rule = (
+                f"promise dated {when.isoformat()} ({days_out} days out) exceeds the "
+                f"{max_horizon_days}-day horizon in config/rules.yaml promises.max_horizon_days"
+            )
+            intent, when = "question", None
+        elif outstanding_paise is not None:
+            claimed_paise = _extract_amount_paise(text)
+            if claimed_paise is not None and claimed_paise > outstanding_paise * amount_multiple:
+                downgraded.append(
+                    f"a promised amount of {claimed_paise} paise is implausible against "
+                    f"an outstanding balance of {outstanding_paise} paise"
+                )
+                rejected_by_rule = (
+                    f"promised {claimed_paise} paise exceeds {amount_multiple}x the "
+                    f"outstanding {outstanding_paise} paise (promises.amount_implausible_multiple)"
+                )
+                intent, when = "question", None
 
     result: dict[str, Any] = {
         "intent": intent,
@@ -182,6 +265,17 @@ def parse_reply(
             source="llm", today=today, buyer_id=buyer_id, actor="promises",
             detail={"reply": text, **result},
         )
+        if rejected_by_rule:
+            # A distinct entry, source=rule: the parse above records what the
+            # model said, this records that a rule -- not the model -- is why
+            # it was not taken at face value. Non-negotiable #1: nothing about
+            # a rejected promise happens silently.
+            audit.record(
+                invoice_id=invoice_id, action="promise_sanity_rejected",
+                reason=rejected_by_rule, source="rule", today=today,
+                buyer_id=buyer_id, actor="promises",
+                detail={"reply": text, "raw_model_output": parsed},
+            )
     return result
 
 

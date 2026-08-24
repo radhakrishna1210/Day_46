@@ -197,7 +197,8 @@ def _apply_reaction(
     if outcome in (personas.PROMISE, personas.DISPUTE):
         parsed = promises.parse_reply(
             reaction["reply"], today, variant=reaction["variant"],
-            invoice_id=invoice["invoice_id"], buyer_id=invoice["buyer_id"], log=log,
+            invoice_id=invoice["invoice_id"], buyer_id=invoice["buyer_id"],
+            outstanding_paise=law.outstanding_paise(invoice, today), log=log,
         )
         promises.apply_reply(parsed, invoice, plist, today, log=log)
         return "promise_made" if outcome == personas.PROMISE else "disputed"
