@@ -96,8 +96,20 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   buckets, and a rich `exceptions` list (buyer, persona, status, reason);
   `--compare` writes report/out/results.json, and
   `python report/build_report.py` renders report/out/report.html (Jinja2,
-  report/templates/report.html.j2) with the headline table, per-rung table,
-  Exceptions section and an audit-trail excerpt. 601 tests.
+  report/templates/report.html.j2). Extended same day with two
+  credibility features: `--extra-seeds` (default 5 fixed seeds beyond
+  --seed) runs the full comparison on each and the report's "Is this just
+  one lucky seed?" table shows the win rate (6/6 on both money and fair
+  days-to-pay, seed 42 + the 5 defaults) -- and a static Methodology
+  section citing the actual test/mechanism behind each anti-rigging claim
+  (persona isolation, identical invoice sets, mocked LLM output,
+  conservation, multi-seed proof, full audit trail). Fixed a false
+  positive this surfaced: tests/test_sim_isolation.py's guard scanned
+  report/ too and flagged build_report.py for *naming*
+  hidden_personas.json in that Methodology text; narrowed the guard to
+  engine/ + main.py (the actual decision pipeline) with a dedicated test
+  that build_report.py's mention stays confined to documentation, never a
+  functional read. 600 tests.
 - IMPORTANT finding, reported honestly rather than tuned away: the RAW "avg
   days to pay" (each agent's own average over whatever it recovered) makes
   the agent look slightly slower than baseline (95.5d vs 93.3d, seed 42) --

@@ -10,6 +10,14 @@ and fail if the literal string ever appears in it. data/generate.py is the
 one file allowed to name it, and only because it WRITES the file -- it is
 scoped down to a single check that the reference stays confined to the write
 call, so a decision-making addition there would still be caught.
+
+report/build_report.py is deliberately NOT in this list: it runs strictly
+after both simulated runs are already finished, reading only results.json,
+and cannot feed anything back into a decision. Its Methodology section
+names sim/hidden_personas.json and tests/test_sim_isolation.py by filename
+on purpose -- to tell a reader exactly which guardrail backs which claim --
+and test_report_only_documents_the_guardrail_it_does_not_read_the_file
+below checks that mention stays confined to that documentation string.
 """
 
 from __future__ import annotations
@@ -21,10 +29,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: Everything the agent runs through. None of it may know a persona exists.
+#: Everything the agent's decision pipeline runs through. None of it may know
+#: a persona exists. report/ is excluded on purpose -- see the module
+#: docstring -- and checked separately, more narrowly, below.
 FORBIDDEN_FILES = sorted(
     [p for p in (ROOT / "engine").glob("*.py")]
-    + [p for p in (ROOT / "report").glob("*.py")]
     + [p for p in (ROOT / "data").glob("*.py") if p.name != "generate.py"]
     + [ROOT / "main.py"]
 )
@@ -79,6 +88,30 @@ def test_data_generate_only_writes_the_file_it_does_not_read_it_back() -> None:
     assert not offenders, (
         f"data/generate.py reads {MARKER!r} back with: {offenders}. It should "
         f"only ever write this file."
+    )
+
+
+def test_report_only_documents_the_guardrail_it_does_not_read_the_file() -> None:
+    """report/build_report.py may name the persona file in prose, describing
+
+    the guardrail for a reader -- it must never actually open, import from,
+    or otherwise reach it. Only a documentation string may carry the marker.
+    """
+    tree = ast.parse((ROOT / "report" / "build_report.py").read_text(encoding="utf-8"))
+    functional_offenders = [
+        f"line {node.lineno}: {node.id if isinstance(node, ast.Name) else node.attr}"
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Name, ast.Attribute))
+        and MARKER in (node.id if isinstance(node, ast.Name) else node.attr)
+    ]
+    assert not functional_offenders, (
+        f"build_report.py reaches for {MARKER!r} in code, not just prose: "
+        f"{functional_offenders}"
+    )
+    body = (ROOT / "report" / "build_report.py").read_text(encoding="utf-8")
+    assert MARKER in body, (
+        "the guardrail claim naming this file went missing from build_report.py's "
+        "Methodology data -- update this test if that section was intentionally reworded"
     )
 
 

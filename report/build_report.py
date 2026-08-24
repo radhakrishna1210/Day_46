@@ -43,6 +43,43 @@ DEFAULT_OUT_PATH = ROOT / "report" / "out" / "report.html"
 #: audit/audit_log.jsonl for anyone who wants to check further.
 AUDIT_EXCERPT_LINES = 20
 
+#: Static claims about how this comparison was guarded against being rigged,
+#: each pointing at the actual test or mechanism that backs it -- not run
+#: live at build time (that would need pytest as a report-build dependency
+#: and would slow every build down), but every file and test named here
+#: really exists and really checks what it claims to.
+GUARDRAILS: tuple[dict[str, str], ...] = (
+    {"claim": "The agent cannot see buyer personas.",
+     "proof": "sim/hidden_personas.json is read only by "
+              "sim/personas.load_hidden_personas(). tests/test_sim_isolation.py "
+              "statically scans every file under engine/ and main.py and fails if "
+              "any of them ever reference it -- and was hand-verified to actually "
+              "fail when a real leak was introduced, then reverted."},
+    {"claim": "Both agents see the same invoices, the same seed.",
+     "proof": "tests/test_experiment.py::test_both_agents_start_from_identical_invoice_sets "
+              "checks the baseline and agent runs start from byte-identical invoice "
+              "amounts and persona assignments before either one mutates anything."},
+    {"claim": "LLM output is deterministic, never a cherry-picked live response.",
+     "proof": "sim/run_sim.py forces LLM_MODE=mock for the entire simulated run "
+              "(_forced_mock_mode), so every drafted message and parsed reply comes "
+              "from the same fixed, reviewable fixtures in config/replies.yaml and "
+              "config/messages.yaml, in code regardless of what .env says."},
+    {"claim": "Money cannot be silently created or destroyed.",
+     "proof": "sim/run_sim.py's verify_conservation() asserts paid + outstanding == "
+              "the original amount for every invoice before either run returns; "
+              "tests/test_run_sim.py proves this check would actually catch a "
+              "desynced invoice."},
+    {"claim": "The result is not one lucky seed.",
+     "proof": "The \"Is this just one lucky seed?\" table near the top of this "
+              "report, and tests/test_experiment.py, both run the full comparison "
+              "on several independently generated worlds, not just the one this "
+              "report's other sections narrate in detail."},
+    {"claim": "Every decision is in the audit trail, not just this summary.",
+     "proof": "audit/audit_log.jsonl records every brain decision, message draft "
+              "and delivery attempt from this run, timestamped and reasoned -- "
+              "see the excerpt near the bottom of this report."},
+)
+
 
 class ResultsMissing(FileNotFoundError):
     """Raised when results.json has not been produced yet."""
@@ -128,6 +165,35 @@ def _audit_excerpt() -> list[dict[str, Any]]:
     return entries[-AUDIT_EXCERPT_LINES:]
 
 
+def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
+    """The credibility table: did the agent win on more than one world?
+
+    Returns None when --compare was run with --extra-seeds "" (skipped), so
+    the template can fall back to a plain note instead of an empty table.
+    """
+    multi = results.get("multi_seed")
+    if not multi:
+        return None
+    rows = []
+    for row in multi["rows"]:
+        rows.append({
+            "seed": row["seed"],
+            "baseline_recovered": _money(row["baseline_recovered_paise"]),
+            "agent_recovered": _money(row["agent_recovered_paise"]),
+            "money_win": row["money_win"],
+            "matched_n": row["matched_n"],
+            "matched_baseline_days": _days(row["matched_baseline_days"]),
+            "matched_agent_days": _days(row["matched_agent_days"]),
+            "days_win": row["days_win"],
+        })
+    return {
+        "rows": rows,
+        "money_win_rate": multi["money_win_rate"],
+        "days_win_rate": multi["days_win_rate"],
+        "days_excluded": multi["days_excluded"],
+    }
+
+
 def _view(results: dict[str, Any]) -> dict[str, Any]:
     handoff_reasons = results["agent"].get("handoff_reasons") or {}
     stop_reasons = results["agent"].get("stop_reasons") or {}
@@ -142,6 +208,8 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "handoff_reasons": sorted(handoff_reasons.items()),
         "stop_reasons": sorted(stop_reasons.items()),
         "audit_excerpt": _audit_excerpt(),
+        "multi_seed": _multi_seed_rows(results),
+        "guardrails": GUARDRAILS,
         "gain_paise": (results["agent"]["final"]["recovered_paise"]
                       - results["baseline"]["final"]["recovered_paise"]),
         "gain": _money(results["agent"]["final"]["recovered_paise"]

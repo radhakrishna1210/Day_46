@@ -87,6 +87,26 @@ Ideas that came up during the build and were deliberately **not** built:
 - `draft_message` and `judgment_call` run on a Flash-tier Gemini model rather
   than Pro, because this key's free tier has zero pro-tier quota and billing
   isn't available for it -- a known quality-vs-cost tradeoff, not a design choice.
+- Simulator reply lag: a persona's reaction lands the same simulated day a
+  message is sent. A real buyer takes a day or three, and the "days to pay"
+  number in the Day 9 report would mean more with that modelled.
+- Simulator fallback-message penalty: when the writer's guardrail rejects a
+  draft and falls back to the plain skeleton, the persona reacts identically
+  to a full LLM-drafted message today. A small penalty on the fallback path
+  would give the guardrail work a measurable effect on outcomes, not just on
+  audit-trail honesty.
+- Simulator partial-payment realism: every `pay_partial` reaction is tagged
+  as an unexplained, ambiguous reply (to exercise the brain's one LLM
+  judgment-call path) rather than sometimes arriving with a normal
+  explanation. Splitting some partial payments into a clean "partial,
+  explained" case would stop that path from over-firing on every partial
+  payment in the simulated world.
+- Ablation experiment: a third arm with the baseline's fixed 3-message
+  schedule but score-aware timing and no legal/tax content, to isolate how
+  much of the agent's win over the baseline comes from smarter timing versus
+  the law engine's leverage. The most direct answer to "how much of this is
+  really the legal argument" a skeptical judge could ask -- not built for
+  Day 9 because it's a third full pipeline variant, not a report tweak.
 
 ## Legal disclaimer
 

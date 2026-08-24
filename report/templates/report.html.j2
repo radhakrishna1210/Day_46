@@ -44,6 +44,14 @@
   .audit td { padding: 0.35rem 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
   .audit td.reason-cell { white-space: normal; max-width: none; }
   .empty { color: var(--muted); font-style: italic; }
+  .win { color: var(--good); font-weight: 600; }
+  .lose { color: var(--bad); font-weight: 600; }
+  .win-rate { font-size: 1rem; margin: 0.75rem 0 0; }
+  .guardrails { list-style: none; margin: 0; padding: 0; }
+  .guardrails li { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+  .guardrails li:last-child { border-bottom: none; }
+  .guardrails .claim { font-weight: 600; }
+  .guardrails .proof { color: var(--muted); font-size: 0.88rem; margin-top: 0.2rem; }
 </style>
 </head>
 <body>
@@ -76,6 +84,47 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <h2>Is this just one lucky seed?</h2>
+  {% if multi_seed %}
+  <table>
+    <thead>
+      <tr>
+        <th>Seed</th><th class="num">₹ baseline</th><th class="num">₹ agent</th><th>₹ win</th>
+        <th class="num">Days baseline</th><th class="num">Days agent</th><th>Days win</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in multi_seed.rows %}
+      <tr>
+        <td>{{ row.seed }}{{ " (detailed above)" if loop.first }}</td>
+        <td class="num">{{ row.baseline_recovered }}</td>
+        <td class="num">{{ row.agent_recovered }}</td>
+        <td class="{{ 'win' if row.money_win else 'lose' }}">{{ "✓" if row.money_win else "✗" }}</td>
+        {% if row.matched_n %}
+        <td class="num">{{ row.matched_baseline_days }}</td>
+        <td class="num">{{ row.matched_agent_days }}</td>
+        <td class="{{ 'win' if row.days_win else 'lose' }}">{{ "✓" if row.days_win else "✗" }}</td>
+        {% else %}
+        <td class="num empty">n/a</td><td class="num empty">n/a</td><td class="empty">no data</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="win-rate">
+    Agent won on ₹ recovered in <strong>{{ multi_seed.money_win_rate }}</strong> seeds,
+    and on avg days-to-pay (the fair, matched-set comparison) in
+    <strong>{{ multi_seed.days_win_rate }}</strong> seeds{% if multi_seed.days_excluded %}
+    ({{ multi_seed.days_excluded }} seed(s) excluded -- no invoice was recovered by both runs
+    at this window length){% endif %}.
+  </p>
+  {% else %}
+  <p class="empty">
+    Multi-seed comparison skipped for this run (--extra-seeds ""). Seed {{ seed }} alone is
+    shown above and throughout this report.
+  </p>
+  {% endif %}
 
   <h2>Per-rung effectiveness -- the agent's escalation ladder</h2>
   <table>
@@ -173,6 +222,16 @@
   {% else %}
   <p class="empty">No audit entries found -- run sim/run_sim.py --compare again to regenerate the trail.</p>
   {% endif %}
+
+  <h2>Methodology -- how this was guarded against being rigged</h2>
+  <ul class="guardrails">
+    {% for item in guardrails %}
+    <li>
+      <div class="claim">{{ item.claim }}</div>
+      <div class="proof">{{ item.proof }}</div>
+    </li>
+    {% endfor %}
+  </ul>
 
   <div class="disclaimer">
     Synthetic data, generated with --seed {{ seed }}. Legal figures are simplified
