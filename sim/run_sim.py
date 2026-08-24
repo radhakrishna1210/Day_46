@@ -37,11 +37,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import os
 import random
 import sys
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from data import store
+from data import generate, store
 from engine import audit, brain, channels, law, llm, promises, watchdog, writer
 from engine import score as score_engine
 from engine.money import enable_unicode_output, format_inr
@@ -58,7 +59,15 @@ from sim import personas
 DEFAULT_SEED = 42
 DEFAULT_DAYS = 120
 
-#: The dumb baseline: three fixed reminders, ten days apart, always rung 1.
+#: The dumb baseline: three fixed reminders, evenly spaced, always the same
+#: plain message, no score, no law, no promise memory, no dispute detection.
+#: Confirmed against Razorpay's own Payment Links reminders (web search,
+#: 2026-08-24): capped at 3 reminders, scheduled off the link's expiry/issue
+#: date rather than any buyer behaviour, no personalisation documented.
+#:   https://razorpay.com/docs/payments/payment-links/reminders/
+#:   https://razorpay.com/docs/api/payments/payment-links/reminders/
+#: The 10-day spacing is our own choice, not Razorpay's (they don't publish
+#: one universal default -- it's merchant-configurable).
 BASELINE_MAX_MESSAGES = 3
 BASELINE_INTERVAL_DAYS = 10
 BASELINE_RUNG = 1
@@ -96,10 +105,14 @@ def _rng(seed: int, invoice_id: str, today: date, tag: str) -> random.Random:
 # the fake world
 # --------------------------------------------------------------------------
 
-def _load_world() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str], date]:
-    """A fresh, independent copy of buyers/invoices/personas -- never shared."""
-    if not store.dataset_exists():
-        raise SystemExit(f"no dataset found -- {store.REGENERATE_HINT}")
+def _load_world(seed: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str], date]:
+    """A fresh, independent copy of buyers/invoices/personas -- never shared.
+
+    Regenerates on disk first if it is missing or was built for a different
+    seed (data.generate.ensure_dataset) -- otherwise a run asked for --seed 7
+    could silently replay whatever seed happened to be on disk already.
+    """
+    generate.ensure_dataset(seed)
     buyers = copy.deepcopy(store.load_buyers())
     invoices = copy.deepcopy(store.load_invoices())
     persona_of = personas.load_hidden_personas()
@@ -217,6 +230,151 @@ def verify_conservation(invoices: list[dict[str, Any]], as_of: date) -> None:
         assert 0 <= paid <= amount, f"{invoice['invoice_id']}: paid {paid} out of bounds"
 
 
+#: How a HANDOFF/STOP reason (engine.brain's own sentence) is bucketed for
+#: reporting. Matched by substring against the exact phrasing brain.decide()
+#: writes -- if that wording ever changes these buckets need a look too.
+_REASON_BUCKETS: tuple[tuple[str, str], ...] = (
+    ("disputed", "disputed"),
+    ("opted out", "opted_out"),
+    ("escalated to the final rung", "rung4_escalation"),
+    ("reaching the limit", "max_contacts_reached"),
+)
+
+
+def _classify_reason(reason: str) -> str:
+    for needle, bucket in _REASON_BUCKETS:
+        if needle in reason:
+            return bucket
+    return "other"
+
+
+def paid_days_map(invoices: list[dict[str, Any]]) -> dict[str, int]:
+    """invoice_id -> days from issue to payment, for every current invoice paid."""
+    return {
+        inv["invoice_id"]: (date.fromisoformat(inv["paid_date"])
+                            - date.fromisoformat(inv["issue_date"])).days
+        for inv in _current(invoices)
+        if inv.get("status") == "paid" and inv.get("paid_date")
+    }
+
+
+def avg_days_to_pay(invoices: list[dict[str, Any]]) -> float | None:
+    """Mean days from issue to payment, over current invoices actually paid.
+
+    Caution when comparing this across two different agents: it is an average
+    over whatever each one happened to recover, not the same set of invoices
+    -- see matched_avg_days_to_pay() for the fair, like-for-like comparison.
+    """
+    days = paid_days_map(invoices)
+    return round(sum(days.values()) / len(days), 1) if days else None
+
+
+def matched_avg_days_to_pay(baseline: dict[str, Any], agent: dict[str, Any]) -> dict[str, Any]:
+    """The fair comparison: avg days to pay over invoices BOTH runs recovered.
+
+    The plain avg_days_to_pay() figures are not directly comparable -- a run
+    that gives up on the hard cases (and simply never recovers them) has a
+    faster-looking average than one that goes after them and eventually wins
+    most of them, purely because the hard ones drop out of the average
+    entirely rather than counting as slow. Restricting to the intersection of
+    what both runs actually recovered removes that selection effect.
+    """
+    common = set(baseline["paid_invoices"]) & set(agent["paid_invoices"])
+    if not common:
+        return {"n": 0, "baseline": None, "agent": None}
+    return {
+        "n": len(common),
+        "baseline": round(sum(baseline["paid_invoices"][i] for i in common) / len(common), 1),
+        "agent": round(sum(agent["paid_invoices"][i] for i in common) / len(common), 1),
+    }
+
+
+def _effectiveness_table(rows: dict[int, dict[str, int]]) -> dict[int, dict[str, Any]]:
+    for row in rows.values():
+        contacted = row["invoices_contacted"]
+        row["effectiveness_pct"] = round(100 * row["recovered_here"] / contacted, 1) if contacted else 0.0
+    return rows
+
+
+def per_rung_effectiveness(
+    history: dict[str, list[dict[str, Any]]], invoices_by_id: dict[str, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """For each rung: how many invoices were ever contacted there, and how many
+
+    of those paid without needing to escalate any further (their last contact
+    was at that rung and the invoice is now settled).
+    """
+    table: dict[int, dict[str, int]] = {r: {"invoices_contacted": 0, "recovered_here": 0}
+                                        for r in (1, 2, 3)}
+    for inv_id, contacts in history.items():
+        if not contacts:
+            continue
+        for rung_id in {c["rung"] for c in contacts}:
+            if rung_id in table:
+                table[rung_id]["invoices_contacted"] += 1
+        invoice = invoices_by_id.get(inv_id)
+        last_rung = contacts[-1]["rung"]
+        if invoice and invoice.get("status") == "paid" and last_rung in table:
+            table[last_rung]["recovered_here"] += 1
+    return _effectiveness_table(table)
+
+
+def per_attempt_effectiveness(
+    sent_count: dict[str, int], invoices_by_id: dict[str, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """The baseline's analogue of per_rung_effectiveness -- it has no rungs,
+
+    only a fixed reminder number, so invoices are bucketed by how many
+    reminders they had received when the run ended.
+    """
+    table: dict[int, dict[str, int]] = {n: {"invoices_contacted": 0, "recovered_here": 0}
+                                        for n in range(1, BASELINE_MAX_MESSAGES + 1)}
+    for inv_id, count in sent_count.items():
+        for n in range(1, count + 1):
+            if n in table:
+                table[n]["invoices_contacted"] += 1
+        invoice = invoices_by_id.get(inv_id)
+        if invoice and invoice.get("status") == "paid" and count in table:
+            table[count]["recovered_here"] += 1
+    return _effectiveness_table(table)
+
+
+def _exceptions(
+    invoices: list[dict[str, Any]],
+    buyers_by_id: dict[str, dict[str, Any]],
+    persona_of: dict[str, str],
+    reason_of: dict[str, str],
+    last_rung_of: dict[str, int | None],
+    as_of: date,
+) -> list[dict[str, Any]]:
+    """Every current invoice not fully paid, with the buyer, persona and why.
+
+    persona is a simulator-only field -- fine here, this report is for us,
+    not something the agent itself ever gets to read (tests/test_sim_isolation.py
+    is what guards that boundary).
+    """
+    rows = []
+    for invoice in _current(invoices):
+        if invoice.get("status") == "paid":
+            continue
+        inv_id = invoice["invoice_id"]
+        buyer = buyers_by_id.get(invoice["buyer_id"], {})
+        rows.append({
+            "invoice_id": inv_id,
+            "buyer_id": invoice["buyer_id"],
+            "buyer_name": buyer.get("name"),
+            "persona": persona_of.get(invoice["buyer_id"]),
+            "status": invoice.get("status"),
+            "outstanding_paise": law.outstanding_paise(invoice, as_of),
+            "days_overdue": watchdog.days_overdue(invoice, as_of),
+            "disputed": bool(invoice.get("disputed")),
+            "last_rung": last_rung_of.get(inv_id),
+            "reason": reason_of.get(inv_id, "never contacted within the simulated window"),
+        })
+    rows.sort(key=lambda r: -r["outstanding_paise"])
+    return rows
+
+
 def _narrate(day_number: int, buyer: dict[str, Any], persona: str, rung: int, outcome: str,
             promise: dict[str, Any] | None = None) -> str:
     name = buyer.get("name", buyer.get("buyer_id"))
@@ -245,7 +403,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     was asked for) and every decision, draft and delivery is written with
     log=True, exactly as production would.
     """
-    buyers, invoices, persona_of, day0 = _load_world()
+    buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
 
     history: dict[str, list[dict[str, Any]]] = {}
@@ -255,9 +413,15 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     handoffs: set[str] = set()
     stops: set[str] = set()
     disputes: set[str] = set()
+    handoff_reasons: dict[str, int] = {}
+    stop_reasons: dict[str, int] = {}
+    # The most recent brain.decide() outcome for every invoice, updated on
+    # every visit (not just SEND) -- so an invoice still sitting inside an
+    # active promise's grace period reports THAT as its reason, not silence.
+    last_action_by_invoice: dict[str, dict[str, Any]] = {}
     messages_sent = 0
     narrative: list[str] = []
-    daily: list[dict[str, Any]] = []
+    last_day = day0
 
     audit.clear()
     audit.enable()
@@ -265,6 +429,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     with _forced_mock_mode():
         for offset in range(days):
             today = day0 + timedelta(days=offset)
+            last_day = today
 
             _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=True)
 
@@ -282,6 +447,9 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
 
                 action = brain.decide(invoice, buyer, scores[buyer["buyer_id"]], position,
                                       promises=plist, history=hist, log=True)
+                last_action_by_invoice[inv_id] = {
+                    "kind": action.kind, "rung": action.rung, "reason": action.reason,
+                }
 
                 if action.kind == brain.SEND and action.skeleton:
                     drafted = writer.write_message(
@@ -309,25 +477,37 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                                                   outcome, promise))
                     if outcome == "disputed":
                         disputes.add(inv_id)
+                        last_action_by_invoice[inv_id]["reason"] = (
+                            f"the buyer disputed the invoice; {action.reason}")
 
                 elif action.kind in (brain.HANDOFF, brain.STOP) and inv_id not in announced:
                     announced.add(inv_id)
-                    (handoffs if action.kind == brain.HANDOFF else stops).add(inv_id)
+                    bucket = _classify_reason(action.reason)
+                    if action.kind == brain.HANDOFF:
+                        handoffs.add(inv_id)
+                        handoff_reasons[bucket] = handoff_reasons.get(bucket, 0) + 1
+                    else:
+                        stops.add(inv_id)
+                        stop_reasons[bucket] = stop_reasons.get(bucket, 0) + 1
                     if verbose:
                         narrative.append(f"Day {offset + 1}: {buyer['name']} ({persona}) "
                                          f"{action.kind} -- {action.reason}")
 
-            daily.append(_totals(invoices, today))
-
-    verify_conservation(invoices, day0 + timedelta(days=days - 1))
+    verify_conservation(invoices, last_day)
+    invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
+    reason_of = {inv_id: entry["reason"] for inv_id, entry in last_action_by_invoice.items()}
+    last_rung_of = {inv_id: entry["rung"] for inv_id, entry in last_action_by_invoice.items()}
     return {
         "mode": "agent", "seed": seed, "days": days,
-        "final": daily[-1] if daily else _totals(invoices, day0),
+        "final": _totals(invoices, last_day),
         "messages_sent": messages_sent,
         "handoffs": len(handoffs), "stops": len(stops), "disputes": len(disputes),
-        "not_recovered": [inv["invoice_id"] for inv in _current(invoices)
-                          if inv.get("status") not in ("paid",)],
-        "daily": daily, "narrative": narrative,
+        "handoff_reasons": handoff_reasons, "stop_reasons": stop_reasons,
+        "avg_days_to_pay": avg_days_to_pay(invoices),
+        "paid_invoices": paid_days_map(invoices),
+        "per_rung": per_rung_effectiveness(history, invoices_by_id),
+        "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of, last_rung_of, last_day),
+        "narrative": narrative,
     }
 
 
@@ -345,6 +525,21 @@ def _generic_reminder(invoice: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _baseline_reason(invoice: dict[str, Any], sent: int) -> str:
+    """Why the baseline hasn't recovered this invoice -- no brain to ask, so
+
+    this is built from the fixed schedule's own state, not a decision.
+    """
+    if invoice.get("disputed"):
+        return (f"the buyer disputed the invoice, but the baseline has no dispute "
+                f"detection and kept its fixed schedule ({sent}/{BASELINE_MAX_MESSAGES} sent)")
+    if sent >= BASELINE_MAX_MESSAGES:
+        return f"all {BASELINE_MAX_MESSAGES} fixed reminders sent, no payment received"
+    if sent == 0:
+        return "not yet due, or the window ended before its first reminder"
+    return f"only {sent}/{BASELINE_MAX_MESSAGES} fixed reminders sent before the window ended"
+
+
 def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     """Three fixed reminders, ten days apart, the same message for everyone.
 
@@ -354,7 +549,7 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     whether or not this bot is smart enough to reference it), which is what
     makes the comparison against the agent honest rather than stacked.
     """
-    buyers, invoices, persona_of, day0 = _load_world()
+    buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
 
     promises_by_invoice: dict[str, list[dict[str, Any]]] = {}
@@ -363,11 +558,12 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     disputes: set[str] = set()
     messages_sent = 0
     narrative: list[str] = []
-    daily: list[dict[str, Any]] = []
+    last_day = day0
 
     with _forced_mock_mode():
         for offset in range(days):
             today = day0 + timedelta(days=offset)
+            last_day = today
 
             _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=False)
 
@@ -402,17 +598,24 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                         f"Day {offset + 1}: [baseline] {buyer['name']} ({persona}) "
                         f"reminder {sent_count[inv_id]}/{BASELINE_MAX_MESSAGES} -> {outcome}")
 
-            daily.append(_totals(invoices, today))
-
-    verify_conservation(invoices, day0 + timedelta(days=days - 1))
+    verify_conservation(invoices, last_day)
+    invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
+    reason_of = {
+        inv_id: _baseline_reason(invoices_by_id[inv_id], count)
+        for inv_id, count in sent_count.items()
+    }
     return {
         "mode": "baseline", "seed": seed, "days": days,
-        "final": daily[-1] if daily else _totals(invoices, day0),
+        "final": _totals(invoices, last_day),
         "messages_sent": messages_sent,
         "handoffs": 0, "stops": 0, "disputes": len(disputes),
-        "not_recovered": [inv["invoice_id"] for inv in _current(invoices)
-                          if inv.get("status") not in ("paid",)],
-        "daily": daily, "narrative": narrative,
+        "handoff_reasons": {}, "stop_reasons": {},
+        "avg_days_to_pay": avg_days_to_pay(invoices),
+        "paid_invoices": paid_days_map(invoices),
+        "per_attempt": per_attempt_effectiveness(sent_count, invoices_by_id),
+        "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of,
+                                  {inv_id: BASELINE_RUNG for inv_id in sent_count}, last_day),
+        "narrative": narrative,
     }
 
 
@@ -420,17 +623,39 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
 # CLI
 # --------------------------------------------------------------------------
 
+DEFAULT_RESULTS_PATH = Path(__file__).resolve().parents[1] / "report" / "out" / "results.json"
+
+
 def _print_summary(label: str, report: dict[str, Any]) -> None:
     final = report["final"]
+    days_to_pay = report["avg_days_to_pay"]
     print(f"{label}")
     print(f"  recovered            {format_inr(final['recovered_paise'], 'Rs '):>16}")
     print(f"  outstanding          {format_inr(final['outstanding_paise'], 'Rs '):>16}")
     print(f"  of which disputed    {format_inr(final['disputed_paise'], 'Rs '):>16} "
           f"({final['disputed_count']} invoices)")
+    print(f"  avg days to pay      {(f'{days_to_pay:.1f}' if days_to_pay is not None else 'n/a'):>16}")
     print(f"  messages sent        {report['messages_sent']:>16}")
     print(f"  escalated to human   {report['handoffs']:>16}")
     print(f"  hard-stopped         {report['stops']:>16}")
-    print(f"  not recovered        {len(report['not_recovered']):>16}")
+    print(f"  not recovered        {len(report['exceptions']):>16}")
+
+
+def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
+                   agent: dict[str, Any], matched_days: dict[str, Any]) -> None:
+    payload = {
+        "seed": seed, "days": days,
+        "generated": datetime.now().isoformat(timespec="seconds"),
+        "baseline": baseline, "agent": agent,
+        # A comparison-level figure, not something either agent computes about
+        # itself: see matched_avg_days_to_pay()'s docstring for why the plain
+        # avg_days_to_pay on each agent's OWN recovered set is not directly
+        # comparable, and this fair, like-for-like figure is reported
+        # alongside it rather than in its place.
+        "matched_avg_days_to_pay": matched_days,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -440,11 +665,9 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS, help="simulated days to run")
     parser.add_argument("--compare", action="store_true", help="run baseline and agent side by side")
     parser.add_argument("--verbose", action="store_true", help="print a daily narrative")
+    parser.add_argument("--results-out", type=Path, default=DEFAULT_RESULTS_PATH,
+                        help="where --compare writes results.json (default: report/out/results.json)")
     args = parser.parse_args()
-
-    if not store.dataset_exists():
-        print(f"no dataset found -- {store.REGENERATE_HINT}")
-        return 1
 
     print(f"simulator: seed={args.seed}, days={args.days}, "
           f"mode={'baseline vs agent' if args.compare else 'agent only'}")
@@ -469,6 +692,12 @@ def main() -> int:
         print()
         print(f"agent recovered {format_inr(gain, 'Rs ')} more than the baseline "
               f"with {agent['messages_sent'] - baseline['messages_sent']:+d} messages")
+        matched = matched_avg_days_to_pay(baseline, agent)
+        if matched["n"]:
+            print(f"avg days to pay, {matched['n']} invoices BOTH recovered "
+                  f"(the fair comparison): baseline {matched['baseline']}, agent {matched['agent']}")
+        _write_results(args.results_out, args.seed, args.days, baseline, agent, matched)
+        print(f"results written to {args.results_out}")
     else:
         agent = run_agent(args.seed, args.days, verbose=args.verbose)
         if args.verbose:

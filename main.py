@@ -44,19 +44,14 @@ class Context:
 
 
 def _ensure_dataset(seed: int) -> None:
-    """Generate the world if it is not on disk yet.
+    """Generate the world if it is not on disk yet, or was built for another seed.
 
     The dataset is gitignored, so a fresh clone has none. Building it here means
     `python main.py --seed 42` works on its own rather than failing on a missing
     file; running data/generate.py yourself does exactly the same thing.
     """
-    if store.dataset_exists():
-        return
-    print(f"  dataset not found, generating it now (seed {seed})")
-    world = generate.generate(seed)
-    generate._write_json(store.BUYERS_PATH, world["buyers"])
-    generate._write_json(store.INVOICES_PATH, world["invoices"])
-    generate._write_json(generate.DEFAULT_PERSONA_PATH, world["personas"])
+    if generate.ensure_dataset(seed):
+        print(f"  dataset missing or built for a different seed, generating now (seed {seed})")
 
 
 # --- the stages -----------------------------------------------------------

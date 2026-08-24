@@ -688,6 +688,35 @@ def _display_path(path: Path) -> str:
         return path.as_posix()
 
 
+def ensure_dataset(seed: int) -> bool:
+    """Make sure the world on disk was actually built with this seed.
+
+    Checking mere existence is not enough: main.py and sim/run_sim.py both
+    used to skip regeneration whenever *a* dataset was present, so asking for
+    a different --seed silently kept reusing whatever was already on disk.
+    That would have made a "three different seeds" experiment test the same
+    invoices three times. This regenerates whenever the file is missing or
+    its own recorded seed does not match.
+
+    Returns:
+        True if the dataset was (re)generated, False if it already matched.
+    """
+    from data import store
+
+    if store.dataset_exists():
+        try:
+            if store.load_meta().get("seed") == seed:
+                return False
+        except (store.DatasetMissing, KeyError):
+            pass
+
+    world = generate(seed)
+    _write_json(store.BUYERS_PATH, world["buyers"])
+    _write_json(store.INVOICES_PATH, world["invoices"])
+    _write_json(DEFAULT_PERSONA_PATH, world["personas"])
+    return True
+
+
 def print_summary(world: dict[str, Any], paths: dict[str, Path]) -> None:
     """A sanity table. One fact per line, no emoji."""
     no_agreement, ceiling = _load_statutory_terms()

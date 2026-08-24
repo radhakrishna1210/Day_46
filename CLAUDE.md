@@ -84,46 +84,44 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [~] Day 7: channels + promises DONE; real-inbox send confirmed working but
       interrupted mid-run (see notes) -- re-run pending
 - [x] Day 8: simulator + persona reaction table + P2 fix
-- [ ] Day 9: full baseline-vs-agent report + exceptions list
-- [ ] Day 10: report, README, ARCHITECTURE.md polish
+- [x] Day 9: experiment + honest report (results.json, report.html)
+- [ ] Day 10: README, ARCHITECTURE.md polish, wire scoreboard into main.py
 - [ ] Day 11-12: video, fresh-machine test, submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 8 done: sim/personas.py (reaction table + load_hidden_personas) and
-  sim/run_sim.py (run_agent/run_baseline, day-loop, --compare, --verbose)
-  built. P2 fixed in engine/brain.py: a first-ever contact now opens one
-  rung above the pacing band's base once one cadence interval has already
-  passed uncontacted, capped at +1 (an uncapped days_overdue // cadence
-  version was tried first and instantly handed off ~70% of the real dataset
-  on day 1 with zero messages ever sent -- reverted for the capped version;
-  see the comment above the backlog_steps block). LLM_MODE is force-mocked
-  inside sim/run_sim.py's day-loop (_forced_mock_mode, os.environ, restored
-  after) regardless of .env; engine/llm.py's --calibrate/--list-models stay
-  the only live spot-check path. 584 tests.
-- `python sim/run_sim.py --compare --seed 42 --days 120` (or 60) works
-  end-to-end: real history/promises threaded day-to-day (brain.decide is
-  never called with history=[] here), persona reactions run through the
-  real promises.parse_reply/apply_reply path, habitual_delayer invoices
-  visibly climb rung 2->3, forgetful buyers pay after one message, a
-  deadbeat hits HANDOFF. Sample 60-day run: agent recovered ~Rs 22.3L more
-  than the baseline with 112 fewer messages sent (252 vs 140) and correctly
-  escalated 41 invoices to a human vs the baseline's 0.
-- sim/hidden_personas.json is read only by sim/personas.load_hidden_personas.
-  tests/test_sim_isolation.py proves engine/ + main.py can never reference
-  it -- verified by hand to actually fail when a leak is introduced, then
-  reverted (same discipline as test_no_legal_constants.py).
+- Day 9 done: `data.generate.ensure_dataset(seed)` (new) regenerates
+  data/seed/ whenever the on-disk seed doesn't match the requested one --
+  main.py and sim/run_sim.py both used to check existence only, so `--seed 7`
+  used to silently replay whatever was on disk. sim/run_sim.py now computes
+  avg_days_to_pay, per_rung/per_attempt effectiveness, handoff/stop reason
+  buckets, and a rich `exceptions` list (buyer, persona, status, reason);
+  `--compare` writes report/out/results.json, and
+  `python report/build_report.py` renders report/out/report.html (Jinja2,
+  report/templates/report.html.j2) with the headline table, per-rung table,
+  Exceptions section and an audit-trail excerpt. 601 tests.
+- IMPORTANT finding, reported honestly rather than tuned away: the RAW "avg
+  days to pay" (each agent's own average over whatever it recovered) makes
+  the agent look slightly slower than baseline (95.5d vs 93.3d, seed 42) --
+  this is a selection-bias artifact, not a real regression: baseline's
+  average excludes every hard invoice it simply never recovers, while the
+  agent goes after them too. On the matched set both runs actually
+  recovered, the agent is faster (97.7d vs 101.2d). Per your call, the report
+  and results.json show BOTH numbers, clearly labeled -- see
+  sim.run_sim.matched_avg_days_to_pay's docstring. The multi-seed test
+  (tests/test_experiment.py) asserts against the fair matched number, not
+  the raw one, and passes on seeds 42, 7 and 2024.
+- Razorpay Payment Links reminders confirmed via live web search (not
+  memory): cap at 3, scheduled off the link's date not buyer behaviour, no
+  personalisation -- our baseline already matched this; cited in
+  sim/run_sim.py next to BASELINE_MAX_MESSAGES.
 - CALIBRATION STATUS unchanged since 2026-08-24 (still not re-run): parse_reply
   is confirmed against the real model; draft_message/judgment_call are not
   -- blocked on the GEMINI free-tier daily quota. Re-run `--calibrate` after
-  a reset. All three purposes still on gemini-3.7-flash (cost/quality
-  tradeoff, noted in README Future Work).
-- OUTSTANDING from Day 7, still unresolved: the interrupted `--send-email`
-  run (2026-08-24, seed 42) got through 20 real sends + 5 whatsapp stubs
-  before a Ctrl+C; an idempotency guard (`_already_sent`, SKIPPED status)
-  now makes re-running safe, but a narrow gap remains where Ctrl+C landing
-  between a successful SMTP send and the audit write would leave one email
-  real but unaudited (`except Exception` in `_send_email` cannot catch a
-  BaseException). Waiting on the user to check the actual test inbox count
-  (20 vs 21) before deciding whether to harden it.
-- Next: Day 9 -- turn `--compare`'s numbers into report/build_report.py's
-  HTML report + exceptions list (what wasn't recovered, and why); then
-  confirm inbox count and re-run `--send-email` clean.
+  a reset.
+- OUTSTANDING from Day 7, still unresolved: a narrow gap where Ctrl+C landing
+  between a successful SMTP send and the audit write during `--send-email`
+  would leave one email real but unaudited. Waiting on the user to check the
+  actual test inbox count (20 vs 21) before deciding whether to harden it.
+- Next: Day 10 -- README results table + demo instructions, wire the
+  scoreboard stage into main.py's own pipeline (currently only reachable via
+  sim/run_sim.py + report/build_report.py separately), then the Day 7 inbox
+  check above.

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revenue Recovery Agent -- Results (seed {{ seed }})</title>
+<style>
+  :root {
+    --ink: #1b1f24;
+    --muted: #5b6472;
+    --line: #dde2e8;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --good: #0f7a3d;
+    --bad: #b3261e;
+    --accent: #1a56db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.15rem; margin: 2.5rem 0 0.75rem; border-bottom: 2px solid var(--line); padding-bottom: 0.35rem; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .pitch { font-size: 1.05rem; margin: 1rem 0 2rem; }
+  .pitch strong.gain { color: var(--good); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .headline td.agent, .headline th.agent { color: var(--accent); font-weight: 600; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .badge.disputed { background: #fde8e8; color: var(--bad); }
+  .badge.partially_paid { background: #fff4e0; color: #8a5a00; }
+  .badge.open { background: #eef1f5; color: var(--muted); }
+  .reasons { color: var(--muted); font-size: 0.85rem; }
+  .exceptions td.persona { color: var(--muted); }
+  .exceptions td.reason { color: var(--muted); font-size: 0.88rem; }
+  .disclaimer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; }
+  .audit { font-family: "SF Mono", Consolas, monospace; font-size: 0.78rem; }
+  .audit td { padding: 0.35rem 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+  .audit td.reason-cell { white-space: normal; max-width: none; }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Revenue Recovery Agent -- Baseline vs Agent</h1>
+  <div class="meta">
+    seed {{ seed }} &middot; {{ days }} simulated days &middot; generated {{ generated }}
+  </div>
+
+  <p class="pitch">
+    Same seeded invoices, same buyer world, two agents. The baseline is a
+    dumb 3-fixed-reminder bot (mirrors how Razorpay Payment Links reminders
+    behave today). Our agent recovered <strong class="gain">{{ gain }} more</strong>
+    with {{ message_delta }} messages{{ " fewer" if message_delta < 0 else " more" }}.
+  </p>
+
+  <h2>Headline</h2>
+  <table class="headline">
+    <thead>
+      <tr><th>Metric</th><th class="num">Baseline</th><th class="num agent">Agent</th></tr>
+    </thead>
+    <tbody>
+      {% for row in headline %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td class="num">{{ row.baseline }}</td>
+        <td class="num agent">{{ row.agent }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Per-rung effectiveness -- the agent's escalation ladder</h2>
+  <table>
+    <thead>
+      <tr><th>Rung</th><th class="num">Invoices contacted</th><th class="num">Recovered at this rung</th><th class="num">Effectiveness</th></tr>
+    </thead>
+    <tbody>
+      {% for row in per_rung %}
+      <tr>
+        <td>{{ row.rung }}</td>
+        <td class="num">{{ row.invoices_contacted }}</td>
+        <td class="num">{{ row.recovered_here }}</td>
+        <td class="num">{{ row.effectiveness_pct }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="reasons">
+    Escalated to a human, by reason:
+    {% if handoff_reasons %}
+      {% for reason, count in handoff_reasons %}{{ reason }} ({{ count }}){{ ", " if not loop.last }}{% endfor %}
+    {% else %}<span class="empty">none</span>{% endif %}
+    &nbsp;&middot;&nbsp; Hard-stopped, by reason:
+    {% if stop_reasons %}
+      {% for reason, count in stop_reasons %}{{ reason }} ({{ count }}){{ ", " if not loop.last }}{% endfor %}
+    {% else %}<span class="empty">none</span>{% endif %}
+  </p>
+
+  <h2>Per-reminder effectiveness -- the baseline's fixed schedule</h2>
+  <table>
+    <thead>
+      <tr><th>Attempt</th><th class="num">Invoices contacted</th><th class="num">Recovered at this attempt</th><th class="num">Effectiveness</th></tr>
+    </thead>
+    <tbody>
+      {% for row in per_attempt %}
+      <tr>
+        <td>{{ row.attempt }}</td>
+        <td class="num">{{ row.invoices_contacted }}</td>
+        <td class="num">{{ row.recovered_here }}</td>
+        <td class="num">{{ row.effectiveness_pct }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Exceptions -- what the agent did NOT recover, and why</h2>
+  {% if exceptions %}
+  <table class="exceptions">
+    <thead>
+      <tr>
+        <th>Invoice</th><th>Buyer</th><th>Persona</th><th>Status</th>
+        <th class="num">Outstanding</th><th class="num">Days overdue</th><th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in exceptions %}
+      <tr>
+        <td>{{ row.invoice_id }}</td>
+        <td>{{ row.buyer_name }}</td>
+        <td class="persona">{{ row.persona }}</td>
+        <td><span class="badge {{ row.status }}">{{ row.status }}</span></td>
+        <td class="num">{{ row.outstanding }}</td>
+        <td class="num">{{ row.days_overdue }}</td>
+        <td class="reason">{{ row.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Every invoice was recovered in this run.</p>
+  {% endif %}
+
+  <h2>Audit trail excerpt (last {{ audit_excerpt | length }} entries)</h2>
+  {% if audit_excerpt %}
+  <div class="card">
+    <table class="audit">
+      <thead>
+        <tr><th>Time</th><th>Invoice</th><th>Actor</th><th>Action</th><th>Source</th><th>Reason</th></tr>
+      </thead>
+      <tbody>
+        {% for entry in audit_excerpt %}
+        <tr>
+          <td>{{ entry.ts }}</td>
+          <td>{{ entry.invoice_id or "-" }}</td>
+          <td>{{ entry.actor }}</td>
+          <td>{{ entry.action }}</td>
+          <td>{{ entry.source }}</td>
+          <td class="reason-cell">{{ entry.reason }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="reasons">Full trail: audit/audit_log.jsonl (append-only, one JSON object per action).</p>
+  {% else %}
+  <p class="empty">No audit entries found -- run sim/run_sim.py --compare again to regenerate the trail.</p>
+  {% endif %}
+
+  <div class="disclaimer">
+    Synthetic data, generated with --seed {{ seed }}. Legal figures are simplified
+    for a demonstration, current as of the date in config/legal.yaml, and are
+    not legal advice. Every ₹ figure above traces back to engine/law.py and the
+    audit trail; nothing here is estimated or invented.
+  </div>
+
+</div>
+</body>
+</html>
