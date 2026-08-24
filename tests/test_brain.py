@@ -27,7 +27,7 @@ def _quiet_audit(tmp_path, monkeypatch):
 
 def invoice(
     *,
-    acceptance: str = "2026-06-20",
+    acceptance: str = "2026-08-06",   # 3 days overdue as of TODAY -- barely, on purpose
     written: bool = False,
     agreed_days: int | None = None,
     amount: int = 50_000_000,
@@ -114,6 +114,58 @@ def test_the_band_boundaries_are_read_from_config() -> None:
     assert brain.band(49, config) == "poor"
 
 
+# --- P2: a first contact is paced for the backlog it inherited ------------
+
+def test_a_backlogged_first_contact_opens_above_the_base_rung() -> None:
+    """A good-score buyer already 10 days overdue does not get the same soft
+
+    opening as one that just became overdue -- the ladder's own cadence
+    (7 days between rungs, for a good score) says one step should already
+    have happened.
+    """
+    old_enough = invoice(acceptance="2026-07-30")     # 10 days overdue at TODAY
+    action = run(score_value=85, record=old_enough)
+    assert action.kind == brain.SEND
+    assert action.rung == 2
+    assert "paced one rung ahead" in action.reason
+
+
+def test_a_fresh_first_contact_is_not_treated_as_backlog() -> None:
+    """The barely-overdue default case keeps opening at the plain base rung."""
+    action = run(score_value=85)
+    assert action.rung == 1
+    assert "paced" not in action.reason
+
+
+def test_the_backlog_bump_is_still_capped_by_the_ceiling() -> None:
+    """The one-step backlog bump never outruns what the law supports.
+
+    A poor-score buyer only 10 days overdue would want rung 3 (base 2 + the
+    backlog step), but the law has not caught up to that yet.
+    """
+    old_enough = invoice(acceptance="2026-07-30")     # 10 days overdue at TODAY
+    position = law.legal_position(old_enough, TODAY)
+    action = run(score_value=45, record=old_enough)
+    assert position["available_rung"] == 2
+    assert action.kind == brain.SEND
+    assert action.rung == 2
+
+
+def test_a_severely_backlogged_first_contact_still_gets_one_message_before_handoff() -> None:
+    """An invoice inherited hundreds of days overdue does not open on a stop
+
+    with the buyer never once contacted -- it gets one real message (one
+    rung above base), and ordinary escalation carries it the rest of the way
+    on later days.
+    """
+    ancient = invoice(acceptance="2025-01-01")
+    position = law.legal_position(ancient, TODAY)
+    action = run(score_value=45, record=ancient)
+    assert position["available_rung"] == 4, "fixture no longer exercises a maxed-out ceiling"
+    assert action.kind == brain.SEND
+    assert action.rung == 3
+
+
 # --- hard stops -----------------------------------------------------------
 
 def test_the_sixth_contact_is_refused_whatever_the_score() -> None:
@@ -184,10 +236,14 @@ def test_an_active_promise_buys_silence() -> None:
 
 
 def test_a_broken_promise_moves_the_case_up_a_rung() -> None:
+    # Old enough overdue for a ceiling above rung 2 -- otherwise both cases
+    # are capped to the same rung and the jump has nowhere to show up.
+    record = invoice(acceptance="2026-06-20")
     broken = [{"invoice_id": "INV-2026-0204", "promised_date": "2026-08-01",
                "status": "open"}]
-    without = run(score_value=62, history=[contact("2026-08-01", 1)])
-    with_broken = run(score_value=62, history=[contact("2026-08-01", 1)], promises=broken)
+    without = run(score_value=62, record=record, history=[contact("2026-08-01", 1)])
+    with_broken = run(score_value=62, record=record, history=[contact("2026-08-01", 1)],
+                      promises=broken)
     assert with_broken.rung > without.rung
 
 

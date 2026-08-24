@@ -304,11 +304,26 @@ def decide(
     current = base if current is None else max(current, base)
 
     step_up = 1 if (days_since is None or days_since >= int(pacing["days_between_rungs"])) else 0
-    if not history:
-        step_up = 0                      # the first contact starts at the base rung
     jump = int(ladder.get("broken_promise_rung_jump", 1)) * broken_promises(promises, today, grace)
 
-    desired = max(base, current + step_up + jump)
+    # A first-ever contact is not necessarily a fresh case: an invoice that
+    # sat overdue and uncontacted before the watchdog ever saw it (P2) should
+    # not open with the same soft nudge as a buyer who became overdue
+    # yesterday. One cadence interval already having passed silently is
+    # enough to say "this is not fresh" and open one rung higher -- but only
+    # one. It deliberately does not keep counting cadence intervals for
+    # however old the backlog is: a case old enough for the legal ceiling to
+    # already sit at its maximum still gets one real message before ordinary
+    # escalation (which already accounts for elapsed days via step_up above)
+    # carries it the rest of the way, rather than opening on a stop with the
+    # buyer never contacted at all.
+    backlog_steps = 0
+    if not history:
+        if int(legal_position["days_overdue"]) >= int(pacing["days_between_rungs"]):
+            backlog_steps = 1
+        desired = base + backlog_steps
+    else:
+        desired = max(base, current + step_up + jump)
     chosen = min(desired, ceiling)                       # <-- the ceiling, applied
 
     # 7b. A rung with no room left escalates, if the law allows it.
@@ -327,8 +342,12 @@ def decide(
                      f"from {seen} settled invoice{'' if seen == 1 else 's'}")
     else:
         how_paced = f"{scored_band} band"
+    backlog_note = (f"; first contact but already {legal_position['days_overdue']} days "
+                    f"overdue, paced one rung ahead of the base for the backlog"
+                    if backlog_steps else "")
     why = (f"score {score.get('score')} ({how_paced}) starts at rung {base}; "
-           f"{legal_position['days_overdue']} days overdue; ceiling {ceiling}{cap_note}")
+           f"{legal_position['days_overdue']} days overdue; ceiling {ceiling}"
+           f"{cap_note}{backlog_note}")
 
     # 8. Rung 4 is a stop, not a message. This MUST precede every send gate:
     #    rung 4 has max_messages of 0, so the exhaustion check below would
