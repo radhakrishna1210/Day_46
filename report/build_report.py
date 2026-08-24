@@ -93,6 +93,42 @@ def _days(value: float | None) -> str:
     return f"{value:.1f}" if value is not None else "n/a"
 
 
+def _message_delta_phrase(delta: int) -> str:
+    if delta < 0:
+        return f"{-delta} fewer messages"
+    if delta > 0:
+        return f"{delta} more messages"
+    return "the same number of messages"
+
+
+def _days_to_pay_note(results: dict[str, Any]) -> str | None:
+    """One sentence reconciling the two 'avg days to pay' rows when they could
+
+    look like they disagree. The plain average looks worse for whichever run
+    recovers more invoices overall, including harder cases that take longer
+    -- those pull its own raw average up, while a run that simply never
+    recovers the hard ones never counts them as slow. Only shown when the raw
+    figures could plausibly read as a contradiction; if the agent already
+    looks faster on the raw number too, there is nothing to reconcile.
+    """
+    baseline, agent = results["baseline"], results["agent"]
+    matched = results.get("matched_avg_days_to_pay") or {}
+    if not matched.get("n"):
+        return None
+    raw_agent, raw_baseline = agent.get("avg_days_to_pay"), baseline.get("avg_days_to_pay")
+    if raw_agent is None or raw_baseline is None or raw_agent <= raw_baseline:
+        return None
+    return (
+        "The plain average above can look worse for the agent purely because it "
+        "recovers more invoices overall, including harder cases that take "
+        "longer to resolve -- those pull its own raw average up, while a run "
+        "that simply never recovers the hard ones never counts them as slow. "
+        "The matched-set figure directly below it, computed only on invoices "
+        "BOTH runs actually recovered, is the fair comparison, and on it the "
+        "agent is genuinely faster."
+    )
+
+
 def exceptions_list(results: dict[str, Any]) -> list[dict[str, Any]]:
     """Every invoice the AGENT failed to recover, with the reason and persona.
 
@@ -210,11 +246,13 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "audit_excerpt": _audit_excerpt(),
         "multi_seed": _multi_seed_rows(results),
         "guardrails": GUARDRAILS,
+        "days_to_pay_note": _days_to_pay_note(results),
         "gain_paise": (results["agent"]["final"]["recovered_paise"]
                       - results["baseline"]["final"]["recovered_paise"]),
         "gain": _money(results["agent"]["final"]["recovered_paise"]
                       - results["baseline"]["final"]["recovered_paise"]),
-        "message_delta": (results["agent"]["messages_sent"] - results["baseline"]["messages_sent"]),
+        "message_delta_phrase": _message_delta_phrase(
+            results["agent"]["messages_sent"] - results["baseline"]["messages_sent"]),
     }
 
 

@@ -66,7 +66,7 @@
     Same seeded invoices, same buyer world, two agents. The baseline is a
     dumb 3-fixed-reminder bot (mirrors how Razorpay Payment Links reminders
     behave today). Our agent recovered <strong class="gain">{{ gain }} more</strong>
-    with {{ message_delta }} messages{{ " fewer" if message_delta < 0 else " more" }}.
+    with {{ message_delta_phrase }}.
   </p>
 
   <h2>Headline</h2>
@@ -84,6 +84,9 @@
       {% endfor %}
     </tbody>
   </table>
+  {% if days_to_pay_note %}
+  <p class="reasons">{{ days_to_pay_note }}</p>
+  {% endif %}
 
   <h2>Is this just one lucky seed?</h2>
   {% if multi_seed %}
