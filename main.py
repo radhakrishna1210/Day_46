@@ -16,7 +16,8 @@ from typing import Any, Callable
 
 from data import generate, store
 from engine.money import enable_unicode_output, format_inr
-from engine import audit, brain, channels, law, llm, promises, rungs, samadhaan, score, watchdog, writer
+from engine import (audit, brain, channels, law, llm, promises, rungs, samadhaan, score,
+                    validate, watchdog, writer)
 from report import build_report
 from sim import personas, run_sim
 
@@ -34,6 +35,7 @@ class Context:
     queue: list[dict[str, Any]]
     scores: list[dict[str, Any]]
     positions: list[dict[str, Any]]
+    invalid_invoices: dict[str, str] = field(default_factory=dict)
     actions: list[Any] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
     deliveries: list[dict[str, Any]] = field(default_factory=list)
@@ -63,7 +65,16 @@ def stage_data(context: Context) -> str:
     meta = store.load_meta()
     context.today = date.fromisoformat(meta["simulation_start"])
     current = sum(1 for inv in context.invoices if inv["cohort"] == "current")
-    return f"{len(context.buyers)} buyers, {len(context.invoices)} invoices ({current} current)"
+    # Malformed invoices (engine.validate) are found once here, before anything
+    # downstream ever sees them -- watchdog excludes them from the queue, so
+    # this is the one place a human running the pipeline sees they exist at
+    # all. Non-negotiable #1: nothing about this may happen silently.
+    context.invalid_invoices = validate.audit_invalid(context.invoices, context.today,
+                                                       log=not context.dry_run)
+    invalid_note = (f", {len(context.invalid_invoices)} malformed (excluded, see audit trail)"
+                    if context.invalid_invoices else "")
+    return (f"{len(context.buyers)} buyers, {len(context.invoices)} invoices "
+            f"({current} current{invalid_note})")
 
 
 def stage_watchdog(context: Context) -> str:

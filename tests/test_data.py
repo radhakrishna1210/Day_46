@@ -318,3 +318,68 @@ def test_personas_produce_distinguishable_payment_behaviour(world: dict, history
 )
 def test_indian_digit_grouping(paise: int, expected: str) -> None:
     assert gen.format_inr(paise, "Rs ") == expected
+
+
+# --- --with-malformed: deliberately bad records, opt-in only --------------
+# docs/edge_cases.md TC-045, TC-049, TC-050, TC-051, TC-053, TC-054, made
+# reachable from real data on disk (data/generate.py --with-malformed), not
+# only from unit-test fixtures like tests/test_validate.py's.
+
+_MALFORMED_TC_KEYWORDS = {
+    "TC-045": "acceptance date",
+    "TC-049": "agreed_days",
+    "TC-050": "future",
+    "TC-051": "chronology",
+    "TC-053": "amount",
+    "TC-054": "amount",
+}
+
+
+def test_default_generation_is_unaffected_by_the_flag_existing() -> None:
+    """The default call stays byte-identical whether or not this flag exists."""
+    assert json.dumps(gen.generate(SEED), sort_keys=True) == \
+           json.dumps(gen.generate(SEED, with_malformed=False), sort_keys=True)
+
+
+def test_with_malformed_adds_exactly_the_six_named_fixtures() -> None:
+    world = gen.generate(SEED, with_malformed=True)
+    ids = {inv["invoice_id"] for inv in world["invoices"]["invoices"]
+           if inv["invoice_id"].startswith("INV-MALFORMED-")}
+    assert ids == {f"INV-MALFORMED-{tc}" for tc in _MALFORMED_TC_KEYWORDS}
+
+
+def test_with_malformed_does_not_perturb_the_other_invoices() -> None:
+    """Appended after the RNG-driven world is fully built -- must not shift IDs."""
+    plain = gen.generate(SEED)["invoices"]["invoices"]
+    with_flag = gen.generate(SEED, with_malformed=True)["invoices"]["invoices"]
+    non_malformed = [inv for inv in with_flag
+                     if not inv["invoice_id"].startswith("INV-MALFORMED-")]
+    assert json.dumps(plain, sort_keys=True) == json.dumps(non_malformed, sort_keys=True)
+
+
+def test_each_malformed_fixture_trips_exactly_the_case_it_names() -> None:
+    from engine import validate
+
+    world = gen.generate(SEED, with_malformed=True)
+    invoices = {inv["invoice_id"]: inv for inv in world["invoices"]["invoices"]}
+    today = date.fromisoformat(world["invoices"]["meta"]["simulation_start"])
+    for tc, keyword in _MALFORMED_TC_KEYWORDS.items():
+        reason = validate.invalid_reason(invoices[f"INV-MALFORMED-{tc}"], today)
+        assert reason is not None, f"{tc} fixture was not rejected"
+        assert keyword in reason, f"{tc}: expected {keyword!r} in reason {reason!r}"
+
+
+def test_malformed_fixtures_are_excluded_from_the_watchdog_queue() -> None:
+    from engine import watchdog
+
+    world = gen.generate(SEED, with_malformed=True)
+    invoices = world["invoices"]["invoices"]
+    today = date.fromisoformat(world["invoices"]["meta"]["simulation_start"])
+    queued = {inv["invoice_id"] for inv in watchdog.overdue_invoices(invoices, today)}
+    assert not any(inv_id.startswith("INV-MALFORMED-") for inv_id in queued)
+
+
+def test_print_summary_does_not_crash_on_malformed_fixtures(capsys) -> None:
+    world = gen.generate(SEED, with_malformed=True)
+    gen.print_summary(world, {"buyers": gen.DEFAULT_SEED_DIR / "buyers.json"})
+    assert "malformed" in capsys.readouterr().out

@@ -144,6 +144,43 @@ def _extract_amount_paise(text: str) -> int | None:
     return best
 
 
+def _distinct_amounts_paise(text: str) -> int:
+    """How many DIFFERENT rupee figures are named in free text.
+
+    See docs/edge_cases.md TC-036: "1 lakh Friday ko aur remaining 4 lakh
+    next month" names two. Coarse, like _extract_amount_paise -- a trip-wire
+    for "this reply may carry more than one instalment", never a ledger.
+    """
+    found: set[int] = set()
+    for pattern in _AMOUNT_PATTERNS:
+        for match in pattern.finditer(text):
+            try:
+                value = float(match.group(1).replace(",", ""))
+            except ValueError:
+                continue
+            unit = (match.group(2) or "").lower()
+            if unit:
+                value *= _AMOUNT_UNITS[unit]
+            found.add(int(round(value * 100)))
+    return len(found)
+
+
+#: Coarse, English/Hinglish dispute language -- a trip-wire only, per
+#: docs/edge_cases.md TC-032 ("goods were damaged, but I'll pay ... Friday").
+#: Never used to change `intent`: a dispute is the model's call to make, this
+#: only flags a promise worth a second look by a human reading the trail.
+_DISPUTE_WORDS: tuple[str, ...] = (
+    "damage", "damaged", "defect", "defective", "faulty", "quality",
+    "not received", "never received", "credit note", "dispute", "mismatch",
+    "wrong quantity", "rejected", "returning", "reject the",
+)
+
+
+def _looks_like_a_dispute(text: str) -> bool:
+    lowered = text.lower()
+    return any(word in lowered for word in _DISPUTE_WORDS)
+
+
 # --------------------------------------------------------------------------
 # reading a reply
 # --------------------------------------------------------------------------
@@ -186,6 +223,16 @@ def parse_reply(
         "report what it says about payment.\n\n"
         f"Today is {today.isoformat()}.\n"
         f"The reply, which may be in Hinglish:\n{text!r}\n\n"
+        "This system tracks exactly ONE intent per reply, so two rules apply "
+        "when a reply carries more than one: (1) if it BOTH raises a dispute "
+        "(damaged goods, wrong quantity, quality complaint, invoice/PO "
+        "mismatch, etc.) AND offers a payment date or amount, classify it as "
+        "dispute -- a dispute always takes precedence, because chasing a "
+        "buyer who has raised a genuine complaint is how a supplier loses a "
+        "customer. (2) if it promises payment in more than one instalment "
+        "(more than one amount and/or date), report only the EARLIEST date "
+        "and its corresponding amount as date_hint/amount; do not try to "
+        "represent every instalment.\n\n"
         f"Answer with a JSON object: intent (one of {', '.join(INTENTS)}), "
         "date_hint (day_of_month:N, relative_days:N, iso:YYYY-MM-DD, month_end "
         "or null -- do NOT compute a date yourself), amount (full, partial or "
@@ -254,6 +301,15 @@ def parse_reply(
         result["downgraded"] = downgraded
         result["raw"] = parsed
 
+    # Defence in depth for docs/edge_cases.md TC-032/TC-036, on top of the
+    # prompt instruction above: coarse, rule-based trip-wires that never
+    # change intent/date/amount -- the classification is the model's call --
+    # they only make sure a human reading the trail is not left unaware that
+    # the raw text looked like it might have carried more than the system
+    # ever tracks as a single intent.
+    possible_dispute = intent == "promise" and _looks_like_a_dispute(text)
+    multiple_amounts = intent == "promise" and _distinct_amounts_paise(text) >= 2
+
     if log:
         reason = f"read the reply as {intent}"
         if when:
@@ -275,6 +331,24 @@ def parse_reply(
                 reason=rejected_by_rule, source="rule", today=today,
                 buyer_id=buyer_id, actor="promises",
                 detail={"reply": text, "raw_model_output": parsed},
+            )
+        if possible_dispute:
+            audit.record(
+                invoice_id=invoice_id, action="promise_may_contain_a_dispute",
+                reason=("the reply was classified as a promise, but also contains "
+                        "dispute language (damage/quality/mismatch wording); worth a "
+                        "human's second look (docs/edge_cases.md TC-032)"),
+                source="rule", today=today, buyer_id=buyer_id, actor="promises",
+                detail={"reply": text},
+            )
+        if multiple_amounts:
+            audit.record(
+                invoice_id=invoice_id, action="promise_may_contain_multiple_amounts",
+                reason=("the reply names more than one rupee figure; only the earliest "
+                        "date/amount is tracked as the promise, the rest is not "
+                        "followed up automatically (docs/edge_cases.md TC-036)"),
+                source="rule", today=today, buyer_id=buyer_id, actor="promises",
+                detail={"reply": text},
             )
     return result
 

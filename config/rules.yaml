@@ -150,6 +150,20 @@ promises:
   # to wave through a figure that is actually implausible.
   amount_implausible_multiple: 1.2
 
+# --- Invoice structural validation (engine/validate.py) --------------------
+# A malformed invoice must never reach engine/law.py or engine/brain.py
+# unnoticed -- see docs/edge_cases.md TC-045, TC-049, TC-050, TC-051, TC-053,
+# TC-054. Most of these checks are structural invariants with no meaningful
+# "how much is too much" (an invoice cannot have a negative amount, full
+# stop) -- only these two are genuinely tunable, so only these two live here.
+validation:
+  # An invoice amount at or below this is not a receivable worth chasing.
+  min_amount_paise: 1
+  # How many days into the future an issue_date may sit before it is treated
+  # as a data error rather than genuine advance invoicing. 0 means "must not
+  # be later than today at all."
+  future_issue_date_grace_days: 0
+
 # --- Hard stopping rules (enforced in code, never by the LLM) -------------
 stop_rules:
   max_per_rung: 3

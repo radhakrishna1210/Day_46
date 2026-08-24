@@ -599,6 +599,55 @@ def _apply_mess(
     buyers[rng.choice(opt_out_pool)]["opted_out"] = True
 
 
+#: One buyer, reused by every malformed fixture below. Any real buyer_id
+#: works -- these invoices are excluded from the watchdog queue before
+#: anything ever needs the buyer's own attributes (engine/validate.py).
+_MALFORMED_BUYER_ID = "BUY-01"
+
+
+def _malformed_invoices() -> list[dict[str, Any]]:
+    """Six deliberately malformed current invoices, one per docs/edge_cases.md
+    case that engine/validate.py exists to catch (TC-045, TC-049, TC-050,
+    TC-051, TC-053, TC-054).
+
+    Purely additive -- appended after _assign_ids(), with their own fixed IDs,
+    so they never affect the normal invoices' numbering or the RNG stream
+    that produced them. cohort="current" so they flow through the same
+    pipeline (watchdog, the simulator's exceptions list) as any other current
+    invoice; only their content marks them as invalid, not a special field.
+    """
+    normal_issue = _iso(SIMULATION_START - timedelta(days=90))
+
+    def fixture(tc: str, **overrides: Any) -> dict[str, Any]:
+        invoice = _blank_invoice()
+        invoice.update(
+            invoice_id=f"INV-MALFORMED-{tc}",
+            buyer_id=_MALFORMED_BUYER_ID,
+            cohort="current",
+            description=f"malformed fixture invoice for docs/edge_cases.md {tc}",
+            amount_paise=5_000_000,
+            issue_date=normal_issue,
+            acceptance_date=normal_issue,
+            status="open",
+        )
+        invoice.update(overrides)
+        return invoice
+
+    future_issue = _iso(SIMULATION_START + timedelta(days=5))
+    return [
+        fixture("TC-045", acceptance_date=None),
+        fixture("TC-049", written_agreement=True, agreed_days="whenever possible"),
+        fixture("TC-050", issue_date=future_issue, acceptance_date=future_issue),
+        fixture(
+            "TC-051",
+            issue_date=_iso(SIMULATION_START - timedelta(days=30)),
+            acceptance_date=_iso(SIMULATION_START - timedelta(days=35)),
+        ),
+        fixture("TC-053", amount_paise=0),
+        fixture("TC-054", amount_paise=-500_000),
+    ]
+
+
 def _assign_ids(invoices: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort chronologically and number the invoices the way a ledger would."""
     invoices.sort(key=lambda inv: (inv["acceptance_date"], inv["buyer_id"]))
@@ -622,8 +671,15 @@ def statutory_due_date(invoice: dict[str, Any], no_agreement: int, ceiling: int)
     return date.fromisoformat(invoice["acceptance_date"]) + timedelta(days=term)
 
 
-def generate(seed: int) -> dict[str, Any]:
-    """Build the whole test world reproducibly from one seed."""
+def generate(seed: int, with_malformed: bool = False) -> dict[str, Any]:
+    """Build the whole test world reproducibly from one seed.
+
+    with_malformed appends six deliberately malformed current invoices (see
+    _malformed_invoices()) AFTER the RNG-driven world is fully built and
+    numbered -- so with_malformed=False (the default) produces byte-identical
+    output to before this flag existed, and with_malformed=True never
+    perturbs the RNG stream that produces the other 100 current invoices.
+    """
     no_agreement, ceiling = _load_statutory_terms()
     rng = random.Random(seed)
 
@@ -634,6 +690,9 @@ def generate(seed: int) -> dict[str, Any]:
     current = _build_current(rng, buyers, no_agreement, ceiling)
     _apply_mess(rng, current, buyers, personas, no_agreement, ceiling)
     invoices = _assign_ids(history + current)
+
+    malformed = _malformed_invoices() if with_malformed else []
+    invoices = invoices + malformed
 
     return {
         "buyers": {
@@ -650,7 +709,7 @@ def generate(seed: int) -> dict[str, Any]:
                 "schema_version": SCHEMA_VERSION,
                 "seed": seed,
                 "simulation_start": _iso(SIMULATION_START),
-                "current_invoice_count": len(current),
+                "current_invoice_count": len(current) + len(malformed),
                 "history_invoice_count": len(history),
             },
             "invoices": invoices,
@@ -723,7 +782,11 @@ def print_summary(world: dict[str, Any], paths: dict[str, Path]) -> None:
     symbol = enable_unicode_output()
     buyers = world["buyers"]["buyers"]
     invoices = world["invoices"]["invoices"]
-    current = [inv for inv in invoices if inv["cohort"] == "current"]
+    # Malformed fixtures (--with-malformed) are deliberately unfit for the law
+    # math this summary itself uses (statutory_due_date, agreed_days > ceiling)
+    # -- they are reported separately below, never folded into these stats.
+    malformed = [inv for inv in invoices if inv["invoice_id"].startswith("INV-MALFORMED-")]
+    current = [inv for inv in invoices if inv["cohort"] == "current" and inv not in malformed]
     history = [inv for inv in invoices if inv["cohort"] == "history"]
 
     history_per_buyer: dict[str, int] = {}
@@ -764,6 +827,8 @@ def print_summary(world: dict[str, Any], paths: dict[str, Path]) -> None:
     row("  disputed", sum(1 for inv in current if inv["status"] == "disputed"))
     row("  not yet due", len(not_yet_due))
     row("  overdue", len(current) - len(not_yet_due))
+    if malformed:
+        row("  malformed (--with-malformed)", len(malformed))
     print("money (current invoices)")
     row("outstanding", format_inr(outstanding, symbol))
     row("of which overdue", format_inr(overdue_outstanding, symbol))
@@ -773,6 +838,10 @@ def print_summary(world: dict[str, Any], paths: dict[str, Path]) -> None:
     row("no written agreement", sum(1 for inv in current if not inv["written_agreement"]))
     row("agreed terms over 45d", sum(1 for inv in current if (inv["agreed_days"] or 0) > ceiling))
     row("with partial payments", sum(1 for inv in current if inv["partial_payments"]))
+    if malformed:
+        print("malformed fixtures (excluded from the queue by engine/validate.py)")
+        for inv in malformed:
+            row(inv["invoice_id"], "")
     print("files written")
     for label, path in paths.items():
         print(f"  {label:<26} {_display_path(path):>16}")
@@ -783,9 +852,16 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="random seed (default: 42)")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_SEED_DIR, help="where buyers/invoices go")
     parser.add_argument("--persona-out", type=Path, default=DEFAULT_PERSONA_PATH, help="hidden persona file")
+    parser.add_argument(
+        "--with-malformed", action="store_true",
+        help="add six deliberately malformed current invoices, one per docs/edge_cases.md "
+             "TC-045/049/050/051/053/054, so engine/validate.py's rejection is reachable "
+             "from real data on disk and not only from unit-test fixtures (default: off; "
+             "the default seed-42 dataset is unaffected by this flag's existence)",
+    )
     args = parser.parse_args()
 
-    world = generate(args.seed)
+    world = generate(args.seed, with_malformed=args.with_malformed)
     paths = {
         "buyers": args.out_dir / "buyers.json",
         "invoices": args.out_dir / "invoices.json",

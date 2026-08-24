@@ -23,6 +23,7 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from engine import validate
 from engine.law import _as_date, days_gained_by_law, statutory_due_date
 
 #: An invoice in any of these states still has money owing on it.
@@ -45,12 +46,27 @@ def days_overdue(invoice: dict[str, Any], today: date) -> int:
 
 
 def is_overdue(invoice: dict[str, Any], today: date) -> bool:
-    """True when this invoice is unsettled and its statutory deadline has passed."""
+    """True when this invoice is unsettled and its statutory deadline has passed.
+
+    A malformed invoice (see engine/validate.py) is never "overdue" -- its due
+    date cannot be trusted, so it must not enter the work queue at all. It is
+    not being called settled here; it is being excluded from a question that
+    cannot be honestly answered about it. Callers that need the reason why
+    should go through engine.validate directly.
+    """
+    if validate.invalid_reason(invoice, today) is not None:
+        return False
     return is_unsettled(invoice) and days_overdue(invoice, today) > 0
 
 
 def overdue_invoices(invoices: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
     """The work queue for today: unsettled invoices past their statutory due date.
+
+    A malformed invoice (engine.validate.invalid_reason) never appears here --
+    see is_overdue() -- so nothing malformed ever reaches engine/law.py or
+    engine/brain.py by way of this queue. It still exists in the caller's full
+    invoice list, so it is not lost; engine.validate.audit_invalid() is what a
+    caller uses to record and surface why it was excluded.
 
     Sorted by money at risk, largest first, then by how long it has been
     outstanding -- so if a run is ever cut short, the expensive cases were

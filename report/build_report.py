@@ -192,7 +192,13 @@ def _per_attempt_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
 def _exception_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for item in exceptions_list(results):
-        rows.append({**item, "outstanding": _money(item["outstanding_paise"])})
+        rows.append({
+            **item,
+            "outstanding": _money(item["outstanding_paise"]),
+            # None for a malformed invoice (sim.run_sim._exceptions): its own
+            # dates are what is wrong, so "days overdue" cannot be stated.
+            "days_overdue": item["days_overdue"] if item["days_overdue"] is not None else "n/a",
+        })
     return rows
 
 

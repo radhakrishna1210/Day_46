@@ -150,9 +150,9 @@ def test_conservation_is_checked_on_every_run(monkeypatch) -> None:
     calls = []
     original = run_sim.verify_conservation
 
-    def spy(invoices, as_of):
+    def spy(invoices, as_of, invalid_ids=frozenset()):
         calls.append(True)
-        return original(invoices, as_of)
+        return original(invoices, as_of, invalid_ids)
 
     monkeypatch.setattr(run_sim, "verify_conservation", spy)
     run_sim.run_agent(seed=42, days=5, verbose=False)
@@ -170,3 +170,102 @@ def test_verify_conservation_catches_a_desynced_invoice() -> None:
     }
     with pytest.raises(AssertionError):
         run_sim.verify_conservation([invoice], date(2026, 8, 24))
+
+
+# --- malformed invoices flow into the SAME exceptions mechanism ------------
+# docs/edge_cases.md's own instruction: reuse the existing exceptions
+# mechanism, don't invent a second one. These are unit tests of the plumbing
+# (_totals, verify_conservation, _exceptions) rather than a full day-loop run,
+# matching test_verify_conservation_catches_a_desynced_invoice's style above.
+
+def test_a_malformed_invoice_surfaces_in_exceptions_with_its_reason() -> None:
+    from datetime import date
+
+    from engine import validate
+
+    good = {
+        "invoice_id": "INV-GOOD", "buyer_id": "BUY-01", "cohort": "current",
+        "status": "open", "amount_paise": 1000, "amount_paid_paise": 0,
+        "partial_payments": [], "acceptance_date": "2026-06-01",
+        "written_agreement": False, "agreed_days": None, "disputed": False,
+    }
+    bad = {**good, "invoice_id": "INV-BAD", "acceptance_date": None}
+    today = date(2026, 8, 25)
+
+    reason_of = validate.reasons_for([good, bad], today)
+    invalid_ids = frozenset(reason_of)
+    rows = run_sim._exceptions([good, bad], {}, {}, reason_of, {}, today, invalid_ids)
+
+    bad_row = next(r for r in rows if r["invoice_id"] == "INV-BAD")
+    assert bad_row["days_overdue"] is None
+    assert "acceptance date" in bad_row["reason"]
+    good_row = next(r for r in rows if r["invoice_id"] == "INV-GOOD")
+    assert good_row["days_overdue"] is not None
+
+
+def test_totals_excludes_invalid_invoices_from_headline_money() -> None:
+    from datetime import date
+
+    good = {
+        "invoice_id": "INV-GOOD", "cohort": "current", "status": "open",
+        "amount_paise": 1000, "amount_paid_paise": 0, "partial_payments": [],
+        "disputed": False,
+    }
+    bad = {**good, "invoice_id": "INV-BAD", "amount_paise": -500}
+    today = date(2026, 8, 25)
+
+    totals = run_sim._totals([good, bad], today, frozenset({"INV-BAD"}))
+    assert totals["outstanding_paise"] == 1000     # the negative amount never counted
+
+
+def test_a_transiently_future_dated_invoice_is_judged_normally_once_the_clock_passes_it(monkeypatch) -> None:
+    """Regression: TC-050's own defect is clock-relative, unlike the other five.
+
+    Freezing validity at day0 for the whole run would keep an invoice that
+    becomes ordinary partway through permanently excluded from the headline
+    totals and stuck with a stale "invalid" reason. It must instead be judged,
+    by the end of the run, on whatever the agent actually did with it -- see
+    run_agent()'s own comment on checking validity at last_day, not day0.
+    """
+    from datetime import date, timedelta
+
+    from data import store as data_store
+    from sim import personas as personas_module
+
+    original_invoices = data_store.load_invoices()
+    day0 = date.fromisoformat(data_store.load_meta()["simulation_start"])
+    # A deadbeat buyer, so the fixture is still unpaid (and so still in the
+    # exceptions list) by the time the 30-day window ends -- the point of
+    # this test is what its VALIDITY looks like at the end, not whether it
+    # got paid.
+    persona_of = personas_module.load_hidden_personas()
+    buyer_id = next(b for b, tag in persona_of.items() if tag == "deadbeat")
+    future = (day0 + timedelta(days=5)).isoformat()
+
+    fixture = {
+        "invoice_id": "INV-TEST-TC050", "buyer_id": buyer_id, "cohort": "current",
+        "description": "test", "po_number": None, "amount_paise": 5_000_000,
+        "currency": "INR", "issue_date": future, "acceptance_date": future,
+        "written_agreement": False, "agreed_days": None, "agreed_due_date": None,
+        "status": "open", "partial_payments": [], "amount_paid_paise": 0,
+        "paid_date": None, "disputed": False, "dispute_note": None, "promise_broken": False,
+    }
+
+    monkeypatch.setattr(data_store, "load_invoices", lambda: original_invoices + [fixture])
+    report = run_sim.run_agent(seed=42, days=30, verbose=False)
+
+    row = next(r for r in report["exceptions"] if r["invoice_id"] == "INV-TEST-TC050")
+    assert row["days_overdue"] is not None             # no longer flagged invalid
+    assert "invoice date" not in row["reason"]          # not the stale validation reason
+
+
+def test_verify_conservation_skips_invalid_invoices_instead_of_crashing() -> None:
+    from datetime import date
+
+    bad = {
+        "invoice_id": "INV-BAD", "cohort": "current", "status": "open",
+        "amount_paise": -500, "amount_paid_paise": 0, "partial_payments": [],
+    }
+    # Would fail the "0 <= paid <= amount" assertion for a negative amount
+    # if not excluded -- this is the TC-054 case reaching this function.
+    run_sim.verify_conservation([bad], date(2026, 8, 25), frozenset({"INV-BAD"}))

@@ -86,7 +86,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 8: simulator + persona reaction table + P2 fix
 - [x] Day 9: experiment + honest report (results.json, report.html)
 - [x] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
-- [ ] E2 - Tier 2 edge cases: invoice/input validation
+- [x] E2 - Tier 2 edge cases: invoice/input validation
 - [ ] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
 - [ ] E4 - TC-141 end-to-end scenario fixture
 - [ ] W1 - Early warning (pre-overdue risk surfacing)
@@ -97,28 +97,27 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Two new docs this session: docs/edge_cases.md (141 catalogued edge cases,
-  drives E1-E4) and docs/winning_layer.md (post-MVP enhancement roadmap).
-  winning_layer.md is a ROADMAP, not a build list -- only W1 (early warning),
-  W2 (trader-level panel + promise reliability), and W3 (buyer-level message
-  consolidation) are being built for this submission; everything else in it
-  stays Future Work because it needs real transaction data we don't have.
-- LLM provider is Gemini, not Anthropic, despite the Architecture rules
-  section above (unrevised): LLM_MODE=live goes through google-genai using
-  GEMINI_API_KEY, and draft_message/judgment_call/parse_reply all collapse
-  onto the flash tier (gemini-3.7-flash in config/rules.yaml) because this
-  key's free tier has zero pro-tier quota. See engine/llm.py.
-- sim/run_sim.py forces LLM_MODE to "mock" for the whole day-loop in code
-  (_forced_mock_mode()), regardless of .env, so a batch of up to 120 x ~100
-  decisions can never place a live call by accident; engine/llm.py's own
-  --calibrate / --list-models remain the one spot-check path against the
-  real model.
-- P2 rung fix (engine/brain.py): a first-ever contact on an invoice that was
-  already overdue before the watchdog ever saw it opens one rung higher than
-  a freshly-overdue case -- but only one rung; it does not keep counting
-  backlog age beyond that.
-- Send idempotency guard shipped (engine/channels.py's _already_sent, commit
-  a67455e): re-running after an interrupted --send-email now skips any
-  invoice already marked sent in today's audit trail instead of re-sending a
-  duplicate real email -- this resolves the Day 7 Ctrl+C gap noted earlier.
-- 600 tests passing (pytest -q).
+- E2 done: new engine/validate.py rejects TC-045/049/050/051/053/054 at a
+  single choke point (watchdog.overdue_invoices() -- nothing malformed ever
+  reaches law.py or brain.py). An invalid invoice is never dropped: audited
+  once per run (invoice_validation_failed) and surfaced in the SAME
+  exceptions list sim/run_sim.py already builds, with a plain-English reason.
+  TC-032/TC-036 (dispute+promise, multi-amount in one reply) got a documented
+  precedence rule in the parse_reply() prompt (dispute beats promise; earliest
+  instalment wins) plus a coarse rule-based audit trip-wire -- no schema
+  change. data/generate.py --with-malformed makes all eight reachable from
+  real data; default seed-42 output confirmed byte-identical without the flag.
+- Subtlety worth remembering: TC-050's defect (issue_date in the future) is
+  clock-relative and self-heals once simulated time passes it, unlike the
+  other five which are permanently invalid. sim/run_sim.py therefore checks
+  validity once at last_day (not day0) when building the final report --
+  checking at day0 would freeze a stale verdict for invoices that later
+  became perfectly ordinary. See tests/test_run_sim.py's regression test.
+- Two docs from an earlier session: docs/edge_cases.md (141 catalogued edge
+  cases, drives E1-E4) and docs/winning_layer.md (roadmap; only W1-W3 are
+  being built for this submission, the rest stays Future Work).
+- LLM provider is Gemini via engine/llm.py (LLM_MODE=live uses google-genai +
+  GEMINI_API_KEY, flash tier only), not Anthropic, despite the Architecture
+  rules section above being unrevised. sim/run_sim.py force-locks LLM_MODE to
+  mock for the whole day-loop regardless of .env.
+- 647 tests passing (pytest -q).

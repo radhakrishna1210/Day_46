@@ -278,6 +278,115 @@ def test_tc135_llm_outage_during_a_real_promise_is_safe_but_loses_the_reply(monk
     assert any("could not read" in note for note in result["downgraded"])
 
 
+# --- TC-032 / TC-036: a reply can carry more than one thing ---------------
+# One intent is tracked per reply. The prompt asks the model to prefer
+# dispute over promise, and the earliest instalment over a later one; a
+# coarse rule-based trip-wire is the safety net for when it doesn't, adding
+# an audit note but never changing intent, date or amount.
+
+def test_prompt_instructs_dispute_precedence_and_earliest_instalment(monkeypatch) -> None:
+    captured: dict = {}
+
+    def spy(prompt: str, purpose: str, variant: str | None = None) -> str:
+        captured["prompt"] = prompt
+        return json.dumps({"intent": "noise", "confidence": "low", "quote": ""})
+
+    monkeypatch.setattr(promises, "llm", spy)
+    promises.parse_reply("anything", TODAY, invoice_id="INV-2026-0204",
+                         buyer_id="BUY-01", log=False)
+    prompt = captured["prompt"]
+    assert "dispute always takes precedence" in prompt
+    assert "EARLIEST date" in prompt
+
+
+def test_tc032_dispute_wins_and_halts_the_ladder(monkeypatch) -> None:
+    """The desired resolution: the model follows precedence, the ladder halts.
+
+    The Rs 2 lakh/Friday commitment is never tracked as a promise -- see the
+    plan's tradeoff: a disputed invoice hands off to a human, who can decide
+    what to do with it manually. That is a safe failure, unlike the reverse.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "dispute", "date_hint": None, "amount": None,
+        "confidence": "medium", "quote": "Goods were damaged",
+    })
+    record, store = invoice(), []
+    result = promises.parse_reply(
+        "Goods were damaged, but I'll pay Rs 2 lakh next Friday.", TODAY,
+        invoice_id=record["invoice_id"], buyer_id=record["buyer_id"], log=False,
+    )
+    outcome = promises.apply_reply(result, record, store, TODAY, log=False)
+    assert outcome["handoff"] is True
+    assert record["status"] == "disputed"
+    assert store == []
+
+
+def test_tc032_a_promise_that_also_reads_as_a_dispute_gets_an_audit_trip_wire(monkeypatch) -> None:
+    """The dangerous resolution: the model calls it a promise anyway.
+
+    Intent is not silently overridden here -- that would be the schema-
+    extension approach the plan rejected. Instead a distinct, rule-sourced
+    audit entry flags the reply for a human to double check.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "promise", "date_hint": "relative_days:2", "amount": "partial",
+        "confidence": "medium", "quote": "I'll pay 2 lakh next Friday",
+    })
+    result = promises.parse_reply(
+        "Goods were damaged, but I'll pay 2 lakh next Friday.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    assert result["intent"] == "promise"
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_a_dispute"]
+    assert len(notes) == 1
+    assert notes[0]["source"] == "rule"
+
+
+def test_an_ordinary_promise_never_trips_the_dispute_wire(monkeypatch) -> None:
+    _mock_model(monkeypatch, {
+        "intent": "promise", "date_hint": "relative_days:2", "amount": "full",
+        "confidence": "high", "quote": "I'll pay on Friday",
+    })
+    promises.parse_reply(
+        "I'll pay in full on Friday.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_a_dispute"]
+    assert notes == []
+
+
+def test_tc036_multiple_amounts_are_flagged_but_the_earliest_is_still_tracked(monkeypatch) -> None:
+    _mock_model(monkeypatch, {
+        "intent": "promise", "date_hint": "relative_days:2", "amount": "partial",
+        "confidence": "medium", "quote": "1 lakh Friday ko",
+    })
+    result = promises.parse_reply(
+        "1 lakh Friday ko aur remaining 4 lakh next month.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    assert result["intent"] == "promise"
+    assert result["date"] == (TODAY + timedelta(days=2)).isoformat()
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_multiple_amounts"]
+    assert len(notes) == 1
+
+
+def test_a_single_amount_never_trips_the_multiple_amounts_wire(monkeypatch) -> None:
+    _mock_model(monkeypatch, {
+        "intent": "promise", "date_hint": "relative_days:2", "amount": "full",
+        "confidence": "high", "quote": "I'll pay 2 lakh on Friday",
+    })
+    promises.parse_reply(
+        "I'll pay 2 lakh on Friday.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_multiple_amounts"]
+    assert notes == []
+
+
 def test_every_parse_is_audited_with_the_reply_text() -> None:
     parse("promise_tarikh_hinglish", "boss thoda time do, 5 tarikh tak ho jayega")
     entry = audit.entries_for("INV-2026-0204")[0]

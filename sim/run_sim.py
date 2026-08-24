@@ -51,7 +51,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data import generate, store
-from engine import audit, brain, channels, law, llm, promises, watchdog, writer
+from engine import audit, brain, channels, law, llm, promises, validate, watchdog, writer
 from engine import score as score_engine
 from engine.money import enable_unicode_output, format_inr
 from sim import personas
@@ -205,8 +205,17 @@ def _apply_reaction(
     return "no_reply"
 
 
-def _totals(invoices: list[dict[str, Any]], today: date) -> dict[str, Any]:
-    current = _current(invoices)
+def _totals(invoices: list[dict[str, Any]], today: date,
+           invalid_ids: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """Headline money totals over CURRENT, VALID invoices only.
+
+    A malformed invoice (engine.validate) is excluded here too, not just from
+    the watchdog queue: a single bad amount_paise must never move the
+    headline recovered/outstanding figures, or non-negotiable #5 (results
+    measured honestly) is broken by a data bug rather than a real result. It
+    still shows up individually in the exceptions list -- see _exceptions().
+    """
+    current = [inv for inv in _current(invoices) if inv["invoice_id"] not in invalid_ids]
     disputed = [inv for inv in current if inv.get("disputed")]
     return {
         "day": today.isoformat(),
@@ -217,9 +226,19 @@ def _totals(invoices: list[dict[str, Any]], today: date) -> dict[str, Any]:
     }
 
 
-def verify_conservation(invoices: list[dict[str, Any]], as_of: date) -> None:
-    """Money in must equal money accounted for. No invoice may leak or gain paise."""
+def verify_conservation(invoices: list[dict[str, Any]], as_of: date,
+                        invalid_ids: frozenset[str] = frozenset()) -> None:
+    """Money in must equal money accounted for. No invoice may leak or gain paise.
+
+    Excludes invalid invoices (engine.validate): the conservation invariant
+    assumes amount_paise is a sane starting point, which is exactly what a
+    malformed invoice violates (e.g. TC-054's negative amount) -- and one is
+    never touched by _apply_payment while excluded from the watchdog queue,
+    so there is nothing of this run's doing left to verify on it anyway.
+    """
     for invoice in _current(invoices):
+        if invoice["invoice_id"] in invalid_ids:
+            continue
         amount = int(invoice["amount_paise"])
         paid = int(invoice.get("amount_paid_paise", 0))
         itemised = sum(int(p["amount_paise"]) for p in invoice.get("partial_payments") or [])
@@ -347,8 +366,19 @@ def _exceptions(
     reason_of: dict[str, str],
     last_rung_of: dict[str, int | None],
     as_of: date,
+    invalid_ids: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Every current invoice not fully paid, with the buyer, persona and why.
+
+    This is also where a malformed invoice (engine.validate) surfaces -- it is
+    excluded from the watchdog queue so it never reaches engine/law.py or
+    engine/brain.py, but it is still a current, unpaid invoice, so it lands in
+    this same list like any other unrecovered one. reason_of is expected to
+    already carry the validation reason for it (see run_agent/run_baseline),
+    so no separate "why wasn't this recovered" mechanism exists for it.
+    days_overdue cannot be computed for one -- its own dates are what is
+    wrong -- so it is left as None rather than calling watchdog.days_overdue()
+    and risking the exact crash validation exists to prevent.
 
     persona is a simulator-only field -- fine here, this report is for us,
     not something the agent itself ever gets to read (tests/test_sim_isolation.py
@@ -360,6 +390,7 @@ def _exceptions(
             continue
         inv_id = invoice["invoice_id"]
         buyer = buyers_by_id.get(invoice["buyer_id"], {})
+        invalid = inv_id in invalid_ids
         rows.append({
             "invoice_id": inv_id,
             "buyer_id": invoice["buyer_id"],
@@ -367,7 +398,7 @@ def _exceptions(
             "persona": persona_of.get(invoice["buyer_id"]),
             "status": invoice.get("status"),
             "outstanding_paise": law.outstanding_paise(invoice, as_of),
-            "days_overdue": watchdog.days_overdue(invoice, as_of),
+            "days_overdue": None if invalid else watchdog.days_overdue(invoice, as_of),
             "disputed": bool(invoice.get("disputed")),
             "last_rung": last_rung_of.get(inv_id),
             "reason": reason_of.get(inv_id, "never contacted within the simulated window"),
@@ -494,20 +525,37 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                         narrative.append(f"Day {offset + 1}: {buyer['name']} ({persona}) "
                                          f"{action.kind} -- {action.reason}")
 
-    verify_conservation(invoices, last_day)
+    # A malformed invoice (engine.validate) is found here, once, against the
+    # clock as it stands at the END of the run -- not at day0. TC-050's own
+    # defect (an issue_date in the future) is inherently clock-relative: the
+    # watchdog already re-checked it fresh every single day inside the loop
+    # above (so it was correctly kept out of the queue for every day it was
+    # genuinely invalid), but by the time a long run ends, "the future" may
+    # already have arrived, and by then it is just an ordinary invoice --
+    # judged, like any other, on whatever brain.decide() actually did with
+    # it. Checking here at last_day, once, keeps that judgment honest instead
+    # of freezing a stale day0 verdict for the whole run.
+    validation_reasons = validate.audit_invalid(invoices, last_day, log=True)
+    invalid_ids = frozenset(validation_reasons)
+
+    verify_conservation(invoices, last_day, invalid_ids)
     invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
-    reason_of = {inv_id: entry["reason"] for inv_id, entry in last_action_by_invoice.items()}
+    reason_of = {
+        **validation_reasons,
+        **{inv_id: entry["reason"] for inv_id, entry in last_action_by_invoice.items()},
+    }
     last_rung_of = {inv_id: entry["rung"] for inv_id, entry in last_action_by_invoice.items()}
     return {
         "mode": "agent", "seed": seed, "days": days,
-        "final": _totals(invoices, last_day),
+        "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
         "handoffs": len(handoffs), "stops": len(stops), "disputes": len(disputes),
         "handoff_reasons": handoff_reasons, "stop_reasons": stop_reasons,
         "avg_days_to_pay": avg_days_to_pay(invoices),
         "paid_invoices": paid_days_map(invoices),
         "per_rung": per_rung_effectiveness(history, invoices_by_id),
-        "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of, last_rung_of, last_day),
+        "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of, last_rung_of,
+                                  last_day, invalid_ids),
         "narrative": narrative,
     }
 
@@ -599,15 +647,23 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                         f"Day {offset + 1}: [baseline] {buyer['name']} ({persona}) "
                         f"reminder {sent_count[inv_id]}/{BASELINE_MAX_MESSAGES} -> {outcome}")
 
-    verify_conservation(invoices, last_day)
+    # Checked once here, against the clock at the END of the run -- see the
+    # matching comment in run_agent() for why last_day and not day0.
+    # Never logged (log=False): run_agent() is the one place a full audit
+    # trail is produced, per this function's own docstring above.
+    validation_reasons = validate.audit_invalid(invoices, last_day, log=False)
+    invalid_ids = frozenset(validation_reasons)
+
+    verify_conservation(invoices, last_day, invalid_ids)
     invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
     reason_of = {
-        inv_id: _baseline_reason(invoices_by_id[inv_id], count)
-        for inv_id, count in sent_count.items()
+        **validation_reasons,
+        **{inv_id: _baseline_reason(invoices_by_id[inv_id], count)
+           for inv_id, count in sent_count.items()},
     }
     return {
         "mode": "baseline", "seed": seed, "days": days,
-        "final": _totals(invoices, last_day),
+        "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
         "handoffs": 0, "stops": 0, "disputes": len(disputes),
         "handoff_reasons": {}, "stop_reasons": {},
@@ -615,7 +671,8 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         "paid_invoices": paid_days_map(invoices),
         "per_attempt": per_attempt_effectiveness(sent_count, invoices_by_id),
         "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of,
-                                  {inv_id: BASELINE_RUNG for inv_id in sent_count}, last_day),
+                                  {inv_id: BASELINE_RUNG for inv_id in sent_count},
+                                  last_day, invalid_ids),
         "narrative": narrative,
     }
 
