@@ -81,62 +81,44 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 3: score engine + watchdog
 - [x] Day 4-5: law engine + tests + Samadhaan draft
 - [x] Day 6: brain + writer
-- [~] Day 7: channels + promises DONE; real-inbox send confirmed working but
-      interrupted mid-run (see notes) -- re-run pending
+- [x] Day 7: channels + promises DONE; the Ctrl+C mid-send gap is closed by
+      the send idempotency guard (_already_sent, commit a67455e)
 - [x] Day 8: simulator + persona reaction table + P2 fix
 - [x] Day 9: experiment + honest report (results.json, report.html)
-- [ ] Day 10: README, ARCHITECTURE.md polish, wire scoreboard into main.py
-- [ ] Day 11-12: video, fresh-machine test, submit
+- [ ] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
+- [ ] E2 - Tier 2 edge cases: invoice/input validation
+- [ ] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
+- [ ] E4 - TC-141 end-to-end scenario fixture
+- [ ] W1 - Early warning (pre-overdue risk surfacing)
+- [ ] W2 - Trader-level panel + promise reliability
+- [ ] W3 - Buyer-level message consolidation
+- [ ] W4 - Re-run experiment, regenerate report with new numbers
+- [ ] 10 - README + ARCHITECTURE sync + hygiene
+- [ ] 11 - Demo assets + video prep
+- [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Day 9 done: `data.generate.ensure_dataset(seed)` (new) regenerates
-  data/seed/ whenever the on-disk seed doesn't match the requested one --
-  main.py and sim/run_sim.py both used to check existence only, so `--seed 7`
-  used to silently replay whatever was on disk. sim/run_sim.py now computes
-  avg_days_to_pay, per_rung/per_attempt effectiveness, handoff/stop reason
-  buckets, and a rich `exceptions` list (buyer, persona, status, reason);
-  `--compare` writes report/out/results.json, and
-  `python report/build_report.py` renders report/out/report.html (Jinja2,
-  report/templates/report.html.j2). Extended same day with two
-  credibility features: `--extra-seeds` (default 5 fixed seeds beyond
-  --seed) runs the full comparison on each and the report's "Is this just
-  one lucky seed?" table shows the win rate (6/6 on both money and fair
-  days-to-pay, seed 42 + the 5 defaults) -- and a static Methodology
-  section citing the actual test/mechanism behind each anti-rigging claim
-  (persona isolation, identical invoice sets, mocked LLM output,
-  conservation, multi-seed proof, full audit trail). Fixed a false
-  positive this surfaced: tests/test_sim_isolation.py's guard scanned
-  report/ too and flagged build_report.py for *naming*
-  hidden_personas.json in that Methodology text; narrowed the guard to
-  engine/ + main.py (the actual decision pipeline) with a dedicated test
-  that build_report.py's mention stays confined to documentation, never a
-  functional read. 600 tests.
-- IMPORTANT finding, reported honestly rather than tuned away: the RAW "avg
-  days to pay" (each agent's own average over whatever it recovered) makes
-  the agent look slightly slower than baseline (95.5d vs 93.3d, seed 42) --
-  this is a selection-bias artifact, not a real regression: baseline's
-  average excludes every hard invoice it simply never recovers, while the
-  agent goes after them too. On the matched set both runs actually
-  recovered, the agent is faster (97.7d vs 101.2d). Per your call, the report
-  and results.json show BOTH numbers, clearly labeled -- see
-  sim.run_sim.matched_avg_days_to_pay's docstring -- and report.html now also
-  carries a one-sentence prose note directly under the headline table
-  reconciling the two figures for a reader (build_report._days_to_pay_note,
-  only rendered when the raw numbers could actually look contradictory). The
-  multi-seed test (tests/test_experiment.py) asserts against the fair
-  matched number, not the raw one, and passes on seeds 42, 7 and 2024.
-- Razorpay Payment Links reminders confirmed via live web search (not
-  memory): cap at 3, scheduled off the link's date not buyer behaviour, no
-  personalisation -- our baseline already matched this; cited in
-  sim/run_sim.py next to BASELINE_MAX_MESSAGES.
-- CALIBRATION STATUS unchanged since 2026-08-24 (still not re-run): parse_reply
-  is confirmed against the real model; draft_message/judgment_call are not
-  -- blocked on the GEMINI free-tier daily quota. Re-run `--calibrate` after
-  a reset.
-- OUTSTANDING from Day 7, still unresolved: a narrow gap where Ctrl+C landing
-  between a successful SMTP send and the audit write during `--send-email`
-  would leave one email real but unaudited. Waiting on the user to check the
-  actual test inbox count (20 vs 21) before deciding whether to harden it.
-- Next: Day 10 -- README results table + demo instructions, wire the
-  scoreboard stage into main.py's own pipeline (currently only reachable via
-  sim/run_sim.py + report/build_report.py separately), then the Day 7 inbox
-  check above.
+- Two new docs this session: docs/edge_cases.md (141 catalogued edge cases,
+  drives E1-E4) and docs/winning_layer.md (post-MVP enhancement roadmap).
+  winning_layer.md is a ROADMAP, not a build list -- only W1 (early warning),
+  W2 (trader-level panel + promise reliability), and W3 (buyer-level message
+  consolidation) are being built for this submission; everything else in it
+  stays Future Work because it needs real transaction data we don't have.
+- LLM provider is Gemini, not Anthropic, despite the Architecture rules
+  section above (unrevised): LLM_MODE=live goes through google-genai using
+  GEMINI_API_KEY, and draft_message/judgment_call/parse_reply all collapse
+  onto the flash tier (gemini-3.7-flash in config/rules.yaml) because this
+  key's free tier has zero pro-tier quota. See engine/llm.py.
+- sim/run_sim.py forces LLM_MODE to "mock" for the whole day-loop in code
+  (_forced_mock_mode()), regardless of .env, so a batch of up to 120 x ~100
+  decisions can never place a live call by accident; engine/llm.py's own
+  --calibrate / --list-models remain the one spot-check path against the
+  real model.
+- P2 rung fix (engine/brain.py): a first-ever contact on an invoice that was
+  already overdue before the watchdog ever saw it opens one rung higher than
+  a freshly-overdue case -- but only one rung; it does not keep counting
+  backlog age beyond that.
+- Send idempotency guard shipped (engine/channels.py's _already_sent, commit
+  a67455e): re-running after an interrupted --send-email now skips any
+  invoice already marked sent in today's audit trail instead of re-sending a
+  duplicate real email -- this resolves the Day 7 Ctrl+C gap noted earlier.
+- 600 tests passing (pytest -q).
