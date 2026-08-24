@@ -41,7 +41,9 @@ from engine.config import rules
 load_dotenv()
 
 REAL, STUB = "real", "stub"
-SENT, WOULD_SEND, BLOCKED, FAILED = "sent", "would_send", "blocked", "failed"
+SENT, WOULD_SEND, BLOCKED, FAILED, SKIPPED = (
+    "sent", "would_send", "blocked", "failed", "skipped",
+)
 
 #: Prepended to every real email. If a screenshot of this inbox reaches the
 #: video or the repo, it has to be unambiguous that nobody was contacted.
@@ -109,6 +111,24 @@ def _stub(channel: str, to: str, message: dict[str, Any], rung: int | None) -> d
     }
 
 
+def _already_sent(invoice_id: str | None, when: date | datetime) -> bool:
+    """True if a real email for this invoice already reached the test inbox today.
+
+    A run always redecides and redrafts everything from scratch -- there is no
+    other state tracking what has already gone out. Without this, re-running
+    after an interrupted --send-email would re-send every email that already
+    landed in the test inbox.
+    """
+    if not invoice_id:
+        return False
+    day = when.date().isoformat() if isinstance(when, datetime) else when.isoformat()
+    return any(
+        entry.get("actor") == "channels" and entry.get("action") == SENT
+        and str(entry.get("ts", "")).startswith(day)
+        for entry in audit.entries_for(invoice_id)
+    )
+
+
 def _send_email(
     to: str,
     message: dict[str, Any],
@@ -140,6 +160,13 @@ def _send_email(
 
     if not enabled:
         delivery["reason"] = "sending is off; run with --send-email to deliver"
+        return delivery
+    if _already_sent(invoice_id, simulated_date):
+        delivery["status"] = SKIPPED
+        delivery["reason"] = (
+            "already sent to the test inbox earlier today; skipping to avoid "
+            "a duplicate real email"
+        )
         return delivery
     if not inbox:
         delivery["reason"] = "TEST_INBOX_EMAIL is not set in .env, so there is nowhere safe to send"

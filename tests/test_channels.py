@@ -260,3 +260,45 @@ def test_the_audit_entry_names_both_addresses(monkeypatch: pytest.MonkeyPatch) -
     detail = audit.entries()[0]["detail"]
     assert detail["intended_for"] == BUYER_ADDRESS
     assert detail["channel"] == "email"
+
+
+# --- a re-run must not duplicate an already-delivered email ---------------
+
+def test_a_second_send_the_same_day_is_skipped_not_resent(captured) -> None:
+    """Re-running after an interrupt must not duplicate real emails already sent."""
+    first = email(enabled=True)
+    assert first["status"] == channels.SENT
+    assert len(captured) == 1
+
+    second = email(enabled=True)
+    assert second["status"] == channels.SKIPPED
+    assert "already sent" in second["reason"]
+    assert len(captured) == 1        # no second envelope was ever opened
+
+
+def test_the_skip_is_itself_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The skip is a decision, not a silent no-op -- non-negotiable #1."""
+    monkeypatch.setattr(channels.smtplib, "SMTP", Capture)
+    email(enabled=True)
+    email(enabled=True)
+    actions = [e["action"] for e in audit.entries()]
+    assert actions == [channels.SENT, channels.SKIPPED]
+
+
+def test_a_different_day_is_not_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard is per simulated day, not a blanket 'ever sent'."""
+    monkeypatch.setattr(channels.smtplib, "SMTP", Capture)
+    email(enabled=True, today=date(2026, 8, 24))
+    second = email(enabled=True, today=date(2026, 8, 25),
+                    now=datetime(2026, 8, 25, 11, 0))
+    assert second["status"] == channels.SENT
+
+
+def test_the_stub_channel_still_logs_every_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(channels.smtplib, "SMTP", Explode)
+    channels.send("whatsapp", "+91-90000-00007", MESSAGE, invoice_id="INV-1",
+                  rung=2, today=TODAY, enabled=True)
+    channels.send("whatsapp", "+91-90000-00007", MESSAGE, invoice_id="INV-1",
+                  rung=2, today=TODAY, enabled=True)
+    actions = [e["action"] for e in audit.entries()]
+    assert actions == [channels.WOULD_SEND, channels.WOULD_SEND]

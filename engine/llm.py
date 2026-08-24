@@ -224,8 +224,9 @@ def _live_response(prompt: str, purpose: str) -> str:
 
     config = rules()["llm"]
     model = config["models"][purpose]
+    client = _client(key)
     try:
-        response = _client(key).models.generate_content(
+        response = client.models.generate_content(
             model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -322,8 +323,8 @@ def calibrate() -> int:
     if get_mode() != LIVE:
         print(f"LLM_MODE is {get_mode()!r}. Set LLM_MODE=live in .env to calibrate.")
         return 1
-    if not (os.getenv("ANTHROPIC_API_KEY") or "").strip():
-        print("ANTHROPIC_API_KEY is empty in .env. Put the key there, not in your shell.")
+    if not (os.getenv("GEMINI_API_KEY") or "").strip():
+        print("GEMINI_API_KEY is empty in .env. Put the key there, not in your shell.")
         return 1
     if not store.dataset_exists():
         print("no dataset found -- run: python data/generate.py --seed 42")
@@ -405,7 +406,8 @@ def list_models() -> int:
         return 1
 
     try:
-        available = list(_client(key).models.list())
+        client = _client(key)
+        available = list(client.models.list())
     except Exception as exc:
         print(f"could not list models: {type(exc).__name__}: {exc}")
         return 1

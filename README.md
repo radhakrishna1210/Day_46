@@ -84,6 +84,9 @@ Ideas that came up during the build and were deliberately **not** built:
   be shown landing rather than asserted. Parked on Day 2 because the simulation
   window (starts 2026-08-24, runs 90 days) never crosses March 31 -- revisit on
   Day 8 if the window changes.
+- `draft_message` and `judgment_call` run on a Flash-tier Gemini model rather
+  than Pro, because this key's free tier has zero pro-tier quota and billing
+  isn't available for it -- a known quality-vs-cost tradeoff, not a design choice.
 
 ## Legal disclaimer
 

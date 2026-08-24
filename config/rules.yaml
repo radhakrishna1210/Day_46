@@ -163,8 +163,8 @@ law_gates:
 # list your key can actually reach.
 llm:
   models:
-    draft_message: "gemini-3.1-pro"
-    judgment_call: "gemini-3.1-pro"
+    draft_message: "gemini-3.7-flash"
+    judgment_call: "gemini-3.7-flash"
     parse_reply: "gemini-3.7-flash"
   max_tokens:
     draft_message: 2000
@@ -184,7 +184,7 @@ llm:
     HARM_CATEGORY_HARASSMENT: BLOCK_ONLY_HIGH
     HARM_CATEGORY_HATE_SPEECH: BLOCK_ONLY_HIGH
     HARM_CATEGORY_SEXUALLY_EXPLICIT: BLOCK_ONLY_HIGH
-    HARM_CATEGORY_DANGEROUS: BLOCK_ONLY_HIGH
+    HARM_CATEGORY_DANGEROUS_CONTENT: BLOCK_ONLY_HIGH
 
 # --- Message writer (engine/writer.py) ------------------------------------
 writer:

@@ -83,10 +83,19 @@ def test_classification_routes_to_the_cheaper_tier(monkeypatch) -> None:
     assert captured["model"] == rules()["llm"]["models"]["parse_reply"]
 
 
-def test_the_two_tiers_are_actually_different_models() -> None:
-    """A split that routes everything to one model is not a split."""
+def test_the_tier_split_is_currently_collapsed_pending_billing() -> None:
+    """NOT a forgotten TODO: this is the documented billing-constrained tradeoff.
+
+    The design is a cheap tier for classification and a stronger tier for
+    drafting/judgment. draft_message and judgment_call were moved onto the
+    same flash-tier model as parse_reply because this key's free tier has
+    zero pro-tier quota and billing isn't available for it -- see CLAUDE.md
+    ("draft_message/judgment_call are on Flash not Pro") and README's Future
+    Work. Once billing is available, re-split the tiers and swap this back to
+    asserting they differ.
+    """
     models = rules()["llm"]["models"]
-    assert models["draft_message"] != models["parse_reply"]
+    assert models["draft_message"] == models["judgment_call"] == models["parse_reply"]
 
 
 def test_the_key_is_passed_explicitly(monkeypatch) -> None:
