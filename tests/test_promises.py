@@ -57,7 +57,9 @@ def _mock_model(monkeypatch, output: dict) -> None:
 # --- the headline case ----------------------------------------------------
 
 def test_boss_5_tarikh_tak_ho_jayega_is_a_promise_for_the_next_fifth() -> None:
-    """The fixture from ARCHITECTURE, and the reason dates are a rule.
+    """docs/edge_cases.md TC-033 (Hinglish promise) and TC-009 (no amount
+    stated -- see the "full" assertion below): the fixture from ARCHITECTURE,
+    and the reason dates are a rule.
 
     Said on 26 August, "5 tarikh" means 5 September. A model doing its own
     calendar arithmetic could easily return 5 August -- already past, and
@@ -190,6 +192,51 @@ def test_tc003_promise_dated_in_the_past_at_extraction_time_is_refused(monkeypat
     assert result["intent"] == "question"
     assert result["date"] is None
     assert any("not in the future" in note for note in result["downgraded"])
+
+
+def test_tc041_a_genuinely_unclear_reply_is_neither_a_promise_nor_a_refusal(monkeypatch) -> None:
+    """"Haan dekhte hain" ("yes, let's see") commits to nothing and refuses
+    nothing. This is distinct from test_brain.py's
+    test_an_ambiguous_case_is_routed_to_the_model, which drives engine.brain's
+    OWN ambiguity check off a simulator-only history flag -- that never runs
+    real text through the LLM classifier. This does: the model itself has to
+    call this one noise/low-confidence, and nothing gets fabricated from it.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "noise", "date_hint": None, "amount": None,
+        "confidence": "low", "quote": "Haan dekhte hain",
+    })
+    record, store = invoice(), []
+    result = promises.parse_reply(
+        "Haan dekhte hain.", TODAY,
+        invoice_id=record["invoice_id"], buyer_id=record["buyer_id"], log=False,
+    )
+    assert result["intent"] == "noise"
+    assert result["date"] is None
+    outcome = promises.apply_reply(result, record, store, TODAY, log=False)
+    assert outcome == {"intent": "noise", "promise": None, "handoff": False}
+    assert record["status"] == "open"
+
+
+def test_tc042_irrelevant_text_changes_nothing(monkeypatch) -> None:
+    """"Good morning" is the doc's own example of text with no payment
+    information at all. config/replies.yaml's noise_ok fixture reply is "ok",
+    not this -- this is the literal case, not an approximation of it.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "noise", "date_hint": None, "amount": None,
+        "confidence": "high", "quote": "Good morning",
+    })
+    record, store = invoice(), []
+    result = promises.parse_reply(
+        "Good morning.", TODAY,
+        invoice_id=record["invoice_id"], buyer_id=record["buyer_id"], log=False,
+    )
+    assert result["intent"] == "noise"
+    outcome = promises.apply_reply(result, record, store, TODAY, log=False)
+    assert outcome == {"intent": "noise", "promise": None, "handoff": False}
+    assert record["status"] == "open"
+    assert store == []
 
 
 def test_tc011_promised_amount_exceeding_outstanding_is_rejected(monkeypatch) -> None:
@@ -350,6 +397,46 @@ def test_an_ordinary_promise_never_trips_the_dispute_wire(monkeypatch) -> None:
     })
     promises.parse_reply(
         "I'll pay in full on Friday.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_a_dispute"]
+    assert notes == []
+
+
+# --- TC-092: a dispute the model missed, not just one it read as a promise -
+
+def test_tc092_a_dispute_misclassified_as_a_refusal_still_trips_the_wire(monkeypatch) -> None:
+    """Before this, possible_dispute only watched intent=="promise". A dispute
+    the model calls a refusal (or a question, or noise) is exactly as
+    dangerous -- none of those intents halt the ladder either, see
+    apply_reply -- so the same coarse keyword scan now watches every
+    non-dispute intent.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "refusal", "date_hint": None, "amount": None,
+        "confidence": "medium", "quote": "goods were damaged",
+    })
+    promises.parse_reply(
+        "The goods were damaged, we are not paying.", TODAY,
+        invoice_id="INV-2026-0204", buyer_id="BUY-01",
+    )
+    notes = [e for e in audit.entries_for("INV-2026-0204")
+             if e["action"] == "promise_may_contain_a_dispute"]
+    assert len(notes) == 1
+    assert "classified as refusal" in notes[0]["reason"]
+
+
+def test_a_genuine_refusal_with_no_dispute_language_still_never_trips_the_wire(monkeypatch) -> None:
+    """The widened scope must not turn every refusal/question/noise into a
+    false positive -- only ones that actually contain dispute language.
+    """
+    _mock_model(monkeypatch, {
+        "intent": "refusal", "date_hint": None, "amount": None,
+        "confidence": "high", "quote": "abhi nahi ho payega",
+    })
+    promises.parse_reply(
+        "abhi nahi ho payega, budget nahi hai.", TODAY,
         invoice_id="INV-2026-0204", buyer_id="BUY-01",
     )
     notes = [e for e in audit.entries_for("INV-2026-0204")

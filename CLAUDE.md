@@ -87,7 +87,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] Day 9: experiment + honest report (results.json, report.html)
 - [x] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
 - [x] E2 - Tier 2 edge cases: invoice/input validation
-- [ ] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
+- [x] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
 - [ ] E4 - TC-141 end-to-end scenario fixture
 - [ ] W1 - Early warning (pre-overdue risk surfacing)
 - [ ] W2 - Trader-level panel + promise reliability
@@ -97,27 +97,25 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- E2 done: new engine/validate.py rejects TC-045/049/050/051/053/054 at a
-  single choke point (watchdog.overdue_invoices() -- nothing malformed ever
-  reaches law.py or brain.py). An invalid invoice is never dropped: audited
-  once per run (invoice_validation_failed) and surfaced in the SAME
-  exceptions list sim/run_sim.py already builds, with a plain-English reason.
-  TC-032/TC-036 (dispute+promise, multi-amount in one reply) got a documented
-  precedence rule in the parse_reply() prompt (dispute beats promise; earliest
-  instalment wins) plus a coarse rule-based audit trip-wire -- no schema
-  change. data/generate.py --with-malformed makes all eight reachable from
-  real data; default seed-42 output confirmed byte-identical without the flag.
-- Subtlety worth remembering: TC-050's defect (issue_date in the future) is
-  clock-relative and self-heals once simulated time passes it, unlike the
-  other five which are permanently invalid. sim/run_sim.py therefore checks
-  validity once at last_day (not day0) when building the final report --
-  checking at day0 would freeze a stale verdict for invoices that later
-  became perfectly ordinary. See tests/test_run_sim.py's regression test.
-- Two docs from an earlier session: docs/edge_cases.md (141 catalogued edge
-  cases, drives E1-E4) and docs/winning_layer.md (roadmap; only W1-W3 are
-  being built for this submission, the rest stays Future Work).
-- LLM provider is Gemini via engine/llm.py (LLM_MODE=live uses google-genai +
-  GEMINI_API_KEY, flash tier only), not Anthropic, despite the Architecture
-  rules section above being unrevised. sim/run_sim.py force-locks LLM_MODE to
-  mock for the whole day-loop regardless of .env.
-- 647 tests passing (pytest -q).
+- E3 done: docs/edge_cases.md has a **Status:** line (TESTED/HANDLED/OUT OF
+  SCOPE) on all 141 cases plus a Status Summary block (57/45/39). Part A
+  regression tests added for TC-027/033/041/042/064/065/140 -- TC-033 and
+  TC-064 were exact-match aliases to tests that already existed, not
+  duplicated; the rest were genuinely new.
+- Auditing that table surfaced two real gaps, fixed rather than just
+  documented: TC-052 (no invoice_id dedup existed anywhere in the pipeline,
+  which could have silently double-counted a duplicate in every headline
+  money figure -- engine/validate.py::duplicate_reasons() now closes it,
+  consulted by both watchdog.overdue_invoices() and sim/run_sim.py's totals)
+  and TC-092 (the TC-032 dispute trip-wire only fired for intent=="promise";
+  widened to intent!="dispute", since a dispute misread as a refusal,
+  question or noise is exactly as dangerous).
+- TC-050's defect (issue_date in the future) is clock-relative and self-heals
+  once simulated time passes it, unlike the other malformed-invoice cases,
+  which are permanently invalid. See tests/test_run_sim.py's regression test.
+- Two docs from an earlier session: docs/edge_cases.md (141 cases, now fully
+  status-marked, drives E1-E4) and docs/winning_layer.md (roadmap; only
+  W1-W3 are being built for this submission, the rest stays Future Work).
+- LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
+  despite the Architecture rules section above being unrevised. 665 tests
+  passing (pytest -q).

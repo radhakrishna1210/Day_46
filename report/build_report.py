@@ -209,11 +209,12 @@ def _audit_excerpt() -> list[dict[str, Any]]:
 
 #: engine/promises.py's coarse, rule-based trip-wires (never the model, never
 #: a change to intent/date/amount) -- see docs/edge_cases.md TC-032 (dispute
-#: language alongside a tracked promise) and TC-036 (more than one amount/date
-#: named in one reply). Scanned over the FULL trail, not just the excerpt
-#: above, since either could easily fall outside the last 20 lines.
+#: language alongside a tracked promise), TC-092 (a dispute the model missed
+#: and classified as something else entirely) and TC-036 (more than one
+#: amount/date named in one reply). Scanned over the FULL trail, not just the
+#: excerpt above, since any of these could easily fall outside the last 20 lines.
 _TRIP_WIRE_LABELS: dict[str, str] = {
-    "promise_may_contain_a_dispute": "possible dispute alongside the promise",
+    "promise_may_contain_a_dispute": "possible dispute the model's classification may have missed",
     "promise_may_contain_multiple_amounts": "more than one amount/date named",
 }
 

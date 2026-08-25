@@ -68,11 +68,17 @@ def overdue_invoices(invoices: list[dict[str, Any]], today: date) -> list[dict[s
     invoice list, so it is not lost; engine.validate.audit_invalid() is what a
     caller uses to record and surface why it was excluded.
 
+    A duplicate invoice_id (TC-052) is excluded here too, alongside is_overdue's
+    per-invoice checks -- is_overdue() cannot see it, since a duplicate is a
+    property of the whole batch, not of one invoice.
+
     Sorted by money at risk, largest first, then by how long it has been
     outstanding -- so if a run is ever cut short, the expensive cases were
     handled first.
     """
-    queue = [inv for inv in invoices if is_overdue(inv, today)]
+    duplicates = validate.duplicate_reasons(invoices)
+    queue = [inv for inv in invoices
+             if inv["invoice_id"] not in duplicates and is_overdue(inv, today)]
     queue.sort(key=lambda inv: (-outstanding_paise(inv), -days_overdue(inv, today)))
     return queue
 

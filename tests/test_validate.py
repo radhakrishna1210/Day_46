@@ -112,6 +112,41 @@ def test_tc054_negative_amount_is_rejected() -> None:
     assert "amount" in reason
 
 
+# --- TC-052: a duplicate invoice_id cannot be safely counted as one --------
+# Unlike the six checks above, this needs the WHOLE batch -- a single invoice
+# can never know on its own that it is a duplicate. See duplicate_reasons()'s
+# own docstring for why this matters: with no dedup anywhere else in the
+# pipeline, a duplicate would otherwise be silently double-counted in every
+# headline money figure (non-negotiable #5).
+
+def test_tc052_a_duplicate_invoice_id_is_flagged_for_both_records() -> None:
+    first = invoice(invoice_id="INV-DUP")
+    second = invoice(invoice_id="INV-DUP", amount_paise=1_000_000)
+    reasons = validate.duplicate_reasons([first, second])
+    assert set(reasons) == {"INV-DUP"}
+    assert "appears 2 times" in reasons["INV-DUP"]
+
+
+def test_tc052_a_lone_invoice_id_is_never_flagged_as_a_duplicate() -> None:
+    assert validate.duplicate_reasons([invoice(), invoice(invoice_id="INV-OTHER")]) == {}
+
+
+def test_tc052_invalid_reason_alone_cannot_see_a_duplicate() -> None:
+    """The documented asymmetry: one invoice cannot know it is one of a pair.
+
+    reasons_for(), not invalid_reason(), is where TC-052 is actually caught.
+    """
+    first = invoice(invoice_id="INV-DUP")
+    assert validate.invalid_reason(first, TODAY) is None
+
+
+def test_tc052_reasons_for_catches_what_invalid_reason_alone_cannot() -> None:
+    first = invoice(invoice_id="INV-DUP")
+    second = invoice(invoice_id="INV-DUP")
+    reasons = validate.reasons_for([first, second], TODAY)
+    assert set(reasons) == {"INV-DUP"}
+
+
 # --- reasons_for / audit_invalid --------------------------------------------
 
 def test_reasons_for_reports_only_the_invalid_ones() -> None:
@@ -171,4 +206,22 @@ def test_an_invalid_invoice_among_valid_ones_does_not_break_the_rest() -> None:
     good = invoice(invoice_id="INV-GOOD")
     bad = invoice(invoice_id="INV-BAD", acceptance_date=None)
     queue = watchdog.overdue_invoices([good, bad], TODAY)
+    assert [inv["invoice_id"] for inv in queue] == ["INV-GOOD"]
+
+
+def test_tc052_a_duplicate_invoice_id_never_enters_the_overdue_queue() -> None:
+    """is_overdue() alone cannot catch this -- see test_tc052_invalid_reason_
+    alone_cannot_see_a_duplicate -- so overdue_invoices() has to check
+    duplicate_reasons() itself, not just delegate to is_overdue() per invoice.
+    """
+    first = invoice(invoice_id="INV-DUP")
+    second = invoice(invoice_id="INV-DUP")
+    assert watchdog.overdue_invoices([first, second], TODAY) == []
+
+
+def test_tc052_a_duplicate_does_not_hide_a_genuinely_separate_invoice() -> None:
+    good = invoice(invoice_id="INV-GOOD")
+    dup_a = invoice(invoice_id="INV-DUP")
+    dup_b = invoice(invoice_id="INV-DUP")
+    queue = watchdog.overdue_invoices([good, dup_a, dup_b], TODAY)
     assert [inv["invoice_id"] for inv in queue] == ["INV-GOOD"]

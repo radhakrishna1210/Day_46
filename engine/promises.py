@@ -166,9 +166,10 @@ def _distinct_amounts_paise(text: str) -> int:
 
 
 #: Coarse, English/Hinglish dispute language -- a trip-wire only, per
-#: docs/edge_cases.md TC-032 ("goods were damaged, but I'll pay ... Friday").
-#: Never used to change `intent`: a dispute is the model's call to make, this
-#: only flags a promise worth a second look by a human reading the trail.
+#: docs/edge_cases.md TC-032 ("goods were damaged, but I'll pay ... Friday")
+#: and TC-092 (a dispute the model missed entirely). Never used to change
+#: `intent`: a dispute is the model's call to make, this only flags a reply
+#: worth a second look by a human reading the trail.
 _DISPUTE_WORDS: tuple[str, ...] = (
     "damage", "damaged", "defect", "defective", "faulty", "quality",
     "not received", "never received", "credit note", "dispute", "mismatch",
@@ -301,13 +302,16 @@ def parse_reply(
         result["downgraded"] = downgraded
         result["raw"] = parsed
 
-    # Defence in depth for docs/edge_cases.md TC-032/TC-036, on top of the
-    # prompt instruction above: coarse, rule-based trip-wires that never
+    # Defence in depth for docs/edge_cases.md TC-032/TC-036/TC-092, on top of
+    # the prompt instruction above: coarse, rule-based trip-wires that never
     # change intent/date/amount -- the classification is the model's call --
     # they only make sure a human reading the trail is not left unaware that
-    # the raw text looked like it might have carried more than the system
-    # ever tracks as a single intent.
-    possible_dispute = intent == "promise" and _looks_like_a_dispute(text)
+    # the raw text looked like it might have carried more than the model's
+    # answer captured. possible_dispute checks every non-dispute intent, not
+    # just "promise": a dispute misread as a refusal, question or noise is
+    # exactly as dangerous as one misread as a promise -- none of those
+    # intents halt the ladder either (see engine/promises.py's apply_reply).
+    possible_dispute = intent != "dispute" and _looks_like_a_dispute(text)
     multiple_amounts = intent == "promise" and _distinct_amounts_paise(text) >= 2
 
     if log:
@@ -335,9 +339,9 @@ def parse_reply(
         if possible_dispute:
             audit.record(
                 invoice_id=invoice_id, action="promise_may_contain_a_dispute",
-                reason=("the reply was classified as a promise, but also contains "
+                reason=(f"the reply was classified as {intent}, but also contains "
                         "dispute language (damage/quality/mismatch wording); worth a "
-                        "human's second look (docs/edge_cases.md TC-032)"),
+                        "human's second look (docs/edge_cases.md TC-032/TC-092)"),
                 source="rule", today=today, buyer_id=buyer_id, actor="promises",
                 detail={"reply": text},
             )

@@ -10,8 +10,15 @@ See docs/edge_cases.md:
     TC-049  agreed_days not a number
     TC-050  issue_date in the future
     TC-051  acceptance_date before issue_date (impossible chronology)
+    TC-052  duplicate invoice_id
     TC-053  amount is zero
     TC-054  amount is negative
+
+TC-052 is the odd one out: every other check above answers a question about
+ONE invoice in isolation, but "is this a duplicate" can only be answered by
+looking at the whole batch. See duplicate_reasons() below -- it is not one of
+the per-invoice _CHECKS, and invalid_reason() (single invoice) still cannot
+see it. reasons_for() is where the two are merged.
 
 An invoice that fails a check here is never silently dropped: the caller
 (engine/watchdog.py) excludes it from the work queue so it can never reach
@@ -107,7 +114,13 @@ _CHECKS: tuple[Check, ...] = (
 
 
 def invalid_reason(invoice: dict[str, Any], today: date, *, config: dict[str, Any] | None = None) -> str | None:
-    """A plain-English reason this invoice cannot be reasoned about, or None if it is fit to process."""
+    """A plain-English reason this invoice cannot be reasoned about, or None if it is fit to process.
+
+    Single-invoice only, so this can never catch TC-052 (duplicate invoice_id)
+    -- a duplicate is not a property of one record, it is a property of the
+    batch. Use reasons_for() when duplicates matter, which is everywhere the
+    real pipeline (engine/watchdog.py, sim/run_sim.py) cares about validity.
+    """
     bounds = (config or rules())["validation"]
     for check in _CHECKS:
         reason = check(invoice, today, bounds)
@@ -116,13 +129,47 @@ def invalid_reason(invoice: dict[str, Any], today: date, *, config: dict[str, An
     return None
 
 
+def duplicate_reasons(invoices: list[dict[str, Any]]) -> dict[str, str]:
+    """TC-052: invoice_id -> reason, for every invoice sharing its invoice_id with another.
+
+    invoice_id is this dataset's only invoice-number field (data/generate.py's
+    _assign_ids always hands out unique sequential ones), so a duplicate
+    invoice can only mean a literal invoice_id collision here.
+
+    Without this, nothing dedupes by invoice_id anywhere downstream:
+    data/store.py returns a plain list, sim/run_sim.py's _totals() and
+    verify_conservation() just sum/iterate every entry, and
+    report/build_report.py only ever formats numbers already summed upstream.
+    A duplicate would be silently double-counted in every headline money
+    figure -- both colliding records are flagged here (there is no way to
+    tell which one is "real"), which then excludes both from the totals
+    (engine/watchdog.py, sim/run_sim.py) rather than guessing.
+    """
+    counts: dict[str, int] = {}
+    for invoice in invoices:
+        inv_id = invoice.get("invoice_id")
+        if inv_id is not None:
+            counts[inv_id] = counts.get(inv_id, 0) + 1
+    return {
+        invoice["invoice_id"]: (
+            f"invoice_id {invoice['invoice_id']!r} appears {counts[invoice['invoice_id']]} "
+            f"times in this dataset; a duplicate cannot be safely counted as one receivable"
+        )
+        for invoice in invoices
+        if invoice.get("invoice_id") is not None and counts[invoice["invoice_id"]] > 1
+    }
+
+
 def reasons_for(invoices: list[dict[str, Any]], today: date) -> dict[str, str]:
     """invoice_id -> reason, for every invoice in `invoices` that fails validation."""
-    reasons = {}
+    reasons = duplicate_reasons(invoices)
     for invoice in invoices:
+        inv_id = invoice["invoice_id"]
+        if inv_id in reasons:
+            continue  # the duplicate reason already explains it
         reason = invalid_reason(invoice, today)
         if reason:
-            reasons[invoice["invoice_id"]] = reason
+            reasons[inv_id] = reason
     return reasons
 
 

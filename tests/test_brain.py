@@ -185,17 +185,50 @@ def test_a_fourth_message_at_one_rung_is_refused() -> None:
 
 
 def test_opt_out_outranks_everything() -> None:
-    """Even a long-overdue, low-score, rung-4-eligible case."""
+    """docs/edge_cases.md TC-075/TC-140's general rule. Even a long-overdue,
+    low-score, rung-4-eligible case.
+    """
     old = invoice(acceptance="2025-06-01")
     action = run(score_value=10, record=old, who=buyer(opted_out=True))
     assert action.kind == brain.STOP
     assert "opted out" in action.reason
 
 
+def test_tc140_opt_out_mid_sequence_at_rung_two_stops_everything() -> None:
+    """docs/edge_cases.md TC-140, specifically: unlike test_opt_out_outranks_
+    everything's long-overdue, rung-4-eligible case above, this builds an
+    actual in-progress rung-2 sequence -- two prior contacts, still under the
+    3-per-rung cap -- so the case is genuinely active, mid-ladder, when the
+    buyer opts out.
+    """
+    history = [contact("2026-08-01", 2), contact("2026-08-10", 2)]
+    still_active = run(score_value=45, history=history, who=buyer(opted_out=False))
+    assert still_active.kind == brain.SEND  # the sequence really was still live
+
+    action = run(score_value=45, history=history, who=buyer(opted_out=True))
+    assert action.kind == brain.STOP
+    assert "opted out" in action.reason
+
+
 def test_a_dispute_goes_straight_to_a_human() -> None:
+    """docs/edge_cases.md TC-027, first half: the immediate handoff."""
     action = run(record=invoice(status="disputed"))
     assert action.kind == brain.HANDOFF
     assert "disputed" in action.reason
+
+
+def test_a_dispute_never_resumes_sending_on_a_later_pass() -> None:
+    """docs/edge_cases.md TC-027, second half: "chasing stops" has to mean
+    more than one handoff on one call -- an automated day-loop calls decide()
+    again tomorrow, and it must not flip back to SEND for the same disputed
+    invoice.
+    """
+    record = invoice(status="disputed")
+    first = run(record=record, today=TODAY)
+    second = run(record=record, today=TODAY + timedelta(days=1))
+    assert first.kind == brain.HANDOFF
+    assert second.kind == brain.HANDOFF
+    assert "disputed" in second.reason
 
 
 def test_a_settled_invoice_stops() -> None:

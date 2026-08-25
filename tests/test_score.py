@@ -148,12 +148,27 @@ def test_confidence_thresholds(count: int, expected: str) -> None:
 
 
 def test_a_buyer_with_no_history_is_flagged_not_trusted() -> None:
-    """The neutral default is 100, which would be dangerous read on its own."""
+    """docs/edge_cases.md TC-064 (zero payment history -> low confidence).
+
+    The neutral default is 100, which would be dangerous read on its own.
+    """
     result = score_of([])
     assert result["score"] == 100
     assert result["confidence"] == "low"
     assert result["history_count"] == 0
     assert any(item["factor"] == "no history" for item in result["breakdown"])
+
+
+def test_a_buyer_with_one_prior_invoice_is_still_low_confidence() -> None:
+    """docs/edge_cases.md TC-065: one prior invoice is not enough evidence
+    either. test_confidence_thresholds[1-low] already pins confidence() in
+    isolation; this is the same case at the score_of() level, the way TC-064
+    is pinned above -- one settled invoice is real evidence (unlike TC-064's
+    empty history), and it still is not enough to be trusted on its own.
+    """
+    result = score_of([paid(0)])
+    assert result["history_count"] == 1
+    assert result["confidence"] == "low"
 
 
 # --- trend ----------------------------------------------------------------

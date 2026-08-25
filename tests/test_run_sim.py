@@ -218,6 +218,31 @@ def test_totals_excludes_invalid_invoices_from_headline_money() -> None:
     assert totals["outstanding_paise"] == 1000     # the negative amount never counted
 
 
+def test_a_duplicate_invoice_id_is_excluded_from_headline_totals_end_to_end() -> None:
+    """docs/edge_cases.md TC-052, wired all the way through: audit_invalid()
+    is the actual choke point run_agent()/run_baseline() call below -- proving
+    validate.reasons_for() alone catches a duplicate (tests/test_validate.py)
+    is not enough on its own if nothing carries that into invalid_ids here.
+    """
+    from datetime import date
+
+    from engine import validate
+
+    today = date(2026, 8, 25)
+    dup_a = {
+        "invoice_id": "INV-DUP", "cohort": "current", "status": "open",
+        "amount_paise": 1000, "amount_paid_paise": 0, "partial_payments": [],
+        "acceptance_date": "2026-06-01", "written_agreement": False,
+        "agreed_days": None, "disputed": False,
+    }
+    dup_b = {**dup_a, "amount_paise": 5000}            # same invoice_id, different amount
+    good = {**dup_a, "invoice_id": "INV-GOOD"}
+
+    invalid_ids = frozenset(validate.audit_invalid([good, dup_a, dup_b], today, log=False))
+    totals = run_sim._totals([good, dup_a, dup_b], today, invalid_ids)
+    assert totals["outstanding_paise"] == 1000      # only INV-GOOD counted, neither duplicate
+
+
 def test_a_transiently_future_dated_invoice_is_judged_normally_once_the_clock_passes_it(monkeypatch) -> None:
     """Regression: TC-050's own defect is clock-relative, unlike the other five.
 
