@@ -104,9 +104,37 @@ def highest_rung_used(history: list[dict[str, Any]]) -> int | None:
     return max(used) if used else None
 
 
+def _not_superseded(promises: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop every promise superseded by a later one for the same invoice.
+
+    docs/edge_cases.md TC-014: engine.promises.apply_reply() never cancels a
+    prior OPEN promise when the buyer makes a new one for the same invoice --
+    it only ever appends. Without this filter, a promise the buyer
+    proactively renegotiated before it came due would still count as its own
+    separately broken promise once its own grace passed -- confirmed to
+    inflate the rung-jump in decide() below and push a case to a premature
+    human handoff for a buyer who renegotiated in good faith.
+
+    "Later" is decided by recorded_on (when the buyer said it), not
+    promised_date (what they promised) -- a buyer can renegotiate to an
+    EARLIER date too, and it is the most recent thing they said that matters.
+    Ties (identical or missing recorded_on) prefer the later list position,
+    matching append order.
+    """
+    winner_index: dict[str, int] = {}
+    for i, promise in enumerate(promises or []):
+        invoice_id = promise.get("invoice_id")
+        recorded_on = promise.get("recorded_on") or ""
+        current = winner_index.get(invoice_id)
+        if current is None or recorded_on >= (promises[current].get("recorded_on") or ""):
+            winner_index[invoice_id] = i
+    keep = set(winner_index.values())
+    return [p for i, p in enumerate(promises or []) if i in keep]
+
+
 def active_promise(promises: list[dict[str, Any]], today: date, grace_days: int) -> dict | None:
     """A promise still within its grace period. Chasing over it would be rude."""
-    for promise in promises or []:
+    for promise in _not_superseded(promises):
         if promise.get("status") != "open":
             continue
         if _as_date(promise["promised_date"]) + timedelta(days=grace_days) >= today:
@@ -117,7 +145,7 @@ def active_promise(promises: list[dict[str, Any]], today: date, grace_days: int)
 def broken_promises(promises: list[dict[str, Any]], today: date, grace_days: int) -> int:
     """Promises whose date and grace have passed with the money still missing."""
     return sum(
-        1 for promise in promises or []
+        1 for promise in _not_superseded(promises)
         if promise.get("status") in {"open", "broken"}
         and _as_date(promise["promised_date"]) + timedelta(days=grace_days) < today
     )

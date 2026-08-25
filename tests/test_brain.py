@@ -280,6 +280,54 @@ def test_a_broken_promise_moves_the_case_up_a_rung() -> None:
     assert with_broken.rung > without.rung
 
 
+# --- TC-014: a buyer who renegotiates before their promise falls due -----
+# apply_reply() never cancels a prior open promise (engine/promises.py) -- it
+# only ever appends. Confirmed bug this closes: without _not_superseded(), a
+# proactively renegotiated promise still counted as its OWN separately
+# broken promise once its grace passed, inflating the rung-jump and pushing
+# a good-faith renegotiation to a premature human handoff.
+
+def test_tc014_active_promise_returns_the_renegotiated_one_not_the_stale_one() -> None:
+    """Both are simultaneously "open" -- see docs/edge_cases.md TC-014's own
+    scenario -- so active_promise() must not return the one appended first.
+    """
+    superseded = {"invoice_id": "INV-2026-0204", "promised_date": "2026-09-05",
+                 "status": "open", "recorded_on": "2026-08-01"}
+    current = {"invoice_id": "INV-2026-0204", "promised_date": "2026-09-20",
+              "status": "open", "recorded_on": "2026-08-03"}
+    active = brain.active_promise([superseded, current], date(2026, 8, 10), grace_days=3)
+    assert active is current
+
+
+def test_tc014_a_superseded_promise_is_never_counted_as_broken() -> None:
+    superseded = {"invoice_id": "INV-2026-0204", "promised_date": "2026-07-01",
+                 "status": "broken", "recorded_on": "2026-06-25"}
+    current = {"invoice_id": "INV-2026-0204", "promised_date": "2026-07-15",
+              "status": "broken", "recorded_on": "2026-06-28"}
+    assert brain.broken_promises([superseded, current], TODAY, grace_days=3) == 1
+
+
+def test_tc014_a_renegotiated_promise_does_not_double_escalate_the_case() -> None:
+    """The bug, end to end: a buyer who renegotiated once in good faith must
+    not be escalated as if they had broken two independent promises.
+    """
+    record = invoice(acceptance="2026-06-20")
+    only_current = [{"invoice_id": "INV-2026-0204", "promised_date": "2026-07-15",
+                     "status": "broken", "recorded_on": "2026-06-28"}]
+    superseded_plus_current = [
+        {"invoice_id": "INV-2026-0204", "promised_date": "2026-07-01",
+         "status": "broken", "recorded_on": "2026-06-25"},
+        {"invoice_id": "INV-2026-0204", "promised_date": "2026-07-15",
+         "status": "broken", "recorded_on": "2026-06-28"},
+    ]
+    history = [contact("2026-08-01", 1)]
+    without_stale = run(score_value=62, record=record, history=history, promises=only_current)
+    with_stale = run(score_value=62, record=record, history=history,
+                     promises=superseded_plus_current)
+    assert with_stale.rung == without_stale.rung
+    assert with_stale.kind == without_stale.kind
+
+
 # --- the legal ceiling ----------------------------------------------------
 
 def test_a_broken_promise_cannot_punch_through_the_ceiling() -> None:

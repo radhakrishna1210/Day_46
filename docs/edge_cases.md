@@ -28,19 +28,27 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 57 |
-| HANDLED | 45 |
+| TESTED | 58 |
+| HANDLED | 44 |
 | OUT OF SCOPE | 39 |
 | **Total** | **141** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
 seven previously-incidental behaviours (TC-027, TC-033, TC-041, TC-042,
-TC-064, TC-065, TC-140) and fixed two real gaps surfaced while auditing this
-table: TC-052 (no duplicate-invoice_id detection, which could have let a
-duplicate silently double-count in every headline money figure) and TC-092
-(the TC-032 dispute trip-wire only watched replies the model classified as a
-promise, not a dispute misclassified as a refusal/question/noise, which is
-exactly as dangerous). Both are now TESTED, not just documented as gaps.
+TC-064, TC-065, TC-140) and fixed three real gaps surfaced while auditing
+this table, not just documented as gaps:
+
+- TC-052: no duplicate-invoice_id detection anywhere, which could have let a
+  duplicate silently double-count in every headline money figure.
+- TC-092: the TC-032 dispute trip-wire only watched replies the model
+  classified as a promise, not a dispute misclassified as a refusal,
+  question or noise, which is exactly as dangerous.
+- TC-014: a confirmed bug, not a benign gap -- a buyer who renegotiates a
+  promise before it falls due had the superseded promise permanently counted
+  as its own separately broken one, inflating rung escalation (verified to
+  push a real case from `SEND rung=3` to `HANDOFF rung=4`). Dormant in the
+  seed-42 dataset (the simulator never solicits a reply while a promise is
+  active), but reachable through the real `parse_reply`/`apply_reply` path.
 
 ---
 # 1. Promise and Payment-Date Cases
@@ -308,7 +316,7 @@ Repeated promise failures represent a different behavioral pattern from one isol
 
 ## TC-014 — Buyer Changes the Promise Amount
 
-**Status: HANDLED** -- `apply_reply` always appends a new promise (`engine/promises.py:471`) without cancelling a prior open one on the same invoice -- no crash or double-count risk since money tracking (`amount_paid_paise`) is entirely separate from promise records, but no test re-promises a different amount for the same invoice.
+**Status: TESTED** -- `tests/test_brain.py::test_tc014_active_promise_returns_the_renegotiated_one_not_the_stale_one`, `test_tc014_a_superseded_promise_is_never_counted_as_broken`, `test_tc014_a_renegotiated_promise_does_not_double_escalate_the_case`. This was a confirmed bug, not a benign gap: `apply_reply` always appends a new promise (`engine/promises.py`) without cancelling a prior open one, and `engine/brain.py`'s `active_promise()`/`broken_promises()` used to have no notion of "superseded" -- verified to inflate the rung-jump enough to push a real case from `SEND rung=3` to `HANDOFF rung=4` for a buyer who renegotiated in good faith before their original date arrived. Fixed via `brain._not_superseded()`, which both functions now consult (most-recently-*recorded* promise per invoice wins, not most-recently-appended). Confirmed dormant in the seed-42 dataset: the simulator's day-loop never solicits a reply while a promise is active (that path is a `WAIT`), so this specific sequence cannot arise from the synthetic personas today -- `sim/run_sim.py --compare --seed 42` is byte-identical except the `generated` timestamp -- but the bug was reachable through the real `parse_reply`/`apply_reply` path regardless of what triggered the reply.
 
 ### Scenario
 ```text
