@@ -780,7 +780,23 @@ def main() -> int:
     parser.add_argument("--extra-seeds", default=",".join(str(s) for s in DEFAULT_EXTRA_SEEDS),
                         help="comma-separated extra seeds for the multi-seed table under --compare "
                              "(default: the 5 fixed seeds above; pass \"\" to skip)")
+    parser.add_argument("--scenario", choices=("tc141",), default=None,
+                        help="run a scripted end-to-end scenario instead of the seeded simulation "
+                             "(docs/edge_cases.md TC-141 -> tc141)")
     args = parser.parse_args()
+
+    if args.scenario == "tc141":
+        # Imported here, not at module level: sim/scenario_tc141.py imports
+        # _forced_mock_mode etc. back from this module, and importing it at
+        # module level would be circular.
+        from sim import scenario_tc141
+
+        print(f"simulator: scenario={args.scenario}")
+        result = scenario_tc141.run()
+        print()
+        for line in result["narrative"]:
+            print(line)
+        return 0
 
     print(f"simulator: seed={args.seed}, days={args.days}, "
           f"mode={'baseline vs agent' if args.compare else 'agent only'}")

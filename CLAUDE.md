@@ -88,7 +88,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] E1 - Tier 1 edge cases: promise sanity bounds (real bugs)
 - [x] E2 - Tier 2 edge cases: invoice/input validation
 - [x] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
-- [ ] E4 - TC-141 end-to-end scenario fixture
+- [x] E4 - TC-141 end-to-end scenario fixture
 - [ ] W1 - Early warning (pre-overdue risk surfacing)
 - [ ] W2 - Trader-level panel + promise reliability
 - [ ] W3 - Buyer-level message consolidation
@@ -97,29 +97,22 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- E3 done: docs/edge_cases.md has a **Status:** line (TESTED/HANDLED/OUT OF
-  SCOPE) on all 141 cases plus a Status Summary block (58/44/39). Part A
-  regression tests added for TC-027/033/041/042/064/065/140 -- TC-033 and
-  TC-064 were exact-match aliases to tests that already existed, not
-  duplicated; the rest were genuinely new.
-- Auditing that table surfaced three real gaps, fixed rather than just
-  documented: TC-052 (no invoice_id dedup existed anywhere in the pipeline --
-  engine/validate.py::duplicate_reasons() now closes it), TC-092 (the TC-032
-  dispute trip-wire only fired for intent=="promise"; widened to
-  intent!="dispute", since a dispute misread as a refusal/question/noise is
-  exactly as dangerous), and TC-014 (a real bug, not benign: a renegotiated
-  promise's superseded predecessor was permanently counted as its own broken
-  promise, confirmed to inflate rung escalation enough to push a case to a
-  premature human handoff -- fixed via brain._not_superseded(), most-recently
-  -*recorded* promise per invoice wins. Dormant in seed 42's dataset since the
-  simulator never solicits a reply while a promise is active, but reachable
-  through the real parse_reply/apply_reply path).
-- TC-050's defect (issue_date in the future) is clock-relative and self-heals
-  once simulated time passes it, unlike the other malformed-invoice cases,
-  which are permanently invalid. See tests/test_run_sim.py's regression test.
-- Two docs from an earlier session: docs/edge_cases.md (141 cases, now fully
-  status-marked, drives E1-E4) and docs/winning_layer.md (roadmap; only
-  W1-W3 are being built for this submission, the rest stays Future Work).
+- E4 done: `python sim/run_sim.py --scenario tc141` runs docs/edge_cases.md
+  TC-141 end to end through the real pipeline (sim/scenario_tc141.py) --
+  scripted buyer replies/payments feed the same engine.promises/brain/writer/
+  channels calls run_agent() uses, not a special demo path. Tests in
+  tests/test_scenario_tc141.py.
+- Day 49's reply ("...Goods mein bhi thoda issue hai") is classified as a
+  promise, not a dispute -- a deliberate, user-approved choice (not TC-032's
+  crisp "damaged" claim, and it doesn't trip promises.py's _DISPUTE_WORDS
+  list either, a disclosed real gap distinct from TC-032/TC-092's own
+  already-tested triggered case). Revisit if this scenario's story needs to
+  change.
+- Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
+  constants.py bans "Samadhaan" (and other statutory names/numbers) as a
+  literal string constant anywhere outside config/legal.yaml, INCLUDING in
+  narration/log text, not just message drafts -- pull such names via
+  engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
-  despite the Architecture rules section above being unrevised. 668 tests
-  passing (pytest -q).
+  despite the Architecture rules section above being unrevised.
+- 674 tests passing (pytest -q).

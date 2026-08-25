@@ -28,9 +28,9 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 58 |
+| TESTED | 59 |
 | HANDLED | 44 |
-| OUT OF SCOPE | 39 |
+| OUT OF SCOPE | 38 |
 | **Total** | **141** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
@@ -49,6 +49,11 @@ this table, not just documented as gaps:
   push a real case from `SEND rung=3` to `HANDOFF rung=4`). Dormant in the
   seed-42 dataset (the simulator never solicits a reply while a promise is
   active), but reachable through the real `parse_reply`/`apply_reply` path.
+
+E4 (this pass) moved TC-141 from OUT OF SCOPE to TESTED: `sim/scenario_tc141.py`
+runs its exact sequence end to end through the real pipeline, driven by
+`python sim/run_sim.py --scenario tc141`, with tests in
+`tests/test_scenario_tc141.py`.
 
 ---
 # 1. Promise and Payment-Date Cases
@@ -2131,7 +2136,7 @@ Tests a communication preference change during an existing recovery lifecycle.
 
 ## TC-141 — Full Complex Recovery Case
 
-**Status: OUT OF SCOPE** -- Requires a dedicated multi-day fixture combining every listed element (buyer history, Hinglish, partial promise, partial payment, dispute, unreasonable future date, prompt injection, remaining balance, long-running recovery) in one continuous run. This is explicitly the next planned task (E4 in CLAUDE.md's current status), not yet built.
+**Status: TESTED** -- `sim/scenario_tc141.py` runs this exact sequence through the real pipeline (`python sim/run_sim.py --scenario tc141`); `tests/test_scenario_tc141.py` asserts the run completes, that Day 61's injected instruction never marks the invoice paid, and that Day 60's three-year promise is never recorded and never pauses recovery. One disclosed caveat: Day 49's quality remark ("Goods mein bhi thoda issue hai") is classified as a promise, not a dispute -- unlike TC-032's crisp "damaged" claim it is a passing gripe riding along a concrete instalment offer, and it does not happen to trip `engine/promises.py`'s `_DISPUTE_WORDS` keyword list either. So "dispute" is present in this scenario as buyer language, not as a triggered system behaviour -- the triggered case is already covered in isolation by TC-032/TC-092.
 
 ### Initial State
 ```text
