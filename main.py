@@ -100,34 +100,39 @@ def stage_score(context: Context) -> str:
 
 
 def stage_early_warning(context: Context) -> str:
-    """Invoices approaching their due date whose already-known signals look
-    bad -- surfacing only, never a message (see CLAUDE.md's early-warning
-    decision: Option A).
+    """Every invoice approaching its due date, with a real risk band --
+    surfacing only, never a message (see CLAUDE.md's early-warning decision:
+    Option A). `context.early_warnings` holds ALL of them, low band
+    included, so downstream code has the honest full picture; this stage's
+    summary and print_early_warnings() below only show the notable ones.
     """
     scores_by_buyer = {item["buyer_id"]: item for item in context.scores}
     context.early_warnings = watchdog.early_warnings(
         context.invoices, context.promises, scores_by_buyer, context.today,
     )
-    high = sum(1 for w in context.early_warnings if w["risk_band"] == "high")
-    watch = len(context.early_warnings) - high
+    notable = [w for w in context.early_warnings if w["risk_band"] != "low"]
+    high = sum(1 for w in notable if w["risk_band"] == "high")
     window = watchdog.rules()["early_warning"]["window_days"]
-    return f"{len(context.early_warnings)} flagged ({high} high, {watch} watch), within {window}d of due"
+    return (f"{len(notable)} flagged ({high} high, {len(notable) - high} watch), "
+            f"{len(context.early_warnings) - len(notable)} low band, within {window}d of due")
 
 
 def print_early_warnings(context: Context, limit: int = 10) -> None:
-    """One line per early warning, with the reasons -- this is the whole
-    point: a human reading it should believe it, not just trust it."""
+    """One line per NOTABLE early warning (watch/high; low band is computed
+    but not shown here) -- this is the whole point: a human reading it
+    should believe it, not just trust it."""
+    notable = [w for w in context.early_warnings if w["risk_band"] != "low"]
     print()
     print(f"  {'invoice':<16}{'buyer':<9}{'band':<7}{'due in':>7}{'outstanding':>14}  reasons")
-    for warning in context.early_warnings[:limit]:
+    for warning in notable[:limit]:
         print(
             f"  {warning['invoice_id']:<16}{warning['buyer_id']:<9}{warning['risk_band']:<7}"
             f"{warning['days_until_due']:>6}d"
             f"{format_inr(warning['outstanding_paise'], 'Rs '):>14}  "
             + "; ".join(warning["reasons"])
         )
-    if len(context.early_warnings) > limit:
-        print(f"  ... and {len(context.early_warnings) - limit} more")
+    if len(notable) > limit:
+        print(f"  ... and {len(notable) - limit} more")
 
 
 def stage_law(context: Context) -> str:
@@ -345,7 +350,8 @@ def run(seed: int, dry_run: bool = False, send_email: bool = False,
     for number, stage in enumerate(PIPELINE, start=1):
         print(f"step {number}: {stage.name} -- {stage.what}")
         print(f"  {stage.run(context)}")
-        if stage.name == "early warning" and context.early_warnings:
+        if stage.name == "early warning" and any(
+                w["risk_band"] != "low" for w in context.early_warnings):
             print_early_warnings(context)
         if stage.name == "law engine" and context.positions:
             print_legal_detail(context)

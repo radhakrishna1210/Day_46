@@ -184,10 +184,15 @@ early_warning:
   prior_overdue:
     min_count: 2   # this many of the buyer's OTHER invoices having gone
                     # overdue (now, or historically paid late) triggers it
-  # How many of the three categories (score, promise reliability, prior
-  # overdue) must trigger before a warning is surfaced at all, and before it
-  # is "high" rather than "watch". Requiring at least 2 of 3 also guarantees
-  # every surfaced warning carries at least two plain-English reasons.
+  # engine.watchdog.early_warnings() computes a real risk_band (low/watch/
+  # high) for EVERY invoice in the window, not just the notable ones -- these
+  # two numbers are the low->watch and watch->high boundaries, by how many of
+  # the three categories (score, promise reliability, prior overdue)
+  # triggered. Requiring 2 of 3 for "watch" also guarantees every watch/high
+  # entry carries at least two plain-English reasons. Callers that only want
+  # to show the notable cases (main.py, sim/run_sim.py's audit logging, the
+  # report) filter risk_band != "low" themselves -- this function reports
+  # every band honestly, it does not decide what gets shown.
   bands:
     watch_from_signals: 2
     high_from_signals: 3

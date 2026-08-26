@@ -195,20 +195,53 @@ def test_a_bad_signal_buyers_not_yet_due_invoice_is_flagged() -> None:
     assert any("2 prior invoices went overdue" in reason for reason in warning["reasons"])
 
 
-def test_a_good_signal_buyers_not_yet_due_invoice_is_not_flagged() -> None:
+def test_a_good_signal_buyers_not_yet_due_invoice_gets_low_band_not_watch_or_high() -> None:
+    """risk_band is a real value here, not an absence -- a good-signal buyer's
+    invoice is still returned, just banded "low", never dropped or promoted."""
     target = {**invoice(invoice_id="INV-GOOD", acceptance="2026-07-19", agreed_days=45),
               "buyer_id": "BUY-02"}
     scores = {"BUY-02": {"score": 85, "confidence": "high"}}
     warnings = watchdog.early_warnings([target], [], scores, TODAY)
-    assert warnings == []
+    assert [w["invoice_id"] for w in warnings] == ["INV-GOOD"]
+    assert warnings[0]["risk_band"] == "low"
+    assert warnings[0]["signals_triggered"] == 0
 
 
-def test_one_bad_signal_alone_is_not_enough_to_flag() -> None:
-    """Consistent with score.py: a single data point is never evidence."""
+def test_one_bad_signal_alone_stays_low_band() -> None:
+    """Consistent with score.py: a single data point is never evidence, so
+    one triggered category is not enough to reach "watch"."""
     target = invoice(invoice_id="INV-TARGET", acceptance="2026-07-19", agreed_days=45)
     scores = {"BUY-01": {"score": 32, "confidence": "medium"}}
     warnings = watchdog.early_warnings([target], [], scores, TODAY)
-    assert warnings == []
+    assert [w["invoice_id"] for w in warnings] == ["INV-TARGET"]
+    assert warnings[0]["risk_band"] == "low"
+    assert warnings[0]["signals_triggered"] == 1
+
+
+def test_risk_band_covers_low_watch_and_high() -> None:
+    """The three band values are all real, reachable outcomes, not just two
+    labels plus a silent exclusion."""
+    low_target = {**invoice(invoice_id="INV-LOW", acceptance="2026-07-19", agreed_days=45),
+                  "buyer_id": "BUY-LOW"}
+    low = watchdog.early_warnings(
+        [low_target], [], {"BUY-LOW": {"score": 90, "confidence": "high"}}, TODAY)
+    assert [w["risk_band"] for w in low] == ["low"]
+
+    watch_target = {**invoice(invoice_id="INV-WATCH", acceptance="2026-07-19", agreed_days=45),
+                     "buyer_id": "BUY-WATCH"}
+    prior_a = {**invoice(invoice_id="INV-WATCH-P1", acceptance="2026-01-01"), "buyer_id": "BUY-WATCH"}
+    prior_b = {**invoice(invoice_id="INV-WATCH-P2", acceptance="2026-02-01"), "buyer_id": "BUY-WATCH"}
+    watch = watchdog.early_warnings(
+        [watch_target, prior_a, prior_b], [],
+        {"BUY-WATCH": {"score": 10, "confidence": "medium"}}, TODAY)
+    watch_entry = next(w for w in watch if w["invoice_id"] == "INV-WATCH")
+    assert watch_entry["risk_band"] == "watch"
+    assert watch_entry["signals_triggered"] == 2
+
+    invoices, promises, scores = _bad_signal_world()
+    high = watchdog.early_warnings(invoices, promises, scores, TODAY)
+    high_entry = next(w for w in high if w["invoice_id"] == "INV-TARGET")
+    assert high_entry["risk_band"] == "high"
 
 
 def test_window_days_is_read_from_config_not_hardcoded() -> None:
@@ -221,10 +254,25 @@ def test_window_days_is_read_from_config_not_hardcoded() -> None:
 
 
 def test_band_signal_thresholds_are_read_from_config_not_hardcoded() -> None:
-    invoices, promises, scores = _bad_signal_world()
+    """A two-triggered-signal case is "watch" by default; raising
+    watch_from_signals in config must visibly push it down to "low"."""
+    watch_target = {**invoice(invoice_id="INV-WATCH", acceptance="2026-07-19", agreed_days=45),
+                     "buyer_id": "BUY-WATCH"}
+    prior_a = {**invoice(invoice_id="INV-WATCH-P1", acceptance="2026-01-01"), "buyer_id": "BUY-WATCH"}
+    prior_b = {**invoice(invoice_id="INV-WATCH-P2", acceptance="2026-02-01"), "buyer_id": "BUY-WATCH"}
+    invoices = [watch_target, prior_a, prior_b]
+    scores = {"BUY-WATCH": {"score": 10, "confidence": "medium"}}
+
+    default_result = next(w for w in watchdog.early_warnings(invoices, [], scores, TODAY)
+                          if w["invoice_id"] == "INV-WATCH")
+    assert default_result["risk_band"] == "watch"
+
     stricter = copy.deepcopy(rules())
-    stricter["early_warning"]["bands"]["watch_from_signals"] = 4   # only 3 categories exist
-    assert watchdog.early_warnings(invoices, promises, scores, TODAY, config=stricter) == []
+    stricter["early_warning"]["bands"]["watch_from_signals"] = 3   # was 2
+    stricter_result = next(
+        w for w in watchdog.early_warnings(invoices, [], scores, TODAY, config=stricter)
+        if w["invoice_id"] == "INV-WATCH")
+    assert stricter_result["risk_band"] == "low"
 
 
 def test_early_warning_never_states_a_legal_fact_or_interest_figure() -> None:

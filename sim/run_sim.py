@@ -473,8 +473,15 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             grouped = store.invoices_by_buyer(invoices)
             scores = {s["buyer_id"]: s for s in score_engine.score_all(buyers, grouped, today)}
 
+            # early_warnings() reports a real band for every in-window invoice,
+            # low included -- only watch/high are notable enough to log, and
+            # the dedup set is only populated on those, so an invoice that
+            # starts "low" and later worsens into "watch"/"high" still gets
+            # logged the day it actually crosses that line.
             all_promises = [p for plist in promises_by_invoice.values() for p in plist]
-            for warning in watchdog.early_warnings(invoices, all_promises, scores, today):
+            notable_warnings = [w for w in watchdog.early_warnings(invoices, all_promises, scores, today)
+                               if w["risk_band"] != "low"]
+            for warning in notable_warnings:
                 if warning["invoice_id"] in warned:
                     continue
                 warned.add(warning["invoice_id"])

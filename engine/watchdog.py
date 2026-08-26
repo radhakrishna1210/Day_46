@@ -167,18 +167,25 @@ def early_warnings(
     *,
     config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Invoices approaching their due date whose already-known signals look bad.
+    """Every invoice approaching its due date, with a real risk band.
 
     Surfacing only -- never a message, never a legal fact. A RISK BAND, not a
     probability: there is no ground truth to validate a percentage against
-    when the simulator's personas are our own, so this outputs "watch"/"high"
-    plus the real numbers behind it, exactly like score.py's breakdown lines.
+    when the simulator's personas are our own. `risk_band` is a genuine
+    three-level value -- "low", "watch" or "high" -- computed for every
+    invoice in the window, not a binary flag that only exists implicitly by
+    an entry's absence. Callers that only want to show the notable cases
+    (main.py's printout, sim/run_sim.py's audit logging, the report) filter
+    the returned list for `risk_band != "low"` themselves; this function's
+    job is to report the band honestly for everything in the window, exactly
+    like score.py's breakdown reports every buyer's arithmetic whether or
+    not the score ends up looking good.
 
-    A single bad signal is never enough on its own -- score.py's own "two
-    invoices of history is not evidence" philosophy applies here too. Each of
-    the three categories below needs a genuine pattern, and at least
-    early_warning.bands.watch_from_signals of them must trigger before an
-    invoice is surfaced at all. That also guarantees every surfaced entry
+    A single bad signal is never enough to reach "watch" or "high" on its
+    own -- score.py's own "two invoices of history is not evidence"
+    philosophy applies here too. Each of the three categories below needs a
+    genuine pattern, and early_warning.bands.watch_from_signals of them must
+    trigger to leave "low", which also guarantees every "watch"/"high" entry
     carries at least two plain-English reasons, not one.
 
     Categories (config/rules.yaml early_warning):
@@ -199,9 +206,9 @@ def early_warnings(
         config: rules; defaults to config/rules.yaml.
 
     Returns:
-        Entries for invoices due within early_warning.window_days whose
-        signals triggered enough categories, worst first (more triggered
-        categories first, then largest money at risk). Each carries
+        One entry per invoice due within early_warning.window_days, worst
+        first (more triggered categories first, then largest money at risk).
+        Each carries `risk_band` (low/watch/high), `signals_triggered`, and
         `reasons`: plain sentences with real numbers.
     """
     config = config or rules()
@@ -250,8 +257,12 @@ def early_warnings(
             triggered += 1
             reasons.append(f"{prior_overdue} prior invoices went overdue")
 
-        if triggered < watch_from:
-            continue
+        if triggered >= high_from:
+            band = "high"
+        elif triggered >= watch_from:
+            band = "watch"
+        else:
+            band = "low"
 
         warnings.append({
             "invoice_id": invoice_id,
@@ -259,7 +270,7 @@ def early_warnings(
             "outstanding_paise": outstanding_paise(invoice),
             "days_until_due": due_in,
             "statutory_due_date": statutory_due_date(invoice).isoformat(),
-            "risk_band": "high" if triggered >= high_from else "watch",
+            "risk_band": band,
             "signals_triggered": triggered,
             "reasons": reasons,
         })
