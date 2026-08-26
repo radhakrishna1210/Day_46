@@ -279,6 +279,39 @@ def paid_days_map(invoices: list[dict[str, Any]]) -> dict[str, int]:
     }
 
 
+def edge_case_counts(
+    invoices: list[dict[str, Any]], day0: date,
+    promises_by_invoice: dict[str, list[dict[str, Any]]],
+) -> dict[str, int]:
+    """How many invoices in THIS run's world actually exercise the E1
+    (superseded promise, TC-014) / E2 (malformed invoice) fixes.
+
+    For the multi-seed table's credibility note (W4 advisor item 2): a
+    "6/6" win reads very differently as "despite these edge cases" than as
+    "these edge cases never came up". Malformed is counted at day0, not
+    whatever day the caller's own run ended on -- a clock-relative defect
+    (TC-050's future issue_date) can validly stop being invalid by the end
+    of a long run (see run_agent()'s own comment on checking validity at
+    last_day), but it still needed E2's validation to handle safely while
+    it WAS invalid, and this count is about whether that ever happened, not
+    the run's final verdict on it. The structural fields validate.py checks
+    (amount, dates, duplicates) never change after generation, so checking
+    against day0 with whatever invoices list the caller has now (mutated by
+    payments or not) gives the same answer checking at the very start would
+    have.
+
+    A "superseded promise" is simply an invoice with more than one promise
+    ever recorded against it -- exactly the TC-014 scenario: a buyer
+    renegotiating before their first promise fell due.
+    """
+    day0_invalid = validate.audit_invalid(invoices, day0, log=False)
+    return {
+        "malformed_invoices": len(day0_invalid),
+        "superseded_promise_invoices": sum(
+            1 for plist in promises_by_invoice.values() if len(plist) > 1),
+    }
+
+
 def avg_days_to_pay(invoices: list[dict[str, Any]]) -> float | None:
     """Mean days from issue to payment, over current invoices actually paid.
 
@@ -632,6 +665,8 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     validation_reasons = validate.audit_invalid(invoices, last_day, log=True)
     invalid_ids = frozenset(validation_reasons)
 
+    counted_edge_cases = edge_case_counts(invoices, day0, promises_by_invoice)
+
     verify_conservation(invoices, last_day, invalid_ids)
     # invoices_by_id was already built once, at the top of this function.
     reason_of = {
@@ -662,6 +697,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         # CLAUDE.md's W3 plan, point g. Sum(invoice_contacts) is what
         # messages_sent would have been before consolidation.
         "invoice_contacts": invoice_contacts,
+        "edge_case_counts": counted_edge_cases,
         "handoffs": len(handoffs), "stops": len(stops), "disputes": len(disputes),
         "handoff_reasons": handoff_reasons, "stop_reasons": stop_reasons,
         "avg_days_to_pay": avg_days_to_pay(invoices),
@@ -852,6 +888,7 @@ def multi_seed_summary(
     """
     def row(seed: int, baseline: dict[str, Any], agent: dict[str, Any]) -> dict[str, Any]:
         matched = matched_avg_days_to_pay(baseline, agent)
+        edge = agent["edge_case_counts"]
         return {
             "seed": seed,
             "baseline_recovered_paise": baseline["final"]["recovered_paise"],
@@ -861,6 +898,13 @@ def multi_seed_summary(
             "matched_baseline_days": matched["baseline"],
             "matched_agent_days": matched["agent"],
             "days_win": matched["n"] > 0 and matched["agent"] <= matched["baseline"],
+            # W4 advisor item 2: how many invoices in THIS seed's world
+            # actually exercise the E1 (superseded promise) / E2 (malformed
+            # invoice) fixes -- so a "6/6" win reads as "despite these edge
+            # cases", not "in the absence of them". See CLAUDE.md's W4 note
+            # for the seed-42/seed-555 investigation behind this column.
+            "malformed_invoices": edge["malformed_invoices"],
+            "superseded_promise_invoices": edge["superseded_promise_invoices"],
         }
 
     rows = [row(primary_seed, primary_baseline, primary_agent)]

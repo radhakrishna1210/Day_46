@@ -289,6 +289,103 @@ def test_a_transiently_future_dated_invoice_is_judged_normally_once_the_clock_pa
     assert "invoice date" not in row["reason"]          # not the stale validation reason
 
 
+def test_edge_case_counts_counts_a_malformed_invoice() -> None:
+    from datetime import date
+
+    good = {
+        "invoice_id": "INV-GOOD", "cohort": "current", "status": "open",
+        "amount_paise": 1000, "amount_paid_paise": 0, "partial_payments": [],
+        "acceptance_date": "2026-06-01", "written_agreement": False,
+        "agreed_days": None, "disputed": False,
+    }
+    bad = {**good, "invoice_id": "INV-BAD", "amount_paise": -500}
+    day0 = date(2026, 8, 25)
+
+    counts = run_sim.edge_case_counts([good, bad], day0, promises_by_invoice={})
+    assert counts["malformed_invoices"] == 1
+    assert counts["superseded_promise_invoices"] == 0
+
+
+def test_edge_case_counts_counts_malformed_at_day0_even_if_it_would_self_resolve_later() -> None:
+    """TC-050's own defect is clock-relative -- a future issue_date is no
+    longer invalid once the clock passes it (see the last_day-vs-day0
+    reasoning throughout this file). edge_case_counts() must still count it:
+    the question it answers is "did E2's validation ever need to act",
+    which is a day0 question, not "is this invoice still invalid now"."""
+    from datetime import date
+
+    future_invoice = {
+        "invoice_id": "INV-FUTURE", "cohort": "current", "status": "open",
+        "amount_paise": 1000, "amount_paid_paise": 0, "partial_payments": [],
+        "acceptance_date": "2026-09-01", "issue_date": "2026-09-01",
+        "written_agreement": False, "agreed_days": None, "disputed": False,
+    }
+    day0 = date(2026, 8, 25)          # the invoice is invalid (future) at day0...
+    later = date(2026, 12, 1)         # ...but ordinary by the time a run might end
+
+    counts = run_sim.edge_case_counts([future_invoice], day0, promises_by_invoice={})
+    assert counts["malformed_invoices"] == 1
+
+    # Sanity: the SAME invoice really is no longer flagged once checked at a
+    # later date -- confirming edge_case_counts() deliberately does NOT use
+    # that later-date check, which is what would make this count silently
+    # disappear for exactly the invoices most worth remembering exercised it.
+    from engine import validate
+    assert validate.audit_invalid([future_invoice], later, log=False) == {}
+
+
+def test_edge_case_counts_counts_a_superseded_promise() -> None:
+    from datetime import date
+
+    promises_by_invoice = {
+        "INV-ONE-PROMISE": [{"invoice_id": "INV-ONE-PROMISE", "promised_date": "2026-09-01"}],
+        "INV-RENEGOTIATED": [
+            {"invoice_id": "INV-RENEGOTIATED", "promised_date": "2026-09-01"},
+            {"invoice_id": "INV-RENEGOTIATED", "promised_date": "2026-09-10"},
+        ],
+        "INV-NO-PROMISE": [],
+    }
+    counts = run_sim.edge_case_counts([], date(2026, 8, 25), promises_by_invoice)
+    assert counts["malformed_invoices"] == 0
+    assert counts["superseded_promise_invoices"] == 1        # only INV-RENEGOTIATED
+
+
+def test_run_agent_returns_edge_case_counts_with_the_transient_fixture(monkeypatch) -> None:
+    """End to end: the TC-050 fixture from the test above this one is still
+    counted here even though (per that same test) it is judged as an
+    ordinary, valid invoice by the time the run ends."""
+    from datetime import date, timedelta
+
+    from data import store as data_store
+    from sim import personas as personas_module
+
+    original_invoices = data_store.load_invoices()
+    day0 = date.fromisoformat(data_store.load_meta()["simulation_start"])
+    future = (day0 + timedelta(days=5)).isoformat()
+    buyer_id = next(iter(personas_module.load_hidden_personas()))
+    fixture = {
+        "invoice_id": "INV-TEST-EDGECOUNT", "buyer_id": buyer_id,
+        "cohort": "current", "description": "test", "po_number": None,
+        "amount_paise": 5_000_000, "currency": "INR", "issue_date": future,
+        "acceptance_date": future, "written_agreement": False, "agreed_days": None,
+        "agreed_due_date": None, "status": "open", "partial_payments": [],
+        "amount_paid_paise": 0, "paid_date": None, "disputed": False,
+        "dispute_note": None, "promise_broken": False,
+    }
+    monkeypatch.setattr(data_store, "load_invoices", lambda: original_invoices + [fixture])
+    report = run_sim.run_agent(seed=42, days=10, verbose=False)
+    assert report["edge_case_counts"]["malformed_invoices"] >= 1
+
+
+def test_multi_seed_rows_carry_edge_case_counts() -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    summary = run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(), days=20)
+    row = summary["rows"][0]
+    assert row["malformed_invoices"] == agent["edge_case_counts"]["malformed_invoices"]
+    assert row["superseded_promise_invoices"] == agent["edge_case_counts"]["superseded_promise_invoices"]
+
+
 def test_verify_conservation_skips_invalid_invoices_instead_of_crashing() -> None:
     from datetime import date
 

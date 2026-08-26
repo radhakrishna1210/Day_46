@@ -241,6 +241,82 @@ def test_build_report_renders_a_real_buyer_panel(results_payload, tmp_path) -> N
     assert (first["name"] or first["buyer_id"]) in html
 
 
+# --------------------------------------------------------------------------
+# W4 advisor item 2: per-seed edge-case counts in the multi-seed table
+# --------------------------------------------------------------------------
+
+def _multi_seed_payload(counts_by_seed):
+    """A minimal results.json shape with just enough multi_seed structure
+    for _multi_seed_rows() / _edge_case_note() to run against."""
+    rows = [
+        {"seed": seed, "baseline_recovered_paise": 0, "agent_recovered_paise": 0,
+         "money_win": True, "matched_n": 0, "matched_baseline_days": None,
+         "matched_agent_days": None, "days_win": False, **counts}
+        for seed, counts in counts_by_seed.items()
+    ]
+    return {
+        "multi_seed": {"rows": rows, "money_win_rate": "0/0", "days_win_rate": "n/a",
+                       "days_excluded": 0},
+    }
+
+
+def test_multi_seed_rows_carries_edge_case_counts_through_to_the_view() -> None:
+    payload = _multi_seed_payload({
+        42: {"malformed_invoices": 0, "superseded_promise_invoices": 0},
+        555: {"malformed_invoices": 1, "superseded_promise_invoices": 5},
+    })
+    rows = build_report._multi_seed_rows(payload)["rows"]
+    assert rows[0]["malformed_invoices"] == 0
+    assert rows[0]["superseded_promise_invoices"] == 0
+    assert rows[1]["malformed_invoices"] == 1
+    assert rows[1]["superseded_promise_invoices"] == 5
+
+
+def test_multi_seed_rows_defaults_missing_edge_case_counts_to_zero() -> None:
+    """A results.json written before W4's field existed must not crash the
+    report -- it just shows zero, which is honest for "we didn't record it"
+    even if not literally the same as "we checked and found none"."""
+    payload = _multi_seed_payload({42: {}})
+    rows = build_report._multi_seed_rows(payload)["rows"]
+    assert rows[0]["malformed_invoices"] == 0
+    assert rows[0]["superseded_promise_invoices"] == 0
+
+
+def test_edge_case_note_summarises_across_seeds() -> None:
+    payload = _multi_seed_payload({
+        42: {"malformed_invoices": 0, "superseded_promise_invoices": 0},
+        7: {"malformed_invoices": 0, "superseded_promise_invoices": 6},
+        555: {"malformed_invoices": 1, "superseded_promise_invoices": 5},
+    })
+    note = build_report._edge_case_note(payload)
+    assert "1 of 3 seeds" in note          # malformed
+    assert "2 of 3" in note                # superseded
+    assert "docs/edge_cases.md" in note    # points at the actual regression tests
+
+
+def test_edge_case_note_is_none_without_a_multi_seed_run() -> None:
+    assert build_report._edge_case_note({}) is None
+
+
+def test_view_carries_the_edge_case_note_for_the_template(results_payload) -> None:
+    assert "edge_case_note" in build_report._view(results_payload)
+
+
+def test_build_report_renders_the_edge_case_columns_and_note(results_payload, tmp_path) -> None:
+    """results_payload itself carries no multi_seed section (that fixture is
+    the plain single-seed shape) -- build one for real, the same way
+    sim/run_sim.py's own CLI does, so this exercises the actual code path
+    rather than a hand-built fixture."""
+    summary = run_sim.multi_seed_summary(
+        42, results_payload["baseline"], results_payload["agent"], extra_seeds=(), days=DAYS)
+    payload = {**results_payload, "multi_seed": summary}
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Malformed invoices" in html
+    assert "Superseded promises" in html
+
+
 def test_load_results_reports_a_clear_error_when_missing(tmp_path) -> None:
     with pytest.raises(build_report.ResultsMissing):
         build_report.load_results(tmp_path / "nope.json")

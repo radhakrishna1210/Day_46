@@ -144,6 +144,7 @@
       <tr>
         <th>Seed</th><th class="num">₹ baseline</th><th class="num">₹ agent</th><th>₹ win</th>
         <th class="num">Days baseline</th><th class="num">Days agent</th><th>Days win</th>
+        <th class="num">Malformed invoices</th><th class="num">Superseded promises</th>
       </tr>
     </thead>
     <tbody>
@@ -160,6 +161,8 @@
         {% else %}
         <td class="num empty">n/a</td><td class="num empty">n/a</td><td class="empty">no data</td>
         {% endif %}
+        <td class="num">{{ row.malformed_invoices }}</td>
+        <td class="num">{{ row.superseded_promise_invoices }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -171,6 +174,9 @@
     ({{ multi_seed.days_excluded }} seed(s) excluded -- no invoice was recovered by both runs
     at this window length){% endif %}.
   </p>
+  {% if edge_case_note %}
+  <p class="win-rate">{{ edge_case_note }}</p>
+  {% endif %}
   {% else %}
   <p class="empty">
     Multi-seed comparison skipped for this run (--extra-seeds ""). Seed {{ seed }} alone is

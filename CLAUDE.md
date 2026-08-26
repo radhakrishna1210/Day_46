@@ -112,21 +112,38 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   zero effect on 42 rather than assuming it: checked all 6 seeds directly --
   42 is the ONE seed of six with neither a malformed invoice (E2) nor a
   superseded promise (E1/TC-014) anywhere in its data. The other 5 DO
-  exercise both (seed 555: 1 malformed + 5 superseded) -- but re-running
-  seed 555's PRE-E1 code in a worktree showed identical recovered/
-  outstanding/handoffs to HEAD too: its malformed invoice is TC-050's
-  clock-relative case (a future issue_date that self-resolves before
-  last_day, so pre/post-E2 code treat it the same by the time totals are
-  computed), and TC-014's fix -- real, proven by its own regression test --
-  didn't move this seed's handoff count because brain.py's law-ceiling clamp
-  (`chosen = min(desired, ceiling)`) already capped those cases at the same
-  rung regardless of the inflated broken-promise jump the bug caused. E1/E2
-  are correctness fixes verified by their OWN dedicated tests, not by this
-  experiment's aggregate numbers -- this seeded world doesn't happen to
-  contain a case where they're the only thing standing between a wrong
-  number and a right one. Money conservation confirmed on all 12 runs (6
-  seeds x baseline+agent). tests/test_sim_isolation.py: 24/24 passed,
-  automatically covers engine/consolidate.py too (glob-discovered).
+  exercise both (seed 555: 1 malformed + 5 superseded) -- re-running seed
+  555's PRE-E1 code in a worktree showed identical recovered/outstanding/
+  handoffs to HEAD too, and BOTH mechanisms are now verified with real
+  instrumented data, not inferred: (1) the malformed invoice (TC-050, future
+  issue_date) is only structurally invalid on day0-day1, and its own
+  statutory due date is 20 days out -- watchdog.overdue_invoices() confirmed
+  NEVER queues it on either invalid day, so brain.decide() never sees it
+  during the only window pre/post-E2 code could disagree about it; the two
+  code paths are not "coincidentally" the same, they structurally cannot
+  diverge for this invoice. (2) TC-014: instrumented brain.broken_promises()
+  to compare old-buggy vs new-fixed counts on every real call across the
+  full run -- 4 of the 5 superseded-promise invoices never differ at all
+  (the bug's precondition never arose); the 5th (INV-2026-0141) differs by
+  1 on 107 of 108 days, but on ALL 107 of those days chosen_rung already
+  equalled available_rung (the law ceiling) -- min(desired, ceiling) was
+  already clamping before the bug's extra +1 could matter, 0 of 107 days
+  had room for it to bite. E1/E2 are correctness fixes verified by their OWN
+  dedicated tests, not by this experiment's aggregate numbers. Money
+  conservation confirmed on all 12 runs (6 seeds x baseline+agent).
+  tests/test_sim_isolation.py: 24/24 passed, automatically covers
+  engine/consolidate.py too (glob-discovered). ADVISOR ITEMS 1+2 built (item
+  3, the ablation arm, stays parked in README Future Work): sim/run_sim.py
+  gained edge_case_counts(invoices, day0, promises_by_invoice) -- malformed
+  counted at day0 (not last_day: a clock-relative defect can self-resolve by
+  last_day and correctly stop being "invalid" there, but this count is about
+  whether E2 ever needed to act, not the final verdict), superseded
+  promises = invoices with >1 promise ever recorded. Threaded through
+  multi_seed_summary()'s per-seed rows and report/build_report.py's
+  _edge_case_note() -- the multi-seed table now shows two extra columns and
+  one summary sentence ("N of 6 seeds contain a malformed invoice...") so a
+  judge sees the 6/6 win happened DESPITE these edge cases, not in their
+  absence.
 - W3 done: engine/consolidate.py (pure: groups a day's already-decided SEND
   Actions by buyer into rung TIERS -- courtesy=rung<=1, escalated=rung>=2,
   never mixed, so one buyer may get up to two envelopes/day, never a single-
@@ -169,4 +186,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
-- 749 tests passing (pytest -q).
+- 760 tests passing (pytest -q).
