@@ -91,18 +91,39 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] E4 - TC-141 end-to-end scenario fixture
 - [x] W1 - Early warning (pre-overdue risk surfacing)
 - [x] W2 - Buyer-level panel + promise reliability
-- [ ] W3 - Buyer-level message consolidation
+- [x] W3 - Buyer-level message consolidation
 - [ ] W4 - Re-run experiment, regenerate report with new numbers
 - [ ] 10 - README + ARCHITECTURE sync + hygiene
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- W1 done: engine.watchdog.early_warnings() computes a real low/watch/high
-  risk_band for every invoice in the window; low is filtered out purely at
-  the CALLERS (main.py, sim/run_sim.py) before audit.record(), never inside
-  early_warnings() itself. tests/test_early_warning_wiring.py proves "low"
-  structurally can't leak into the audit trail or report, independent of
-  seed-42's own data.
+- W3 done: engine/consolidate.py (pure: groups a day's already-decided SEND
+  Actions by buyer into rung TIERS -- courtesy=rung<=1, escalated=rung>=2,
+  never mixed, so one buyer may get up to two envelopes/day, never a single-
+  envelope guarantee -- deliberate, see the section-aware-guardrail
+  alternative rejected in the W3 plan). engine.brain.decide(), engine.rungs,
+  engine.law and sim.run_sim.run_baseline() are ALL untouched -- consolidation
+  is purely a post-decide grouping + a new writer path (writer.
+  write_consolidated_message/passes_guardrail_multi/fallback_message_multi)
+  + a new channels path (channels.send_consolidated: one real send, N audit
+  rows, one per invoice, linked by detail.bundle_invoice_ids -- keeps
+  entries_for()/_already_sent() working per-invoice unmodified). Wired into
+  both sim/run_sim.py's run_agent() day loop and main.py's stage_writer/
+  stage_post_office; every buyer-facing send, even a lone invoice, now goes
+  through the same "bundle of one" path -- no separate single-invoice code
+  path left to drift. messages_sent now counts outbound ENVELOPES;
+  run_agent()'s new invoice_contacts field is the OLD per-invoice-contact
+  semantics, also surfaced in report/build_report.py's headline table.
+  Digest-aware subject line (total ₹ in the subject) explicitly DEFERRED to
+  W4 -- not built. Seed-42 verified empirically, invoice-for-invoice: agent
+  invoice_contacts (141) == pre-change messages_sent (141) exactly, same 93
+  invoices, zero per-invoice differences; agent final.recovered_paise,
+  outstanding_paise, handoffs, stops, disputes, exceptions and paid_invoices
+  all identical before/after; only agent messages_sent dropped 141->73.
+  run_baseline()'s own output is a structurally empty diff before/after, and
+  tests/test_run_sim.py::test_run_baseline_never_touches_consolidation_
+  machinery proves it by making every consolidation entry point explode if
+  baseline ever reached one.
 - W2 done: engine/buyer_panel.py -- one buyer-level rollup, called ONCE at
   the end of sim/run_sim.py's run_agent() (not baseline, not inside the day
   loop), reusing score.py's score/confidence/trend unmodified. Confirmed
@@ -128,4 +149,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
-- 706 tests passing (pytest -q).
+- 748 tests passing (pytest -q).

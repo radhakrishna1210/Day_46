@@ -268,6 +268,25 @@ writer:
   # before we fall back to the plain factual skeleton.
   regeneration_attempts: 1
 
+# --- Buyer-level consolidation (engine/consolidate.py) ---------------------
+# One buyer with several overdue invoices should receive one conversation,
+# not one message per invoice (CLAUDE.md W3, docs/winning_layer.md
+# Enhancement 14). Consolidation only changes how many outbound envelopes
+# carry a day's decisions -- engine/brain.py's per-invoice decisions, stop
+# rules and rung selection are computed exactly as if it did not exist.
+consolidation:
+  # A rung-1 (courtesy, no legal content permitted) invoice and a rung 2-3
+  # (legal/tax content) invoice for the same buyer are never bundled into the
+  # same envelope -- the rung-1 guardrail bans legal wording outright, and
+  # mixing tiers would either falsely trip it or require a section-aware
+  # guardrail. A buyer may therefore receive up to two envelopes on a given
+  # day (one per tier), never more.
+  #
+  # Above this many invoices in one tier's bundle, split into multiple
+  # envelopes rather than risk truncating the draft against
+  # llm.max_tokens.draft_message, which is sized for one invoice.
+  max_invoices_per_message: 6
+
 # --- Channels (engine/channels.py) ----------------------------------------
 channels:
   email: real                   # actually sent, only to TEST_INBOX_EMAIL

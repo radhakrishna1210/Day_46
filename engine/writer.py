@@ -29,10 +29,11 @@ from datetime import date
 from functools import lru_cache
 from typing import Any
 
-from engine import audit
+from engine import audit, consolidate
 from engine.config import legal, messages, rules, supplier
 from engine.llm import LLMError, llm
 from engine.money import format_inr
+from engine.rungs import RUNG_ONE_RULES, UNIVERSAL_RULES
 
 
 @lru_cache(maxsize=1)
@@ -451,4 +452,353 @@ def write_message(
               "source": "rule", "rejected_drafts": rejected,
               "fallback_failures": fallback_failures}
     _log_outcome(result, skeleton, invoice, when, log)
+    return result
+
+
+# --------------------------------------------------------------------------
+# consolidated (buyer-level) drafting -- engine/consolidate.py's bundles
+# --------------------------------------------------------------------------
+#
+# A bundle is one envelope, one section per invoice, each section built from
+# that invoice's OWN skeleton -- never one rung applied to every invoice. The
+# tier partition in engine/consolidate.py guarantees a bundle is homogeneous
+# (every invoice rung<=1, or every invoice rung>=2), which is what lets the
+# rung-1 "no legal content" check below stay a simple whole-message check
+# instead of needing to parse the draft into sections.
+
+def _bundle_wrapper_values(buyer: dict[str, Any], sections_text: str, count: int) -> dict[str, str]:
+    """Everything the shared greeting/subject/closing may interpolate."""
+    profile = supplier()["supplier"]
+    return {
+        "invoice_count": str(count),
+        "contact_name": str(buyer.get("contact_name") or "Sir/Madam"),
+        "buyer_name": str(buyer.get("name") or ""),
+        "supplier_name": profile["legal_name"],
+        "supplier_contact": profile["contact_name"],
+        "sections": sections_text,
+    }
+
+
+def required_numbers_multi(entries: list[tuple[dict[str, Any], dict[str, str]]]) -> list[str]:
+    """Every figure EVERY invoice in the bundle requires, union'd, order preserved."""
+    seen: list[str] = []
+    for skeleton, values in entries:
+        for figure in required_numbers(skeleton, values):
+            if figure not in seen:
+                seen.append(figure)
+    return seen
+
+
+def allowed_amounts_multi(entries: list[tuple[dict[str, Any], dict[str, str]]]) -> set[str]:
+    """Every currency figure any invoice in the bundle is permitted to state."""
+    allowed: set[str] = set()
+    for _skeleton, values in entries:
+        allowed |= allowed_amounts(values)
+    return allowed
+
+
+def passes_guardrail_multi(
+    message: dict[str, Any], entries: list[tuple[dict[str, Any], dict[str, str]]],
+) -> tuple[bool, list[str]]:
+    """The guardrail for a consolidated draft covering several invoices.
+
+    Generalizes passes_guardrail(): every required figure from every invoice
+    must appear somewhere in the whole text, and every currency figure found
+    must belong to the union of what any invoice in the bundle is permitted
+    to state. This does not verify that a figure sits in the RIGHT invoice's
+    section -- passes_guardrail() never verified per-section placement either
+    (it only checks presence and set-membership), so this is not a new
+    weakening, just the same check generalized to more than one invoice.
+    """
+    failures: list[str] = []
+    subject = str(message.get("subject") or "")
+    body = str(message.get("body") or "")
+    whole = f"{subject}\n{body}"
+    lowered = whole.lower()
+
+    if not subject.strip():
+        failures.append("the subject is empty")
+    if len(body.strip()) < 40:
+        failures.append("the body is empty or too short to be a message")
+
+    for figure in required_numbers_multi(entries):
+        if figure not in whole:
+            failures.append(f"required figure {figure!r} is missing")
+
+    permitted = allowed_amounts_multi(entries)
+    for found in CURRENCY_PATTERN.findall(whole):
+        if found not in permitted:
+            failures.append(f"amount {found!r} does not come from the law engine")
+
+    for word in messages()["threat_words"]:
+        if re.search(rf"\b{re.escape(word.lower())}\b", lowered):
+            failures.append(f"threatening language: {word!r}")
+
+    # engine.consolidate.bundle_sends() guarantees every entry shares one
+    # tier (all rung<=1, or all rung>=2) -- checked again here, defensively,
+    # rather than trusted silently, the same pattern as engine.rungs'
+    # RungNotAvailable acting as a second barrier alongside the law ceiling.
+    all_courtesy = all(skeleton["rung"] <= 1 for skeleton, _values in entries)
+    mixed_tier = len({skeleton["rung"] <= 1 for skeleton, _values in entries}) > 1
+    if mixed_tier:
+        failures.append(
+            "a bundle mixed a rung-1 courtesy invoice with a rung>=2 escalated "
+            "invoice -- this should be structurally impossible"
+        )
+    elif all_courtesy:
+        citation = citation_pattern().search(whole)
+        if citation:
+            failures.append(f"a courtesy bundle cites {citation.group(0)!r}")
+        for word in messages()["rung_one_banned_words"]:
+            if re.search(rf"\b{re.escape(word)}\b", lowered):
+                failures.append(f"a courtesy bundle mentions {word!r}")
+
+    if re.search(r"\{[a-z_0-9]+\}", whole):
+        failures.append("an unfilled placeholder survived")
+    if LEAKED_NONE_PATTERN.search(whole):
+        failures.append("a stray None reached the page")
+
+    return not failures, failures
+
+
+def fallback_message_multi(
+    bundle_values: dict[str, str], language: str, tier: str,
+) -> dict[str, str]:
+    """The plain factual assembly for a rejected consolidated draft.
+
+    Exactly the same guarantee as fallback_message(): it assembles nothing
+    but each invoice's own already-approved section text (bundle_values
+    ["sections"], built in write_consolidated_message() from
+    consolidated_section templates), so it cannot fail a check the drafted
+    version failed.
+    """
+    shape = "courtesy" if tier == consolidate.COURTESY else "factual"
+    template = messages()["fallback_consolidated"][language][shape]
+    return {"subject": _fill(template["subject"], bundle_values),
+            "body": _fill(template["body"], bundle_values)}
+
+
+def build_prompt_multi(
+    bundle_actions: list[Any],
+    entries: list[tuple[dict[str, Any], dict[str, str]]],
+    buyer: dict[str, Any],
+    score: dict[str, Any] | None,
+    language: str,
+    tier: str,
+    promises_by_invoice: dict[str, list[dict[str, Any]]] | None,
+) -> str:
+    """The prompt for a consolidated draft. One delimited block per invoice,
+    each carrying only that invoice's own facts and numbers -- mirrors
+    build_prompt(), repeated per invoice, with an explicit instruction never
+    to mix a fact from one invoice's section into another's."""
+    profile = supplier()["supplier"]
+    lines = [
+        f"You are writing ONE payment message for {profile['legal_name']}, a "
+        f"small Indian manufacturer, to {buyer.get('contact_name') or 'Sir/Madam'} "
+        f"at {buyer.get('name') or ''}, covering {len(bundle_actions)} separate "
+        f"invoices in a single envelope.",
+        "",
+        ("TIER: courtesy -- no legal content of any kind is permitted anywhere "
+         "in this message, for any invoice"
+         if tier == consolidate.COURTESY else
+         "TIER: escalated -- each invoice's own facts below may be stated, but "
+         "ONLY for that invoice"),
+        f"TONE: {choose_tone(buyer, score)}",
+        f"LANGUAGE: {' '.join(messages()['language_instruction'][language].split())}",
+        "",
+        "Write one clearly separated section per invoice below, in the order "
+        "given. Never use a number or fact from one invoice's section in "
+        "another invoice's section.",
+    ]
+    for i, ((skeleton, values), action) in enumerate(zip(entries, bundle_actions), start=1):
+        lines += ["", f"--- INVOICE {i} of {len(bundle_actions)}: {values['invoice_id']} ---"]
+        if skeleton["facts"]:
+            lines.append("THE ONLY FACTS YOU MAY STATE FOR THIS INVOICE:")
+            lines += [f"  - {fact}" for fact in skeleton["facts"]]
+        else:
+            lines.append("  (no legal content -- this invoice is a courtesy reminder only)")
+        lines.append("THE ONLY NUMBERS YOU MAY USE FOR THIS INVOICE, copied exactly:")
+        for label, key in (("invoice", "invoice_id"), ("goods", "goods"),
+                           ("amount outstanding", "outstanding"),
+                           ("days overdue", "days_overdue"),
+                           ("payment was due", "statutory_due_date"),
+                           ("interest to date", "interest"),
+                           ("tax cost to them", "tax_exposure")):
+            if values.get(key):
+                lines.append(f"  {label:<20}{values[key]}")
+        plist = (promises_by_invoice or {}).get(action.invoice_id) or []
+        if plist:
+            lines.append("PROMISE HISTORY FOR THIS INVOICE:")
+            for promise in plist:
+                lines.append(f"  Committed to paying by {promise.get('promised_date')} "
+                             f"({promise.get('status')}).")
+
+    forbidden = list(UNIVERSAL_RULES)
+    if tier == consolidate.COURTESY:
+        forbidden.extend(RUNG_ONE_RULES)
+    lines += ["", "YOU MUST NOT"]
+    lines += [f"  - {rule}" for rule in forbidden]
+    lines += ["", 'Reply with a JSON object: {"subject": "...", "body": "..."}']
+    return "\n".join(lines)
+
+
+def _log_outcome_multi(
+    result: dict[str, Any], entries: list[tuple[dict[str, Any], dict[str, str]]],
+    bundle_actions: list[Any], when: date, log: bool,
+) -> None:
+    """One audit entry PER INVOICE in the bundle, each carrying the shared
+    bundle content and a bundle_invoice_ids list linking it to its
+    envelope-mates. This is deliberate, not an oversight: audit.entries_for()
+    and channels._already_sent() both index strictly by invoice_id, so
+    logging once per invoice (instead of inventing a new buyer-level entry
+    shape) keeps every existing per-invoice reader working unmodified while
+    still recording, for each invoice, that it was sent as part of a bundle
+    and with whom -- see CLAUDE.md's W3 plan, point g."""
+    if not log:
+        return
+
+    fell_back = result["fallback_used"]
+    invoice_ids = result["invoice_ids"]
+    for action, (skeleton, _values) in zip(bundle_actions, entries):
+        detail: dict[str, Any] = {
+            "rung": skeleton["rung"],
+            "language": result["language"],
+            "subject": result["subject"],
+            "body": result["body"],
+            "guardrail": result["guardrail"],
+            "attempts": result["attempts"],
+            "fallback_used": fell_back,
+            "bundle_tier": result["tier"],
+            "bundle_invoice_ids": invoice_ids,
+        }
+        if result["rejected_drafts"]:
+            detail["rejected_drafts"] = result["rejected_drafts"]
+        if fell_back:
+            detail["fallback_failures"] = result.get("fallback_failures", [])
+            refused = "; ".join(
+                failure for draft in result["rejected_drafts"] for failure in draft["failures"]
+            )
+            reason = (f"the drafted consolidated message ({len(invoice_ids)} invoices: "
+                      f"{', '.join(invoice_ids)}) was refused after {result['attempts']} "
+                      f"attempts and the plain skeleton was sent instead: {refused}")
+        else:
+            reason = (f"rung {skeleton['rung']} message drafted in {result['language']} as "
+                      f"part of a {len(invoice_ids)}-invoice consolidated message "
+                      f"({', '.join(invoice_ids)}), and passed the guardrail on attempt "
+                      f"{result['attempts']}")
+
+        audit.record(
+            invoice_id=action.invoice_id,
+            action="writer_fallback" if fell_back else "message_drafted",
+            reason=reason, source=result["source"], today=when,
+            buyer_id=action.buyer_id, actor="writer", detail=detail,
+        )
+
+
+def write_consolidated_message(
+    bundle_actions: list[Any],
+    *,
+    invoices_by_id: dict[str, dict[str, Any]],
+    buyer: dict[str, Any],
+    score: dict[str, Any] | None = None,
+    promises_by_invoice: dict[str, list[dict[str, Any]]] | None = None,
+    today: date | None = None,
+    log: bool = True,
+) -> dict[str, Any]:
+    """Draft ONE message covering every invoice in one engine.consolidate bundle.
+
+    Args:
+        bundle_actions: the "actions" list from one engine.consolidate.
+            bundle_sends() bundle -- every one a SEND with a buyer-facing
+            skeleton, for the same buyer, and the same rung tier.
+        invoices_by_id: invoice_id -> invoice record, for names and goods only
+            -- every figure still comes from each invoice's own skeleton.
+        buyer, score: as write_message().
+        promises_by_invoice: invoice_id -> promise history, quoted per
+            invoice in the prompt.
+        today: simulation clock, for the audit entries.
+        log: write to the audit trail, once per invoice -- see _log_outcome_multi.
+
+    Returns:
+        subject, body, language, tier, invoice_ids, plus guardrail, attempts,
+        fallback_used and source, exactly as write_message() but for the
+        whole bundle.
+
+    Raises:
+        ValueError: if the bundle is empty, spans more than one buyer, or
+            spans more than one rung tier -- engine.consolidate.bundle_sends()
+            already guarantees none of these happen; this is the second,
+            independent barrier, not the only one.
+        NotSendable: if any invoice's own skeleton refuses to send.
+    """
+    if not bundle_actions:
+        raise ValueError("write_consolidated_message called with an empty bundle")
+    buyer_ids = {action.buyer_id for action in bundle_actions}
+    if len(buyer_ids) != 1:
+        raise ValueError(f"a bundle must cover exactly one buyer, got {sorted(buyer_ids)}")
+    tiers = {consolidate.COURTESY if action.rung <= 1 else consolidate.ESCALATED
+             for action in bundle_actions}
+    if len(tiers) != 1:
+        raise ValueError(f"a bundle must be a single rung tier, got {sorted(tiers)}")
+    tier = tiers.pop()
+    for action in bundle_actions:
+        if not action.skeleton or not action.skeleton.get("sends_to_buyer"):
+            raise NotSendable(
+                f"invoice {action.invoice_id} in this bundle sends nothing to the buyer"
+            )
+
+    language = choose_language(buyer)
+    entries: list[tuple[dict[str, Any], dict[str, str]]] = []
+    section_texts: list[str] = []
+    for action in bundle_actions:
+        skeleton = action.skeleton
+        values = _values(skeleton, invoices_by_id[action.invoice_id], buyer)
+        entries.append((skeleton, values))
+        section_template = messages()["consolidated_section"][language][
+            "courtesy" if tier == consolidate.COURTESY else "factual"
+        ]
+        section_texts.append(_fill(section_template, values))
+
+    bundle_values = _bundle_wrapper_values(buyer, "\n\n".join(section_texts), len(bundle_actions))
+    prompt = build_prompt_multi(bundle_actions, entries, buyer, score, language, tier,
+                                promises_by_invoice)
+    variant = f"consolidated_{tier}_{language}"
+    attempts_allowed = 1 + int(rules().get("writer", {}).get("regeneration_attempts", 1))
+
+    when = today or date.today()
+    failures: list[str] = []
+    rejected: list[dict[str, Any]] = []
+
+    for attempt in range(1, attempts_allowed + 1):
+        try:
+            raw = llm(prompt if attempt == 1 else f"{prompt}\n\nYour previous draft was "
+                      f"rejected: {'; '.join(failures)}. Fix it.",
+                      purpose="draft_message", variant=variant)
+        except LLMError as exc:
+            failures = [f"the model produced nothing usable: {exc}"]
+            rejected.append({"attempt": attempt, "subject": "", "body": "",
+                             "failures": failures})
+            continue
+        message = _parse(raw)
+        message = {"subject": _fill(message["subject"], bundle_values),
+                   "body": _fill(message["body"], bundle_values)}
+        ok, failures = passes_guardrail_multi(message, entries)
+        if ok:
+            result = {**message, "language": language, "guardrail": "passed",
+                      "attempts": attempt, "fallback_used": False, "source": "llm",
+                      "rejected_drafts": rejected, "tier": tier,
+                      "invoice_ids": [action.invoice_id for action in bundle_actions]}
+            _log_outcome_multi(result, entries, bundle_actions, when, log)
+            return result
+        rejected.append({"attempt": attempt, "subject": message["subject"],
+                         "body": message["body"], "failures": failures})
+
+    message = fallback_message_multi(bundle_values, language, tier)
+    ok, fallback_failures = passes_guardrail_multi(message, entries)
+    result = {**message, "language": language,
+              "guardrail": "failed" if not ok else "passed (fallback)",
+              "attempts": attempts_allowed, "fallback_used": True, "source": "rule",
+              "rejected_drafts": rejected, "fallback_failures": fallback_failures,
+              "tier": tier, "invoice_ids": [action.invoice_id for action in bundle_actions]}
+    _log_outcome_multi(result, entries, bundle_actions, when, log)
     return result

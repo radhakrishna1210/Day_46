@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from engine import brain, llm
+from engine import audit, brain, llm
 from sim import run_sim
 
 #: Long enough for promises to mature (the replies.yaml date hints resolve
@@ -80,6 +80,11 @@ def agent_report():
     finally:
         brain.decide = original_decide
     report["rungs_seen_by_invoice"] = seen
+    # A frozen snapshot, taken immediately -- other tests in this module call
+    # run_agent()/run_baseline() directly and clear/rewrite the real on-disk
+    # audit log, so anything reading audit.entries() later would otherwise
+    # see whichever run happened to run last, not this one.
+    report["audit_snapshot"] = list(audit.entries())
     return report
 
 
@@ -294,3 +299,123 @@ def test_verify_conservation_skips_invalid_invoices_instead_of_crashing() -> Non
     # Would fail the "0 <= paid <= amount" assertion for a negative amount
     # if not excluded -- this is the TC-054 case reaching this function.
     run_sim.verify_conservation([bad], date(2026, 8, 25), frozenset({"INV-BAD"}))
+
+
+# ============================================================================
+# W3: buyer-level consolidation, wired into the day loop
+# ============================================================================
+
+def test_a_buyer_with_several_invoices_gets_one_bundled_message(agent_report) -> None:
+    """Direct proof of the W3 Definition of Done: somewhere in a real seed-42
+    run, one buyer's overdue invoices were covered by a single message."""
+    bundled = [
+        e for e in agent_report["audit_snapshot"]
+        if e["actor"] == "writer" and len(e["detail"].get("bundle_invoice_ids", [])) > 1
+    ]
+    assert bundled, "no consolidated (multi-invoice) message was ever sent in this run"
+
+
+def test_the_audit_trail_shows_the_decision_per_invoice_and_the_consolidated_send(
+    agent_report,
+) -> None:
+    """The other half of the DoD: for a bundled message, every invoice it
+    covers still has its OWN brain decision, writer draft and channel
+    delivery in the audit trail -- consolidation changes the envelope count,
+    never what gets recorded about each invoice."""
+    entries = agent_report["audit_snapshot"]
+    writer_entry = next(
+        e for e in entries
+        if e["actor"] == "writer" and len(e["detail"].get("bundle_invoice_ids", [])) > 1
+    )
+    bundle_ids = writer_entry["detail"]["bundle_invoice_ids"]
+    for inv_id in bundle_ids:
+        own = [e for e in entries if e["invoice_id"] == inv_id]
+        assert any(e["actor"] == "brain" and e["action"] == "send" for e in own), (
+            f"{inv_id} has no per-invoice brain decision in the audit trail")
+        assert any(e["actor"] == "writer" for e in own), (
+            f"{inv_id} has no writer entry in the audit trail")
+        assert any(e["actor"] == "channels" for e in own), (
+            f"{inv_id} has no channels entry in the audit trail")
+
+
+def test_invoice_contacts_matches_the_pre_consolidation_messages_sent_semantics(
+    agent_report,
+) -> None:
+    """invoice_contacts is what messages_sent counted before consolidation --
+    every invoice-day that was part of a send, bundled or not. messages_sent
+    now counts envelopes, so it must be <= invoice_contacts, and strictly <
+    once real bundling has happened (proven above)."""
+    assert agent_report["invoice_contacts"] >= agent_report["messages_sent"]
+    assert agent_report["invoice_contacts"] > agent_report["messages_sent"]
+
+
+def _dispute_onset(entries: list[dict]) -> dict[str, str]:
+    """invoice_id -> the timestamp its FIRST dispute handoff was recorded.
+
+    A dispute is the buyer's REACTION to a message that was itself sent
+    earlier the same simulated day (persona.react() -> apply_reply() ->
+    brain sees dispute_hold on its NEXT visit) -- so an invoice can
+    legitimately appear in a writer bundle or a channel delivery on the very
+    day it becomes disputed (that send happened before the reply existed),
+    and the real invariant is that it must never appear again from that
+    point on.
+    """
+    onset: dict[str, str] = {}
+    for entry in entries:
+        if entry["actor"] == "brain" and entry["action"] == "handoff" and "disputed" in entry["reason"]:
+            onset.setdefault(entry["invoice_id"], entry["ts"])
+    return onset
+
+
+def test_a_disputed_invoice_never_appears_in_a_writer_bundle_after_the_dispute(
+    agent_report,
+) -> None:
+    """The highest-risk guardrail in W3, proven end to end: once an invoice
+    is disputed, it never again reaches a buyer through a consolidated
+    message -- checked against every day AFTER the dispute took effect, not
+    merely "this run never bundled it at all" (see _dispute_onset)."""
+    entries = agent_report["audit_snapshot"]
+    onset = _dispute_onset(entries)
+    assert onset, "no disputed invoice occurred in this run to test against"
+    violations = [
+        (entry["invoice_id"], entry["ts"])
+        for entry in entries if entry["actor"] == "writer"
+        for inv_id in entry["detail"].get("bundle_invoice_ids", [])
+        if inv_id in onset and entry["ts"] >= onset[inv_id]
+    ]
+    assert not violations, violations
+
+
+def test_a_disputed_invoice_never_appears_in_a_channels_delivery_after_the_dispute(
+    agent_report,
+) -> None:
+    entries = agent_report["audit_snapshot"]
+    onset = _dispute_onset(entries)
+    violations = [
+        (entry["invoice_id"], entry["ts"])
+        for entry in entries if entry["actor"] == "channels"
+        and entry["invoice_id"] in onset and entry["ts"] >= onset[entry["invoice_id"]]
+    ]
+    assert not violations, violations
+
+
+def test_run_baseline_never_touches_consolidation_machinery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The baseline must stay a dumb, fixed-schedule bot completely untouched
+    by W3 -- proven directly by making every consolidation entry point
+    explode if run_baseline() ever reaches it, not merely by reading the
+    code."""
+    from engine import channels as channels_module
+    from engine import consolidate as consolidate_module
+    from engine import writer as writer_module
+
+    def explode(*args, **kwargs):
+        raise AssertionError("run_baseline() must never touch consolidation machinery")
+
+    monkeypatch.setattr(consolidate_module, "bundle_sends", explode)
+    monkeypatch.setattr(writer_module, "write_consolidated_message", explode)
+    monkeypatch.setattr(channels_module, "send_consolidated", explode)
+
+    report = run_sim.run_baseline(seed=42, days=30, verbose=False)
+    assert report["messages_sent"] > 0

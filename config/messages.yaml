@@ -217,6 +217,162 @@ mock_drafts:
       Dhanyavaad,
       {supplier_contact}
 
+  # Consolidated (buyer-level) drafts -- kept in this same mapping, not a
+  # separate top-level key, so engine/llm.py's mock lookup (one door, keyed
+  # by variant name only) needs no change to find them. {sections} is
+  # pre-built by engine/writer.py by joining each invoice's own
+  # consolidated_section text below.
+  consolidated_courtesy_english:
+    subject: "{invoice_count} invoices with us — a quick check"
+    body: |
+      Dear {contact_name},
+
+      A quick note on {invoice_count} invoices currently outstanding with us:
+
+      {sections}
+
+      Could you let us know when we might expect these, or if anything is
+      holding them up?
+
+      Thanks very much,
+      {supplier_contact}
+      {supplier_name}
+
+  consolidated_courtesy_hinglish:
+    subject: "{invoice_count} invoices ka payment — reminder"
+    body: |
+      Sir,
+
+      {invoice_count} invoices abhi tak pending hain:
+
+      {sections}
+
+      Aap ek baar check karwa lijiye.
+
+      Dhanyavaad,
+      {supplier_contact}
+
+  consolidated_escalated_english:
+    subject: "{invoice_count} invoices outstanding"
+    body: |
+      Dear {contact_name},
+
+      {invoice_count} invoices are currently outstanding with us:
+
+      {sections}
+
+      We would much rather settle these before they grow further. Could you
+      confirm dates you can work to for each?
+
+      Regards,
+      {supplier_contact}
+      {supplier_name}
+
+  consolidated_escalated_hinglish:
+    subject: "{invoice_count} invoices pending"
+    body: |
+      Sir,
+
+      {invoice_count} invoices abhi tak pending hain:
+
+      {sections}
+
+      Request hai ki inhe jald clear kar dein, taaki aur na badhe.
+
+      Dhanyavaad,
+      {supplier_contact}
+
+# --- consolidated (buyer-level) messages -----------------------------------
+# One buyer, several invoices, one envelope. Wrapper text (greeting, closing,
+# subject) is shared and generic -- deliberately no computed total or digest
+# figure in the subject (that's deferred, see CLAUDE.md W3 notes). {sections}
+# holds one block per invoice, each built from that invoice's own
+# already-approved skeleton content, same principle as the single-invoice
+# fallback below: nothing here invents a fact. courtesy sections carry no
+# legal content (rung 1); factual sections carry that invoice's own {facts}.
+consolidated_section:
+  english:
+    courtesy: |
+      Invoice {invoice_id} — {outstanding} ({goods})
+    factual: |
+      Invoice {invoice_id} — {outstanding} ({goods}), due {statutory_due_date},
+      {days_overdue} days past that date.
+
+      {facts}
+  hinglish:
+    courtesy: |
+      Invoice {invoice_id} — {outstanding} ({goods})
+    factual: |
+      Invoice {invoice_id} — {outstanding} ({goods}). Due date
+      {statutory_due_date} thi, {days_overdue} din ho chuke hain.
+
+      {facts}
+
+# --- the consolidated fallback ----------------------------------------------
+# Used when a drafted consolidated message fails the guardrail twice.
+# Deliberately plain, exactly like the single-invoice fallback below: it
+# assembles only the invoices' own approved section content, so it cannot
+# fail the checks a drafted version failed.
+fallback_consolidated:
+  english:
+    courtesy:
+      subject: "{invoice_count} invoices — a quick check"
+      body: |
+        Dear {contact_name},
+
+        This is a reminder about {invoice_count} invoices currently
+        outstanding with us:
+
+        {sections}
+
+        Please let us know when we can expect these.
+
+        Regards,
+        {supplier_contact}
+        {supplier_name}
+    factual:
+      subject: "{invoice_count} invoices outstanding"
+      body: |
+        Dear {contact_name},
+
+        This is regarding {invoice_count} invoices currently outstanding
+        with us:
+
+        {sections}
+
+        Please let us know when payment can be expected for each.
+
+        Regards,
+        {supplier_contact}
+        {supplier_name}
+  hinglish:
+    courtesy:
+      subject: "{invoice_count} invoices — a quick check"
+      body: |
+        Sir,
+
+        {invoice_count} invoices abhi tak pending hain:
+
+        {sections}
+
+        Kab tak ho payega, bata dijiye.
+
+        Dhanyavaad,
+        {supplier_contact}
+    factual:
+      subject: "{invoice_count} invoices pending"
+      body: |
+        Sir,
+
+        Yeh {invoice_count} invoices ke baare mein hai:
+
+        {sections}
+
+        Payment kab tak ho payega, bata dijiye.
+
+        Dhanyavaad,
+        {supplier_contact}
+
 # --- the fallback ---------------------------------------------------------
 # Used when a drafted message fails the guardrail twice. Deliberately plain:
 # it assembles only the skeleton's own content, so it cannot fail the checks

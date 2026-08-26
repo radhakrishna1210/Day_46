@@ -151,8 +151,19 @@ def _headline_rows(results: dict[str, Any]) -> list[dict[str, str]]:
          "agent": _days(agent["avg_days_to_pay"])},
         {"label": f"Avg days to pay ({matched['n']} invoices BOTH recovered -- the fair comparison)",
          "baseline": _days(matched["baseline"]), "agent": _days(matched["agent"])},
-        {"label": "Messages sent",
+        {"label": "Messages sent (envelopes -- W3 consolidates several "
+                  "invoices for one buyer into one message where the rung "
+                  "tier allows it)",
          "baseline": str(baseline["messages_sent"]), "agent": str(agent["messages_sent"])},
+        {"label": "Invoice-contacts (each invoice touched, before bundling "
+                  "-- proves chasing itself did not shrink, only the "
+                  "envelope count did)",
+         # The baseline never bundles, so its own invoice-contacts figure is
+         # just its messages_sent -- not read from the results payload,
+         # since run_baseline() deliberately carries no such field (W3 left
+         # it untouched; see CLAUDE.md's W3 notes).
+         "baseline": str(baseline["messages_sent"]),
+         "agent": str(agent.get("invoice_contacts", agent["messages_sent"]))},
         {"label": "Escalated to a human",
          "baseline": str(baseline["handoffs"]), "agent": str(agent["handoffs"])},
         {"label": "Not recovered",

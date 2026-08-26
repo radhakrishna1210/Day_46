@@ -16,8 +16,8 @@ from typing import Any, Callable
 
 from data import generate, store
 from engine.money import enable_unicode_output, format_inr
-from engine import (audit, brain, channels, law, llm, promises, rungs, samadhaan, score,
-                    validate, watchdog, writer)
+from engine import (audit, brain, channels, consolidate, law, llm, promises, rungs, samadhaan,
+                    score, validate, watchdog, writer)
 from report import build_report
 from sim import personas, run_sim
 
@@ -201,30 +201,35 @@ def print_decisions(context: Context, limit: int = 10) -> None:
 
 
 def stage_writer(context: Context) -> str:
+    """Draft one message per engine.consolidate bundle, not per invoice.
+
+    A buyer with several invoices sendable today gets grouped into one (or,
+    across the rung-1/rung>=2 tier boundary, at most two) bundle -- see
+    CLAUDE.md's W3 note. A buyer with a single eligible invoice still goes
+    through this same "bundle of one" path; there is no separate
+    single-invoice code path left to drift from this one.
+    """
     by_id = {buyer["buyer_id"]: buyer for buyer in context.buyers}
     scores = {item["buyer_id"]: item for item in context.scores}
-    invoices = {inv["invoice_id"]: inv for inv in context.queue}
+    invoices_by_id = {inv["invoice_id"]: inv for inv in context.queue}
 
     context.messages = []
     fallbacks = 0
-    for action in context.actions:
-        if action.kind != "send" or not action.skeleton:
-            continue
-        invoice = invoices[action.invoice_id]
-        drafted = writer.write_message(
-            action.skeleton, invoice=invoice, buyer=by_id[action.buyer_id],
-            score=scores[action.buyer_id], today=context.today,
-            log=not context.dry_run,
+    for bundle in consolidate.bundle_sends(context.actions):
+        buyer_id = bundle["buyer_id"]
+        drafted = writer.write_consolidated_message(
+            bundle["actions"], invoices_by_id=invoices_by_id, buyer=by_id[buyer_id],
+            score=scores.get(buyer_id), today=context.today, log=not context.dry_run,
         )
-        drafted["invoice_id"] = action.invoice_id
-        drafted["buyer_id"] = action.buyer_id
-        drafted["rung"] = action.rung
+        drafted["buyer_id"] = buyer_id
+        drafted["invoice_rungs"] = {a.invoice_id: a.rung for a in bundle["actions"]}
         context.messages.append(drafted)
         fallbacks += drafted["fallback_used"]
 
     hinglish = sum(1 for m in context.messages if m["language"] == "hinglish")
-    return (f"{len(context.messages)} messages drafted, {hinglish} in Hinglish, "
-            f"{fallbacks} fell back to the plain skeleton")
+    invoices_covered = sum(len(m["invoice_ids"]) for m in context.messages)
+    return (f"{len(context.messages)} messages drafted covering {invoices_covered} "
+            f"invoices, {hinglish} in Hinglish, {fallbacks} fell back to the plain skeleton")
 
 
 def print_messages(context: Context, limit: int = 5) -> None:
@@ -232,7 +237,7 @@ def print_messages(context: Context, limit: int = 5) -> None:
     for drafted in context.messages[:limit]:
         print()
         print("  " + "-" * 74)
-        print(f"  {drafted['invoice_id']}  rung {drafted['rung']}  "
+        print(f"  {', '.join(drafted['invoice_ids'])}  tier {drafted['tier']}  "
               f"{drafted['language']}  guardrail: {drafted['guardrail']}")
         print("  " + "-" * 74)
         for refused in drafted.get("rejected_drafts", []):
@@ -261,24 +266,22 @@ def stage_promises(context: Context) -> str:
 
 
 def stage_post_office(context: Context) -> str:
+    """One physical send per bundle, logged once per invoice it covers --
+    see engine.channels.send_consolidated()'s own docstring."""
     by_id = {buyer["buyer_id"]: buyer for buyer in context.buyers}
     context.deliveries = []
 
     for drafted in context.messages:
-        buyer = by_id[drafted["buyer_id"]] if drafted.get("buyer_id") else None
-        buyer = buyer or next(
-            (b for b in context.buyers
-             if b["buyer_id"] == drafted.get("buyer_id")), None)
+        buyer = by_id.get(drafted.get("buyer_id"))
         if buyer is None:
             continue
         channel = buyer.get("preferred_channel", "email")
         for target in {channel, "email"}:
             to = (buyer["contact_email"] if target == "email"
                   else buyer.get("contact_phone", ""))
-            context.deliveries.append(channels.send(
-                target, to, drafted,
-                invoice_id=drafted["invoice_id"], buyer_id=buyer["buyer_id"],
-                rung=drafted["rung"], today=context.today,
+            context.deliveries.extend(channels.send_consolidated(
+                target, to, drafted, invoice_rungs=drafted["invoice_rungs"],
+                buyer_id=buyer["buyer_id"], today=context.today,
                 # A real wall clock, so quiet hours actually apply to a real
                 # send today rather than waiting for the simulator to exist.
                 now=datetime.now(),

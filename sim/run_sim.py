@@ -51,7 +51,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data import generate, store
-from engine import audit, brain, channels, law, llm, promises, validate, watchdog, writer
+from engine import audit, brain, channels, consolidate, law, llm, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
 from engine.money import enable_unicode_output, format_inr
@@ -486,6 +486,9 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     """
     buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
+    # Built once: invoice dicts are mutated in place by _apply_payment (never
+    # replaced), so this stays valid for the whole run without refreshing.
+    invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
 
     history: dict[str, list[dict[str, Any]]] = {}
     promises_by_invoice: dict[str, list[dict[str, Any]]] = {}
@@ -500,7 +503,14 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     # every visit (not just SEND) -- so an invoice still sitting inside an
     # active promise's grace period reports THAT as its reason, not silence.
     last_action_by_invoice: dict[str, dict[str, Any]] = {}
+    # messages_sent counts outbound ENVELOPES (one per buyer/tier bundle, per
+    # day it goes out) -- what CLAUDE.md's W3 plan expects to drop.
+    # invoice_contacts counts, per invoice, every day it was part of a send
+    # -- the OLD messages_sent semantics, preserved under a new name so the
+    # "did chasing actually change" question stays answerable. Both are
+    # incremented from the exact same bundle loop below, never independently.
     messages_sent = 0
+    invoice_contacts = 0
     narrative: list[str] = []
     last_day = day0
     # Logged once per invoice, the first day it is seen -- an invoice sitting
@@ -525,6 +535,11 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             all_promises = [p for plist in promises_by_invoice.values() for p in plist]
             _raise_early_warnings(invoices, all_promises, scores, today, warned)
 
+            # Phase 1: decide -- unchanged, per invoice, exactly as before.
+            # engine.brain.decide() never knows a bundle exists; every stop
+            # rule, promise grace and rung selection is computed exactly as
+            # if consolidation did not exist (CLAUDE.md W3 plan, point b).
+            day_actions: list[brain.Action] = []
             for invoice in queue:
                 inv_id = invoice["invoice_id"]
                 buyer = buyers_by_id[invoice["buyer_id"]]
@@ -538,23 +553,59 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                 last_action_by_invoice[inv_id] = {
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,
                 }
+                day_actions.append(action)
 
-                if action.kind == brain.SEND and action.skeleton:
-                    drafted = writer.write_message(
-                        action.skeleton, invoice=invoice, buyer=buyer,
-                        score=scores[buyer["buyer_id"]], promises=plist, today=today, log=True,
-                    )
-                    target = buyer.get("preferred_channel", "email")
-                    to = buyer.get("contact_email") if target == "email" else buyer.get("contact_phone", "")
-                    channels.send(target, to, drafted, invoice_id=inv_id, buyer_id=buyer["buyer_id"],
-                                 rung=action.rung, today=today, enabled=False, log=True)
-                    messages_sent += 1
+                if action.kind in (brain.HANDOFF, brain.STOP) and inv_id not in announced:
+                    announced.add(inv_id)
+                    bucket = _classify_reason(action.reason)
+                    if action.kind == brain.HANDOFF:
+                        handoffs.add(inv_id)
+                        handoff_reasons[bucket] = handoff_reasons.get(bucket, 0) + 1
+                    else:
+                        stops.add(inv_id)
+                        stop_reasons[bucket] = stop_reasons.get(bucket, 0) + 1
+                    if verbose:
+                        narrative.append(f"Day {offset + 1}: {buyer['name']} ({persona}) "
+                                         f"{action.kind} -- {action.reason}")
+
+            # Phase 2: consolidate -- group today's SEND decisions by buyer
+            # and rung tier (engine/consolidate.py), then draft and send ONE
+            # envelope per bundle instead of one per invoice. A buyer with a
+            # single eligible invoice today still goes through this same
+            # path as a "bundle of one" -- there is no separate single-
+            # invoice code path left to drift from this one.
+            for bundle in consolidate.bundle_sends(day_actions):
+                buyer_id = bundle["buyer_id"]
+                buyer = buyers_by_id[buyer_id]
+                persona = persona_of[buyer_id]
+                bundle_actions = bundle["actions"]
+
+                drafted = writer.write_consolidated_message(
+                    bundle_actions, invoices_by_id=invoices_by_id, buyer=buyer,
+                    score=scores[buyer_id], promises_by_invoice=promises_by_invoice,
+                    today=today, log=True,
+                )
+                target = buyer.get("preferred_channel", "email")
+                to = buyer.get("contact_email") if target == "email" else buyer.get("contact_phone", "")
+                invoice_rungs = {action.invoice_id: action.rung for action in bundle_actions}
+                channels.send_consolidated(target, to, drafted, invoice_rungs=invoice_rungs,
+                                           buyer_id=buyer_id, today=today, enabled=False, log=True)
+                messages_sent += 1
+
+                bundle_ids = [action.invoice_id for action in bundle_actions]
+                for action in bundle_actions:
+                    inv_id = action.invoice_id
+                    invoice = invoices_by_id[inv_id]
+                    plist = promises_by_invoice.setdefault(inv_id, [])
+                    hist = history.setdefault(inv_id, [])
+                    invoice_contacts += 1
 
                     rng = _rng(seed, inv_id, today, "react")
                     reaction = personas.react(persona, action.rung, rng)
                     outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=True)
                     hist.append({"date": today.isoformat(), "rung": action.rung,
-                                "channel": target, "outcome": outcome})
+                                "channel": target, "outcome": outcome,
+                                "bundle_invoice_ids": bundle_ids})
 
                     seen = seen_rungs.setdefault(inv_id, set())
                     newly_seen_rung = action.rung not in seen
@@ -567,19 +618,6 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                         disputes.add(inv_id)
                         last_action_by_invoice[inv_id]["reason"] = (
                             f"the buyer disputed the invoice; {action.reason}")
-
-                elif action.kind in (brain.HANDOFF, brain.STOP) and inv_id not in announced:
-                    announced.add(inv_id)
-                    bucket = _classify_reason(action.reason)
-                    if action.kind == brain.HANDOFF:
-                        handoffs.add(inv_id)
-                        handoff_reasons[bucket] = handoff_reasons.get(bucket, 0) + 1
-                    else:
-                        stops.add(inv_id)
-                        stop_reasons[bucket] = stop_reasons.get(bucket, 0) + 1
-                    if verbose:
-                        narrative.append(f"Day {offset + 1}: {buyer['name']} ({persona}) "
-                                         f"{action.kind} -- {action.reason}")
 
     # A malformed invoice (engine.validate) is found here, once, against the
     # clock as it stands at the END of the run -- not at day0. TC-050's own
@@ -595,7 +633,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     invalid_ids = frozenset(validation_reasons)
 
     verify_conservation(invoices, last_day, invalid_ids)
-    invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
+    # invoices_by_id was already built once, at the top of this function.
     reason_of = {
         **validation_reasons,
         **{inv_id: entry["reason"] for inv_id, entry in last_action_by_invoice.items()},
@@ -618,6 +656,12 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         "mode": "agent", "seed": seed, "days": days,
         "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
+        # Kept alongside messages_sent, not in place of it: messages_sent now
+        # counts outbound envelopes (bundled), invoice_contacts is the OLD
+        # per-invoice-contact semantics -- see the day-loop comment above and
+        # CLAUDE.md's W3 plan, point g. Sum(invoice_contacts) is what
+        # messages_sent would have been before consolidation.
+        "invoice_contacts": invoice_contacts,
         "handoffs": len(handoffs), "stops": len(stops), "disputes": len(disputes),
         "handoff_reasons": handoff_reasons, "stop_reasons": stop_reasons,
         "avg_days_to_pay": avg_days_to_pay(invoices),

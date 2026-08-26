@@ -276,6 +276,86 @@ def send(
     return _record(delivery, invoice_id, buyer_id, when, log)
 
 
+def send_consolidated(
+    channel: str,
+    to: str,
+    message: dict[str, Any],
+    *,
+    invoice_rungs: dict[str, int],
+    buyer_id: str | None = None,
+    today: date | datetime | None = None,
+    now: datetime | None = None,
+    enabled: bool = False,
+    ignore_quiet_hours: bool = False,
+    log: bool = True,
+) -> list[dict[str, Any]]:
+    """One physical send covering several invoices, logged once PER invoice.
+
+    Non-negotiable #1 and every other reader in this module and audit.py
+    (entries_for(), _already_sent() itself) index the audit trail by
+    invoice_id, so rather than invent a new buyer-level entry shape those
+    callers don't expect, the SAME delivery outcome is recorded once for
+    every invoice in the bundle, each carrying the others via
+    detail["bundle_invoice_ids"] -- one real send, N audit rows. Mirrors
+    engine.writer's own per-invoice logging for a consolidated draft.
+
+    The already-sent dedup guard (see _already_sent()'s own docstring: it
+    protects a re-run of an interrupted --send-email from re-sending a real
+    email) is evaluated across the WHOLE bundle here: the bundle is skipped
+    only if EVERY invoice in it was already sent today. If even one has not
+    been, the bundle sends -- covering an invoice that has not gone out yet
+    always wins over avoiding a rare partial-duplicate on a manual rerun,
+    since silently dropping coverage is the worse failure of the two.
+
+    Args:
+        invoice_rungs: invoice_id -> that invoice's OWN rung (a bundle can
+            mix rung 2 and rung 3 in the escalated tier), in the order the
+            per-invoice audit records should be written.
+        Other args: as send().
+
+    Returns:
+        One delivery record per invoice_id in invoice_rungs, in the same
+        order, each also written to the audit trail (when log=True).
+    """
+    when = today or date.today()
+    invoice_ids = list(invoice_rungs)
+    if not invoice_ids:
+        return []
+    bundle_already_sent = all(
+        _already_sent(inv_id, when) for inv_id in invoice_ids
+    )
+
+    if bundle_already_sent:
+        delivery: dict[str, Any] = {
+            "channel": channel, "to": None, "intended_for": to, "status": SKIPPED,
+            "reason": ("already sent to the test inbox earlier today; skipping to avoid "
+                      "a duplicate real email"),
+            "subject": message.get("subject"),
+            "body_chars": len(str(message.get("body") or "")),
+            "message_id": None,
+        }
+    elif _channel_mode(channel) == REAL and channel == "email":
+        # invoice_id=None disables _send_email's OWN per-invoice dedup check
+        # (it would otherwise only ever look at one arbitrary invoice from
+        # the bundle) -- the whole-bundle decision above already covers it.
+        delivery = _send_email(
+            to, message, rung=None, invoice_id=None, enabled=enabled,
+            now=now, ignore_quiet_hours=ignore_quiet_hours, simulated_date=when,
+        )
+    else:
+        delivery = _stub(channel, to, message, None)
+
+    records = []
+    for invoice_id, rung in invoice_rungs.items():
+        # invoice_id is included here (unlike send()'s single delivery dict,
+        # where the caller already knows it) so a caller iterating this
+        # bundle's records can tell them apart without re-zipping.
+        per_invoice = {**delivery, "invoice_id": invoice_id, "rung": rung,
+                       "bundle_invoice_ids": invoice_ids}
+        records.append(_record(per_invoice, invoice_id, buyer_id, when, log))
+    return records
+
+
 def describe(delivery: dict[str, Any]) -> str:
     """One human-readable line, per the log conventions. No emoji."""
     if delivery["status"] == WOULD_SEND:

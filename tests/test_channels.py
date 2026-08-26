@@ -302,3 +302,100 @@ def test_the_stub_channel_still_logs_every_time(monkeypatch: pytest.MonkeyPatch)
                   rung=2, today=TODAY, enabled=True)
     actions = [e["action"] for e in audit.entries()]
     assert actions == [channels.WOULD_SEND, channels.WOULD_SEND]
+
+
+# ============================================================================
+# send_consolidated -- one physical send, N audit rows (one per invoice)
+# ============================================================================
+
+BUNDLE = {"INV-A": 2, "INV-B": 3}
+
+
+def consolidated(**kwargs):
+    defaults = dict(buyer_id="BUY-07", today=TODAY, now=datetime(2026, 8, 24, 11, 0))
+    defaults.update(kwargs)
+    return channels.send_consolidated("email", BUYER_ADDRESS, MESSAGE,
+                                      invoice_rungs=BUNDLE, **defaults)
+
+
+def test_a_consolidated_send_is_one_real_envelope(captured) -> None:
+    """Non-negotiable #4 does not relax just because several invoices share
+    the envelope: still exactly one socket open, one message, one recipient."""
+    records = consolidated(enabled=True)
+    assert len(captured) == 1
+    assert captured[0]["To"] == INBOX
+    assert BUYER_ADDRESS not in str(captured[0]["To"])
+    assert len(records) == 2
+
+
+def test_a_consolidated_send_logs_one_audit_entry_per_invoice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(channels.smtplib, "SMTP", Explode)
+    consolidated(enabled=False)
+    entries = {e["invoice_id"]: e for e in audit.entries()}
+    assert set(entries) == set(BUNDLE)
+    for inv_id, rung in BUNDLE.items():
+        assert entries[inv_id]["detail"]["rung"] == rung
+        assert set(entries[inv_id]["detail"]["bundle_invoice_ids"]) == set(BUNDLE)
+
+
+def test_a_consolidated_send_carries_each_invoices_own_rung(captured) -> None:
+    """Escalated-tier bundles can mix rung 2 and rung 3 -- each invoice's
+    audit record must show ITS OWN rung, not the bundle's or a shared one."""
+    records = consolidated(enabled=True)
+    by_invoice = {r["invoice_id"]: r for r in records}
+    assert by_invoice["INV-A"]["rung"] == 2
+    assert by_invoice["INV-B"]["rung"] == 3
+
+
+def test_the_bundle_is_skipped_only_when_every_invoice_was_already_sent(
+    captured,
+) -> None:
+    """Re-running after an interrupt must not duplicate a real email -- but
+    only once EVERY invoice in the bundle has actually gone out; an un-sent
+    invoice must never be silently dropped just because its bundle-mate
+    already went through."""
+    first = consolidated(enabled=True)
+    assert all(r["status"] == channels.SENT for r in first)
+    assert len(captured) == 1
+
+    second = consolidated(enabled=True)
+    assert all(r["status"] == channels.SKIPPED for r in second)
+    assert len(captured) == 1        # no second envelope opened
+
+
+def test_a_partially_sent_bundle_is_not_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One invoice already sent today (e.g. from a smaller earlier bundle),
+    one not -- the bundle must still go out rather than silently drop
+    coverage of the un-sent invoice."""
+    monkeypatch.setattr(channels.smtplib, "SMTP", Capture)
+    Capture.sent = []
+    channels.send("email", BUYER_ADDRESS, MESSAGE, invoice_id="INV-A", buyer_id="BUY-07",
+                  rung=2, today=TODAY, now=datetime(2026, 8, 24, 11, 0), enabled=True)
+    assert len(Capture.sent) == 1
+
+    records = consolidated(enabled=True)
+    assert all(r["status"] == channels.SENT for r in records)
+    assert len(Capture.sent) == 2
+
+
+def test_a_consolidated_stub_channel_never_opens_a_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(channels.smtplib, "SMTP", Explode)
+    records = channels.send_consolidated(
+        "whatsapp", "+91-90000-00007", MESSAGE, invoice_rungs=BUNDLE,
+        buyer_id="BUY-07", today=TODAY, enabled=True,
+    )
+    assert all(r["status"] == channels.WOULD_SEND and r["to"] is None for r in records)
+
+
+def test_an_empty_bundle_sends_nothing_and_logs_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(channels.smtplib, "SMTP", Explode)
+    records = channels.send_consolidated("email", BUYER_ADDRESS, MESSAGE, invoice_rungs={},
+                                         buyer_id="BUY-07", today=TODAY, enabled=True)
+    assert records == []
+    assert audit.entries() == []
