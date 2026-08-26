@@ -123,7 +123,15 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   run_baseline()'s own output is a structurally empty diff before/after, and
   tests/test_run_sim.py::test_run_baseline_never_touches_consolidation_
   machinery proves it by making every consolidation entry point explode if
-  baseline ever reached one.
+  baseline ever reached one. STRUCTURAL check, not just aggregate sums: for
+  all 93 invoices the seed-42 run ever contacted, the exact SET of calendar
+  days each was contacted on is byte-identical before/after (0 mismatches) --
+  ruling out same-total-different-pattern. That one-time diff can't be re-run
+  once the old code is gone, so the permanent guard is
+  test_every_send_decision_has_exactly_one_matching_writer_entry: every
+  (invoice, day) brain.decide() chose SEND for has EXACTLY one writer audit
+  entry, forever, from a single run's own trail -- no dropped or duplicated
+  contact, whatever future change touches this path.
 - W2 done: engine/buyer_panel.py -- one buyer-level rollup, called ONCE at
   the end of sim/run_sim.py's run_agent() (not baseline, not inside the day
   loop), reusing score.py's score/confidence/trend unmodified. Confirmed
@@ -149,4 +157,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
-- 748 tests passing (pytest -q).
+- 749 tests passing (pytest -q).

@@ -399,6 +399,35 @@ def test_a_disputed_invoice_never_appears_in_a_channels_delivery_after_the_dispu
     assert not violations, violations
 
 
+def test_every_send_decision_has_exactly_one_matching_writer_entry(agent_report) -> None:
+    """The permanent structural guard behind W3's one-time before/after audit
+    diff: that diff can only be run once (it needs the OLD, pre-consolidation
+    code, which won't exist after this commit). What has to hold forever
+    instead is this invariant, checked from a single run's own audit trail:
+    every (invoice, day) where brain.decide() chose SEND has EXACTLY one
+    writer entry for that same (invoice, day) -- never zero (a contact
+    silently dropped by bundling) and never more than one (a contact
+    silently duplicated). This is what "same invoice IDs contacted on the
+    same days, just re-packaged into bundles" actually means, encoded as a
+    test rather than a one-off diff.
+    """
+    entries = agent_report["audit_snapshot"]
+    send_days = [(e["invoice_id"], e["ts"][:10]) for e in entries
+                if e["actor"] == "brain" and e["action"] == "send"]
+    writer_days = [(e["invoice_id"], e["ts"][:10]) for e in entries
+                  if e["actor"] == "writer" and e["action"] in ("message_drafted", "writer_fallback")]
+
+    assert send_days, "no send decision occurred in this run to test against"
+    assert set(send_days) == set(writer_days), (
+        set(send_days) ^ set(writer_days))
+
+    from collections import Counter
+    send_counts, writer_counts = Counter(send_days), Counter(writer_days)
+    duplicated = {k: (send_counts[k], writer_counts[k])
+                 for k in send_counts if send_counts[k] != writer_counts[k]}
+    assert not duplicated, duplicated
+
+
 def test_run_baseline_never_touches_consolidation_machinery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
