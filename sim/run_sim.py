@@ -425,6 +425,54 @@ def _narrate(day_number: int, buyer: dict[str, Any], persona: str, rung: int, ou
 # the agent
 # --------------------------------------------------------------------------
 
+def _notable_early_warnings(
+    invoices: list[dict[str, Any]],
+    promises_list: list[dict[str, Any]],
+    scores: dict[str, dict[str, Any]],
+    today: date,
+) -> list[dict[str, Any]]:
+    """watchdog.early_warnings() reports a real risk_band (low/watch/high)
+    for every invoice in the window -- "low" is a genuine, computed value,
+    not an absence. This is the ONE place that decides what is worth writing
+    to the audit trail: low band is filtered out HERE, not inside
+    early_warnings() itself, so a low-band invoice structurally can never
+    produce an early_warning_raised entry (and therefore never appears in
+    the report's early-warning section either, since that section only ever
+    reads back what was logged -- see report/build_report.py
+    _early_warning_rows()). Pulled out as its own function, rather than left
+    inline in run_agent()'s day loop, specifically so this decision can be
+    unit-tested directly instead of only inferred from one seed's own data
+    happening not to exercise it.
+    """
+    return [w for w in watchdog.early_warnings(invoices, promises_list, scores, today)
+            if w["risk_band"] != "low"]
+
+
+def _raise_early_warnings(
+    invoices: list[dict[str, Any]],
+    promises_list: list[dict[str, Any]],
+    scores: dict[str, dict[str, Any]],
+    today: date,
+    warned: set[str],
+) -> None:
+    """Writes one early_warning_raised audit entry per invoice, the first day
+    it crosses into watch/high -- never "low", which _notable_early_warnings()
+    already excluded. `warned` is mutated in place so a later call (the next
+    simulated day) does not repeat an entry already logged.
+    """
+    for warning in _notable_early_warnings(invoices, promises_list, scores, today):
+        if warning["invoice_id"] in warned:
+            continue
+        warned.add(warning["invoice_id"])
+        audit.record(
+            invoice_id=warning["invoice_id"], action="early_warning_raised",
+            reason=(f"{warning['risk_band']} risk, {warning['signals_triggered']} "
+                    f"signal(s): {'; '.join(warning['reasons'])}"),
+            source="rule", today=today, buyer_id=warning["buyer_id"],
+            actor="watchdog", detail=warning,
+        )
+
+
 def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
     channels -> persona reacts -> promises) over `days` simulated days.
@@ -473,25 +521,8 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             grouped = store.invoices_by_buyer(invoices)
             scores = {s["buyer_id"]: s for s in score_engine.score_all(buyers, grouped, today)}
 
-            # early_warnings() reports a real band for every in-window invoice,
-            # low included -- only watch/high are notable enough to log, and
-            # the dedup set is only populated on those, so an invoice that
-            # starts "low" and later worsens into "watch"/"high" still gets
-            # logged the day it actually crosses that line.
             all_promises = [p for plist in promises_by_invoice.values() for p in plist]
-            notable_warnings = [w for w in watchdog.early_warnings(invoices, all_promises, scores, today)
-                               if w["risk_band"] != "low"]
-            for warning in notable_warnings:
-                if warning["invoice_id"] in warned:
-                    continue
-                warned.add(warning["invoice_id"])
-                audit.record(
-                    invoice_id=warning["invoice_id"], action="early_warning_raised",
-                    reason=(f"{warning['risk_band']} risk, {warning['signals_triggered']} "
-                            f"signal(s): {'; '.join(warning['reasons'])}"),
-                    source="rule", today=today, buyer_id=warning["buyer_id"],
-                    actor="watchdog", detail=warning,
-                )
+            _raise_early_warnings(invoices, all_promises, scores, today, warned)
 
             for invoice in queue:
                 inv_id = invoice["invoice_id"]
