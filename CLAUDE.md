@@ -99,13 +99,22 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - W1 done: engine.watchdog.early_warnings() -- rule-based, Option A
   (surfacing only, never a pre-due message; user chose this over a rung-0
-  courtesy contact). Needs 2 of 3 categories (poor score, majority-broken
-  promises, prior-overdue pattern) to trigger -- one bad signal alone never
-  surfaces. Thresholds in config/rules.yaml early_warning. Wired into
-  main.py (new pipeline stage between score and law), sim/run_sim.py (logs
-  one early_warning_raised audit entry per invoice, first day it enters the
-  window), report/build_report.py + report.html.j2 (new EARLY WARNING
-  section, reads the audit trail like the trip-wire section does).
+  courtesy contact). Returns a REAL risk_band (low/watch/high) for every
+  invoice in the window -- an earlier version only ever produced
+  "watch"/"high" and silently dropped everything else via continue, which
+  the user caught and made me fix (commit a101bc2). 2 of 3 categories (poor
+  score, majority-broken promises, prior-overdue pattern) is the low->watch
+  boundary, 3 of 3 is watch->high; low-band entries are real return values,
+  just filtered out (risk_band != "low") by main.py's printout and
+  sim/run_sim.py's audit logging so demo-facing output doesn't balloon to
+  every near-due invoice. Thresholds in config/rules.yaml early_warning.
+  Wired into main.py (new pipeline stage between score and law),
+  sim/run_sim.py (logs one early_warning_raised audit entry per invoice,
+  first day it crosses into watch/high), report/build_report.py +
+  report.html.j2 (new EARLY WARNING section, reads the audit trail like the
+  trip-wire section does). Every live-path change here was verified with an
+  explicit seed-42 before/after diff of results.json + audit_log.jsonl, not
+  just a test-pass claim.
 - Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
   constants.py bans "Samadhaan" (and other statutory names/numbers) as a
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
