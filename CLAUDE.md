@@ -92,11 +92,41 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] W1 - Early warning (pre-overdue risk surfacing)
 - [x] W2 - Buyer-level panel + promise reliability
 - [x] W3 - Buyer-level message consolidation
-- [ ] W4 - Re-run experiment, regenerate report with new numbers
+- [x] W4 - Re-run experiment, regenerate report with new numbers
 - [ ] 10 - README + ARCHITECTURE sync + hygiene
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
+- W4 done: re-ran the full 6-seed comparison (42, 7, 13, 99, 2024, 555) at
+  HEAD via the real CLI (`sim/run_sim.py --compare --seed 42 --days 120`) --
+  agent wins 6/6 on rupees recovered, 6/6 on matched-set days-to-pay, no
+  regression on any seed. report/out/results.json + report.html regenerated
+  (has W1's early-warning section, W2's buyer panel, W3's messages_sent/
+  invoice_contacts split). Historical "Day 9" comparison done via throwaway
+  git worktrees at the exact pre-E1, post-E4/pre-W1, post-W1/pre-W2 and
+  post-W2/pre-W3 commits (never touching the main working tree's branch or
+  dataset) -- on SEED 42 specifically, every headline number (recovered,
+  outstanding, both days-to-pay figures, handoffs, exceptions) is
+  BYTE-IDENTICAL across all four historical checkpoints and HEAD; only
+  messages_sent moved (141->73, the W3 drop). Investigated WHY E1/E2 showed
+  zero effect on 42 rather than assuming it: checked all 6 seeds directly --
+  42 is the ONE seed of six with neither a malformed invoice (E2) nor a
+  superseded promise (E1/TC-014) anywhere in its data. The other 5 DO
+  exercise both (seed 555: 1 malformed + 5 superseded) -- but re-running
+  seed 555's PRE-E1 code in a worktree showed identical recovered/
+  outstanding/handoffs to HEAD too: its malformed invoice is TC-050's
+  clock-relative case (a future issue_date that self-resolves before
+  last_day, so pre/post-E2 code treat it the same by the time totals are
+  computed), and TC-014's fix -- real, proven by its own regression test --
+  didn't move this seed's handoff count because brain.py's law-ceiling clamp
+  (`chosen = min(desired, ceiling)`) already capped those cases at the same
+  rung regardless of the inflated broken-promise jump the bug caused. E1/E2
+  are correctness fixes verified by their OWN dedicated tests, not by this
+  experiment's aggregate numbers -- this seeded world doesn't happen to
+  contain a case where they're the only thing standing between a wrong
+  number and a right one. Money conservation confirmed on all 12 runs (6
+  seeds x baseline+agent). tests/test_sim_isolation.py: 24/24 passed,
+  automatically covers engine/consolidate.py too (glob-discovered).
 - W3 done: engine/consolidate.py (pure: groups a day's already-decided SEND
   Actions by buyer into rung TIERS -- courtesy=rung<=1, escalated=rung>=2,
   never mixed, so one buyer may get up to two envelopes/day, never a single-
@@ -132,24 +162,6 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   (invoice, day) brain.decide() chose SEND for has EXACTLY one writer audit
   entry, forever, from a single run's own trail -- no dropped or duplicated
   contact, whatever future change touches this path.
-- W2 done: engine/buyer_panel.py -- one buyer-level rollup, called ONCE at
-  the end of sim/run_sim.py's run_agent() (not baseline, not inside the day
-  loop), reusing score.py's score/confidence/trend unmodified. Confirmed
-  surfacing-only, zero decision influence: nothing in the day loop (every
-  brain.decide() call already happened before buyer_panel() runs) or
-  anywhere else reads its output this phase -- grepped, only sim/run_sim.py
-  imports it. Promise "avg days late" is NOT broken_on - promised_date (that
-  gap is a constant ~1 day, an artifact of the daily sweep() cadence, not a
-  buyer signal) -- it's paid_date - promised_date for broken promises whose
-  invoice was eventually paid; unresolved ones count toward `broken` but not
-  the average, and say so ("no resolved-late data") rather than a misleading
-  number. "Response rate" (replies of any non-silent outcome / messages
-  sent) was grepped for name collisions first -- nothing in engine/,
-  report/ or sim/ computed anything response-rate-like before this; only
-  docs/winning_layer.md's aspirational prose used the phrase, no formula.
-  Seed-42 check: results.json's ONLY diff before/after is the added
-  buyer_panel key (confirmed via a stripped-key structural diff); the
-  on-disk audit trail is byte-identical, same SHA-256, both runs.
 - Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
   constants.py bans "Samadhaan" (and other statutory names/numbers) as a
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
