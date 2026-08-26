@@ -24,7 +24,9 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine import validate
+from engine.config import rules
 from engine.law import _as_date, days_gained_by_law, statutory_due_date
+from engine.score import payment_delay_days
 
 #: An invoice in any of these states still has money owing on it.
 UNSETTLED_STATUSES = frozenset({"open", "partially_paid", "disputed"})
@@ -111,6 +113,159 @@ def is_promise_broken(promise: dict[str, Any], today: date) -> bool:
 def due_promises(promises: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
     """Promises whose date has passed without the money arriving."""
     return [p for p in promises if is_promise_broken(p, today)]
+
+
+# --- early warning ----------------------------------------------------------
+# Rule-based only -- see config/rules.yaml early_warning for the thresholds
+# and the reasoning behind them. Surfacing only: this never sends anything
+# and never states a legal fact, because nothing here is legally due yet.
+
+def days_until_due(invoice: dict[str, Any], today: date) -> int:
+    """Days remaining before the statutory due date -- the mirror of
+    days_overdue() for an invoice that has not gone overdue yet."""
+    return -days_overdue(invoice, today)
+
+
+def _settled_promise_counts(promises: list[dict[str, Any]], buyer_id: str) -> tuple[int, int]:
+    """(settled, broken) promise counts for one buyer, across all their invoices.
+
+    Only kept and broken promises count as settled -- an open promise has not
+    resolved yet and says nothing about reliability either way.
+    """
+    settled = [p for p in promises
+               if p.get("buyer_id") == buyer_id and p.get("status") in ("kept", "broken")]
+    broken = sum(1 for p in settled if p["status"] == "broken")
+    return len(settled), broken
+
+
+def _prior_overdue_count(
+    invoice: dict[str, Any], buyer_invoices: list[dict[str, Any]], today: date,
+) -> int:
+    """How many of this buyer's OTHER invoices have gone overdue -- currently
+    unsettled and overdue today, or settled but paid after their own
+    statutory due date. The invoice being evaluated is excluded: it cannot be
+    evidence of its own risk.
+    """
+    count = 0
+    for other in buyer_invoices:
+        if other["invoice_id"] == invoice["invoice_id"]:
+            continue
+        if is_unsettled(other):
+            if is_overdue(other, today):
+                count += 1
+        elif other.get("status") == "paid" and other.get("paid_date"):
+            if payment_delay_days(other) > 0:
+                count += 1
+    return count
+
+
+def early_warnings(
+    invoices: list[dict[str, Any]],
+    promises: list[dict[str, Any]],
+    scores_by_buyer: dict[str, dict[str, Any]],
+    today: date,
+    *,
+    config: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Invoices approaching their due date whose already-known signals look bad.
+
+    Surfacing only -- never a message, never a legal fact. A RISK BAND, not a
+    probability: there is no ground truth to validate a percentage against
+    when the simulator's personas are our own, so this outputs "watch"/"high"
+    plus the real numbers behind it, exactly like score.py's breakdown lines.
+
+    A single bad signal is never enough on its own -- score.py's own "two
+    invoices of history is not evidence" philosophy applies here too. Each of
+    the three categories below needs a genuine pattern, and at least
+    early_warning.bands.watch_from_signals of them must trigger before an
+    invoice is surfaced at all. That also guarantees every surfaced entry
+    carries at least two plain-English reasons, not one.
+
+    Categories (config/rules.yaml early_warning):
+      * buyer score below score.bands.poor_below, UNLESS confidence is "low"
+        -- a score built on almost no history is not evidence either way,
+        the same reasoning engine/brain.py already applies when pacing.
+      * broken promises at or above promise_reliability.broken_ratio_threshold
+        of settled (kept+broken) promises, needing at least min_settled of them.
+      * prior_overdue.min_count or more of the buyer's OTHER invoices having
+        gone overdue, now or historically.
+
+    Args:
+        invoices: every invoice, not just the overdue queue -- an invoice
+            not yet due is exactly the point.
+        promises: every promise on file, any invoice, any buyer.
+        scores_by_buyer: buyer_id -> engine.score.score_buyer() result.
+        today: the simulation clock.
+        config: rules; defaults to config/rules.yaml.
+
+    Returns:
+        Entries for invoices due within early_warning.window_days whose
+        signals triggered enough categories, worst first (more triggered
+        categories first, then largest money at risk). Each carries
+        `reasons`: plain sentences with real numbers.
+    """
+    config = config or rules()
+    settings = config["early_warning"]
+    window_days = int(settings["window_days"])
+    min_settled = int(settings["promise_reliability"]["min_settled"])
+    broken_ratio_threshold = float(settings["promise_reliability"]["broken_ratio_threshold"])
+    prior_overdue_min = int(settings["prior_overdue"]["min_count"])
+    watch_from = int(settings["bands"]["watch_from_signals"])
+    high_from = int(settings["bands"]["high_from_signals"])
+    poor_below = int(config["score"]["bands"]["poor_below"])
+
+    duplicates = validate.duplicate_reasons(invoices)
+    by_buyer: dict[str, list[dict[str, Any]]] = {}
+    for inv in invoices:
+        by_buyer.setdefault(inv.get("buyer_id"), []).append(inv)
+
+    warnings: list[dict[str, Any]] = []
+    for invoice in invoices:
+        invoice_id = invoice["invoice_id"]
+        if invoice_id in duplicates or validate.invalid_reason(invoice, today) is not None:
+            continue
+        if not is_unsettled(invoice):
+            continue
+        due_in = days_until_due(invoice, today)
+        if not 0 <= due_in <= window_days:
+            continue
+
+        buyer_id = invoice.get("buyer_id")
+        reasons = [f"due in {due_in} day(s)"]
+        triggered = 0
+
+        score_entry = scores_by_buyer.get(buyer_id)
+        if (score_entry and score_entry.get("confidence") != "low"
+                and int(score_entry["score"]) < poor_below):
+            triggered += 1
+            reasons.append(f"buyer score {score_entry['score']} (poor)")
+
+        settled, broken = _settled_promise_counts(promises, buyer_id)
+        if settled >= min_settled and broken / settled >= broken_ratio_threshold:
+            triggered += 1
+            reasons.append(f"broke {broken} of last {settled} promises")
+
+        prior_overdue = _prior_overdue_count(invoice, by_buyer.get(buyer_id, []), today)
+        if prior_overdue >= prior_overdue_min:
+            triggered += 1
+            reasons.append(f"{prior_overdue} prior invoices went overdue")
+
+        if triggered < watch_from:
+            continue
+
+        warnings.append({
+            "invoice_id": invoice_id,
+            "buyer_id": buyer_id,
+            "outstanding_paise": outstanding_paise(invoice),
+            "days_until_due": due_in,
+            "statutory_due_date": statutory_due_date(invoice).isoformat(),
+            "risk_band": "high" if triggered >= high_from else "watch",
+            "signals_triggered": triggered,
+            "reasons": reasons,
+        })
+
+    warnings.sort(key=lambda w: (-w["signals_triggered"], -w["outstanding_paise"]))
+    return warnings
 
 
 def main() -> int:

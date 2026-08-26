@@ -164,6 +164,34 @@ validation:
   # be later than today at all."
   future_issue_date_grace_days: 0
 
+# --- Early warning (engine/watchdog.py early_warnings()) -------------------
+# Rule-based only -- no probability, no ML, no invented signal. Surfaces an
+# invoice APPROACHING its statutory due date when signals the agent already
+# computes elsewhere (buyer score, promise history, prior overdue pattern)
+# look bad. Never sends a message and never states a legal fact: nothing is
+# legally due yet on any invoice this looks at (CLAUDE.md non-negotiable #3,
+# and the Option A decision: surfacing only, for a human to see).
+early_warning:
+  # An invoice more than this many days from its statutory due date is not
+  # even considered -- not enough time pressure yet to act on.
+  window_days: 14
+  # A single bad data point is never evidence -- score.py's own philosophy
+  # ("two invoices of history is not evidence") applies here too. Every
+  # category below needs a genuine pattern, not one incident, to trigger.
+  promise_reliability:
+    min_settled: 2                 # need at least this many kept+broken promises
+    broken_ratio_threshold: 0.5    # broken / settled at or above this triggers
+  prior_overdue:
+    min_count: 2   # this many of the buyer's OTHER invoices having gone
+                    # overdue (now, or historically paid late) triggers it
+  # How many of the three categories (score, promise reliability, prior
+  # overdue) must trigger before a warning is surfaced at all, and before it
+  # is "high" rather than "watch". Requiring at least 2 of 3 also guarantees
+  # every surfaced warning carries at least two plain-English reasons.
+  bands:
+    watch_from_signals: 2
+    high_from_signals: 3
+
 # --- Hard stopping rules (enforced in code, never by the LLM) -------------
 stop_rules:
   max_per_rung: 3

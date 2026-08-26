@@ -89,7 +89,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] E2 - Tier 2 edge cases: invoice/input validation
 - [x] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
 - [x] E4 - TC-141 end-to-end scenario fixture
-- [ ] W1 - Early warning (pre-overdue risk surfacing)
+- [x] W1 - Early warning (pre-overdue risk surfacing)
 - [ ] W2 - Trader-level panel + promise reliability
 - [ ] W3 - Buyer-level message consolidation
 - [ ] W4 - Re-run experiment, regenerate report with new numbers
@@ -97,17 +97,15 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- E4 done: `python sim/run_sim.py --scenario tc141` runs docs/edge_cases.md
-  TC-141 end to end through the real pipeline (sim/scenario_tc141.py) --
-  scripted buyer replies/payments feed the same engine.promises/brain/writer/
-  channels calls run_agent() uses, not a special demo path. Tests in
-  tests/test_scenario_tc141.py.
-- Day 49's reply ("...Goods mein bhi thoda issue hai") is classified as a
-  promise, not a dispute -- a deliberate, user-approved choice (not TC-032's
-  crisp "damaged" claim, and it doesn't trip promises.py's _DISPUTE_WORDS
-  list either, a disclosed real gap distinct from TC-032/TC-092's own
-  already-tested triggered case). Revisit if this scenario's story needs to
-  change.
+- W1 done: engine.watchdog.early_warnings() -- rule-based, Option A
+  (surfacing only, never a pre-due message; user chose this over a rung-0
+  courtesy contact). Needs 2 of 3 categories (poor score, majority-broken
+  promises, prior-overdue pattern) to trigger -- one bad signal alone never
+  surfaces. Thresholds in config/rules.yaml early_warning. Wired into
+  main.py (new pipeline stage between score and law), sim/run_sim.py (logs
+  one early_warning_raised audit entry per invoice, first day it enters the
+  window), report/build_report.py + report.html.j2 (new EARLY WARNING
+  section, reads the audit trail like the trip-wire section does).
 - Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
   constants.py bans "Samadhaan" (and other statutory names/numbers) as a
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
@@ -115,4 +113,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
-- 674 tests passing (pytest -q).
+- 680 tests passing (pytest -q).

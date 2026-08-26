@@ -35,6 +35,7 @@ class Context:
     queue: list[dict[str, Any]]
     scores: list[dict[str, Any]]
     positions: list[dict[str, Any]]
+    early_warnings: list[dict[str, Any]] = field(default_factory=list)
     invalid_invoices: dict[str, str] = field(default_factory=dict)
     actions: list[Any] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
@@ -96,6 +97,37 @@ def stage_score(context: Context) -> str:
         f"{len(context.scores)} buyers scored, worst {worst['buyer_id']} at "
         f"{worst['score']}/100, {low} on low confidence"
     )
+
+
+def stage_early_warning(context: Context) -> str:
+    """Invoices approaching their due date whose already-known signals look
+    bad -- surfacing only, never a message (see CLAUDE.md's early-warning
+    decision: Option A).
+    """
+    scores_by_buyer = {item["buyer_id"]: item for item in context.scores}
+    context.early_warnings = watchdog.early_warnings(
+        context.invoices, context.promises, scores_by_buyer, context.today,
+    )
+    high = sum(1 for w in context.early_warnings if w["risk_band"] == "high")
+    watch = len(context.early_warnings) - high
+    window = watchdog.rules()["early_warning"]["window_days"]
+    return f"{len(context.early_warnings)} flagged ({high} high, {watch} watch), within {window}d of due"
+
+
+def print_early_warnings(context: Context, limit: int = 10) -> None:
+    """One line per early warning, with the reasons -- this is the whole
+    point: a human reading it should believe it, not just trust it."""
+    print()
+    print(f"  {'invoice':<16}{'buyer':<9}{'band':<7}{'due in':>7}{'outstanding':>14}  reasons")
+    for warning in context.early_warnings[:limit]:
+        print(
+            f"  {warning['invoice_id']:<16}{warning['buyer_id']:<9}{warning['risk_band']:<7}"
+            f"{warning['days_until_due']:>6}d"
+            f"{format_inr(warning['outstanding_paise'], 'Rs '):>14}  "
+            + "; ".join(warning["reasons"])
+        )
+    if len(context.early_warnings) > limit:
+        print(f"  ... and {len(context.early_warnings) - limit} more")
 
 
 def stage_law(context: Context) -> str:
@@ -286,6 +318,8 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("data factory", "load or build the synthetic world", stage_data),
     Stage("watchdog", "find the invoices that are overdue today", stage_watchdog),
     Stage("score engine", "score each buyer from their payment history", stage_score),
+    Stage("early warning", "flag invoices approaching due date with bad signals",
+          stage_early_warning),
     Stage("law engine", "statutory due date, penal interest, buyer tax exposure", stage_law),
     Stage("brain", "pick one escalation rung, or stop", stage_brain),
     Stage("message writer", "draft the message for the chosen rung", stage_writer),
@@ -311,6 +345,8 @@ def run(seed: int, dry_run: bool = False, send_email: bool = False,
     for number, stage in enumerate(PIPELINE, start=1):
         print(f"step {number}: {stage.name} -- {stage.what}")
         print(f"  {stage.run(context)}")
+        if stage.name == "early warning" and context.early_warnings:
+            print_early_warnings(context)
         if stage.name == "law engine" and context.positions:
             print_legal_detail(context)
         if stage.name == "brain" and context.actions:

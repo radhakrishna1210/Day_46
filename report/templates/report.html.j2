@@ -173,6 +173,41 @@
     </tbody>
   </table>
 
+  <h2>Early warning -- invoices flagged before they went overdue</h2>
+  <p class="reasons">
+    Rule-based, surfacing only -- no message is ever sent and no legal fact is
+    ever stated here, because nothing on this list is legally due yet. An
+    invoice is flagged only once at least two of three signals the agent
+    already computes look bad: a poor buyer score, a pattern of broken
+    promises, or a pattern of that buyer's other invoices going overdue. A
+    band, not a probability -- there is no ground truth to validate a
+    percentage against.
+  </p>
+  {% if early_warnings %}
+  <table class="exceptions">
+    <thead>
+      <tr>
+        <th>Invoice</th><th>Buyer</th><th>Band</th>
+        <th class="num">Due in</th><th class="num">Outstanding</th><th>Reasons</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in early_warnings %}
+      <tr>
+        <td>{{ row.invoice_id }}</td>
+        <td>{{ row.buyer_id }}</td>
+        <td><span class="badge {{ 'disputed' if row.risk_band == 'high' else 'partially_paid' }}">{{ row.risk_band }}</span></td>
+        <td class="num">{{ row.due_in }}d</td>
+        <td class="num">{{ row.outstanding }}</td>
+        <td class="reason">{{ row.reasons }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No invoice in this run's window triggered an early warning.</p>
+  {% endif %}
+
   <h2>Exceptions -- what the agent did NOT recover, and why</h2>
   {% if exceptions %}
   <table class="exceptions">

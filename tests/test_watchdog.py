@@ -7,11 +7,14 @@ money left on the table.
 
 from __future__ import annotations
 
+import copy
+import re
 from datetime import date
 
 import pytest
 
 from engine import watchdog
+from engine.config import legal, rules
 
 TODAY = date(2026, 8, 24)
 
@@ -158,3 +161,81 @@ def test_due_promises_returns_only_the_broken_ones() -> None:
         promise("2026-07-01", status="kept"),
     ]
     assert [p["promised_date"] for p in watchdog.due_promises(promises, TODAY)] == ["2026-08-01"]
+
+
+# --- early warning ----------------------------------------------------------
+# TODAY (2026-08-24) + 9 days == 2026-09-02; on 45-day terms that lands on an
+# acceptance date of 2026-07-19 -- shared by every "due in 9 days" fixture
+# below so the arithmetic only has to be checked once.
+
+def _bad_signal_world() -> tuple[list[dict], list[dict], dict]:
+    """One buyer (BUY-01) with all three early-warning categories triggered."""
+    target = invoice(invoice_id="INV-TARGET", acceptance="2026-07-19", agreed_days=45)
+    prior_1 = invoice(invoice_id="INV-PRIOR-1", acceptance="2026-01-01")   # long overdue
+    prior_2 = invoice(invoice_id="INV-PRIOR-2", acceptance="2026-02-01")   # long overdue
+    promises = (
+        [{"buyer_id": "BUY-01", "status": "broken"}] * 3
+        + [{"buyer_id": "BUY-01", "status": "kept"}]
+    )
+    scores = {"BUY-01": {"score": 32, "confidence": "medium"}}
+    return [target, prior_1, prior_2], promises, scores
+
+
+def test_a_bad_signal_buyers_not_yet_due_invoice_is_flagged() -> None:
+    invoices, promises, scores = _bad_signal_world()
+    warnings = watchdog.early_warnings(invoices, promises, scores, TODAY)
+    assert [w["invoice_id"] for w in warnings] == ["INV-TARGET"]
+    warning = warnings[0]
+    assert warning["days_until_due"] == 9
+    assert warning["risk_band"] == "high"
+    assert warning["signals_triggered"] == 3
+    assert len(warning["reasons"]) >= 2
+    assert any("32" in reason for reason in warning["reasons"])
+    assert any("broke 3 of last 4 promises" in reason for reason in warning["reasons"])
+    assert any("2 prior invoices went overdue" in reason for reason in warning["reasons"])
+
+
+def test_a_good_signal_buyers_not_yet_due_invoice_is_not_flagged() -> None:
+    target = {**invoice(invoice_id="INV-GOOD", acceptance="2026-07-19", agreed_days=45),
+              "buyer_id": "BUY-02"}
+    scores = {"BUY-02": {"score": 85, "confidence": "high"}}
+    warnings = watchdog.early_warnings([target], [], scores, TODAY)
+    assert warnings == []
+
+
+def test_one_bad_signal_alone_is_not_enough_to_flag() -> None:
+    """Consistent with score.py: a single data point is never evidence."""
+    target = invoice(invoice_id="INV-TARGET", acceptance="2026-07-19", agreed_days=45)
+    scores = {"BUY-01": {"score": 32, "confidence": "medium"}}
+    warnings = watchdog.early_warnings([target], [], scores, TODAY)
+    assert warnings == []
+
+
+def test_window_days_is_read_from_config_not_hardcoded() -> None:
+    invoices, promises, scores = _bad_signal_world()
+    narrow = copy.deepcopy(rules())
+    narrow["early_warning"]["window_days"] = 3          # the invoice is 9 days out
+    assert watchdog.early_warnings(invoices, promises, scores, TODAY, config=narrow) == []
+    default_result = watchdog.early_warnings(invoices, promises, scores, TODAY)
+    assert len(default_result) == 1
+
+
+def test_band_signal_thresholds_are_read_from_config_not_hardcoded() -> None:
+    invoices, promises, scores = _bad_signal_world()
+    stricter = copy.deepcopy(rules())
+    stricter["early_warning"]["bands"]["watch_from_signals"] = 4   # only 3 categories exist
+    assert watchdog.early_warnings(invoices, promises, scores, TODAY, config=stricter) == []
+
+
+def test_early_warning_never_states_a_legal_fact_or_interest_figure() -> None:
+    """Nothing here is legally due yet -- see CLAUDE.md non-negotiable #3."""
+    invoices, promises, scores = _bad_signal_world()
+    warnings = watchdog.early_warnings(invoices, promises, scores, TODAY)
+    citation = re.compile(legal()["citation_pattern"], re.IGNORECASE)
+
+    forbidden_keys = {"interest_paise", "tax_exposure_paise", "facts", "allowed_facts",
+                       "available_rung", "interest", "tax"}
+    for warning in warnings:
+        assert not forbidden_keys & set(warning.keys())
+        for reason in warning["reasons"]:
+            assert not citation.search(reason), f"legal citation leaked into: {reason!r}"

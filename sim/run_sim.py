@@ -454,6 +454,10 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     messages_sent = 0
     narrative: list[str] = []
     last_day = day0
+    # Logged once per invoice, the first day it is seen -- an invoice sitting
+    # inside the window every day of a long run should not spam one audit
+    # entry per day for the same warning.
+    warned: set[str] = set()
 
     audit.clear()
     audit.enable()
@@ -468,6 +472,19 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             queue = watchdog.overdue_invoices(invoices, today)
             grouped = store.invoices_by_buyer(invoices)
             scores = {s["buyer_id"]: s for s in score_engine.score_all(buyers, grouped, today)}
+
+            all_promises = [p for plist in promises_by_invoice.values() for p in plist]
+            for warning in watchdog.early_warnings(invoices, all_promises, scores, today):
+                if warning["invoice_id"] in warned:
+                    continue
+                warned.add(warning["invoice_id"])
+                audit.record(
+                    invoice_id=warning["invoice_id"], action="early_warning_raised",
+                    reason=(f"{warning['risk_band']} risk, {warning['signals_triggered']} "
+                            f"signal(s): {'; '.join(warning['reasons'])}"),
+                    source="rule", today=today, buyer_id=warning["buyer_id"],
+                    actor="watchdog", detail=warning,
+                )
 
             for invoice in queue:
                 inv_id = invoice["invoice_id"]

@@ -233,6 +233,28 @@ def _trip_wire_rows() -> list[dict[str, Any]]:
     return rows
 
 
+#: engine/watchdog.py early_warnings() -- surfacing only, never a message
+#: (see CLAUDE.md's early-warning decision, Option A). Logged once per
+#: invoice by sim/run_sim.py the first day it entered the window, so this
+#: reads the persisted trail exactly like _trip_wire_rows() does above.
+def _early_warning_rows() -> list[dict[str, Any]]:
+    rows = []
+    for entry in audit.entries():
+        if entry.get("action") != "early_warning_raised":
+            continue
+        detail = entry.get("detail") or {}
+        rows.append({
+            "invoice_id": entry.get("invoice_id"),
+            "buyer_id": entry.get("buyer_id"),
+            "risk_band": detail.get("risk_band", "watch"),
+            "due_in": detail.get("days_until_due"),
+            "outstanding": _money(detail.get("outstanding_paise", 0)),
+            "reasons": "; ".join(detail.get("reasons") or []),
+        })
+    rows.sort(key=lambda r: (r["risk_band"] != "high", r["invoice_id"] or ""))
+    return rows
+
+
 def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
     """The credibility table: did the agent win on more than one world?
 
@@ -273,6 +295,7 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "per_rung": _per_rung_rows(results),
         "per_attempt": _per_attempt_rows(results),
         "exceptions": _exception_rows(results),
+        "early_warnings": _early_warning_rows(),
         "trip_wires": _trip_wire_rows(),
         "handoff_reasons": sorted(handoff_reasons.items()),
         "stop_reasons": sorted(stop_reasons.items()),
