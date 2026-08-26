@@ -216,6 +216,31 @@ def test_build_report_handles_a_run_with_nothing_unrecovered(results_payload, tm
     assert "Every invoice was recovered" in html
 
 
+def test_build_report_shows_a_clean_empty_state_for_the_buyer_panel(results_payload, tmp_path) -> None:
+    """W2's empty state, same pattern as the exceptions test above: zero
+    buyers with an outstanding invoice must render an honest empty message,
+    not a broken template or a forced fixture standing in for a real run."""
+    payload = {**results_payload,
+              "agent": {**results_payload["agent"], "buyer_panel": []}}
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "No buyer currently has an outstanding balance" in html
+
+
+def test_build_report_renders_a_real_buyer_panel(results_payload, tmp_path) -> None:
+    """The contrast case: seed 42's own agent run does leave buyers with an
+    outstanding invoice, so the panel actually has rows to show, not just an
+    empty state that would pass trivially either way."""
+    assert results_payload["agent"]["buyer_panel"], "seed 42 should leave at least one buyer outstanding"
+    out = tmp_path / "report.html"
+    build_report.build(results_payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Buyer panel" in html
+    first = results_payload["agent"]["buyer_panel"][0]
+    assert (first["name"] or first["buyer_id"]) in html
+
+
 def test_load_results_reports_a_clear_error_when_missing(tmp_path) -> None:
     with pytest.raises(build_report.ResultsMissing):
         build_report.load_results(tmp_path / "nope.json")

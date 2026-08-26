@@ -52,6 +52,7 @@ if __package__ in (None, ""):
 
 from data import generate, store
 from engine import audit, brain, channels, law, llm, promises, validate, watchdog, writer
+from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
 from engine.money import enable_unicode_output, format_inr
 from sim import personas
@@ -600,6 +601,19 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         **{inv_id: entry["reason"] for inv_id, entry in last_action_by_invoice.items()},
     }
     last_rung_of = {inv_id: entry["rung"] for inv_id, entry in last_action_by_invoice.items()}
+
+    # Report-only rollup, computed once at the very end from the same final
+    # state everything above already settled on -- see engine/buyer_panel.py's
+    # own docstring, and CLAUDE.md's W2 note: nothing above this line (every
+    # brain.decide() call in the day loop already happened) ever sees this,
+    # so it has zero influence on what the agent did this run.
+    grouped_final = store.invoices_by_buyer(invoices)
+    scores_final = {s["buyer_id"]: s for s in score_engine.score_all(buyers, grouped_final, last_day)}
+    panel = buyer_panel_engine.buyer_panel(
+        buyers, grouped_final, promises_by_invoice, history, scores_final,
+        last_action_by_invoice, last_day, invalid_ids=invalid_ids,
+    )
+
     return {
         "mode": "agent", "seed": seed, "days": days,
         "final": _totals(invoices, last_day, invalid_ids),
@@ -611,6 +625,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         "per_rung": per_rung_effectiveness(history, invoices_by_id),
         "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of, last_rung_of,
                                   last_day, invalid_ids),
+        "buyer_panel": panel,
         "narrative": narrative,
     }
 

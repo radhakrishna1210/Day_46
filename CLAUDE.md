@@ -90,40 +90,37 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] E3 - Tier 3 edge cases: regression tests + edge_cases.md status markup
 - [x] E4 - TC-141 end-to-end scenario fixture
 - [x] W1 - Early warning (pre-overdue risk surfacing)
-- [ ] W2 - Trader-level panel + promise reliability
+- [x] W2 - Buyer-level panel + promise reliability
 - [ ] W3 - Buyer-level message consolidation
 - [ ] W4 - Re-run experiment, regenerate report with new numbers
 - [ ] 10 - README + ARCHITECTURE sync + hygiene
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- W1 done: engine.watchdog.early_warnings() -- rule-based, Option A
-  (surfacing only, never a pre-due message; user chose this over a rung-0
-  courtesy contact). risk_band is a REAL three-value low/watch/high,
-  computed INSIDE early_warnings() itself for every invoice in the window
-  (2 of 3 categories -- poor score, majority-broken promises, prior-overdue
-  pattern -- is the low->watch boundary, 3 of 3 is watch->high).
-  early_warnings() decides nothing about what gets shown; filtering out
-  "low" happens purely at the CALLERS -- main.py's printout, and
-  sim/run_sim.py's _notable_early_warnings()/_raise_early_warnings() before
-  an entry ever reaches audit.record(). report/build_report.py does no
-  filtering of its own at all -- it is a pure read of whatever the trail
-  already has.
-  Honest history, not smoothed over: the original ship (commit 64b73b8) had
-  a real gap -- risk_band only ever produced "watch"/"high", everything else
-  silently dropped via a bare `continue`, despite a config comment I wrote
-  at the time claiming "low" was "computed but not surfaced" (it was
-  neither computed nor surfaced). The user caught this by asking me to
-  point at the actual band-assignment code rather than accept my summary;
-  fixed in a101bc2. The user then separately pointed out that the seed-42
-  before/after diff only proved no CHANGE on that one dataset's own
-  personas, not a structural guarantee that "low" can never leak out -- no
-  such test existed. 00136dd extracted the caller-side filter into two
-  named, directly-testable functions and added
-  tests/test_early_warning_wiring.py, which constructs a low-band invoice
-  directly (not seed-dependent) and asserts zero audit entries and zero
-  report rows; confirmed the guard is load-bearing by temporarily disabling
-  it (2 of 3 new tests failed, as expected), then restored.
+- W1 done: engine.watchdog.early_warnings() computes a real low/watch/high
+  risk_band for every invoice in the window; low is filtered out purely at
+  the CALLERS (main.py, sim/run_sim.py) before audit.record(), never inside
+  early_warnings() itself. tests/test_early_warning_wiring.py proves "low"
+  structurally can't leak into the audit trail or report, independent of
+  seed-42's own data.
+- W2 done: engine/buyer_panel.py -- one buyer-level rollup, called ONCE at
+  the end of sim/run_sim.py's run_agent() (not baseline, not inside the day
+  loop), reusing score.py's score/confidence/trend unmodified. Confirmed
+  surfacing-only, zero decision influence: nothing in the day loop (every
+  brain.decide() call already happened before buyer_panel() runs) or
+  anywhere else reads its output this phase -- grepped, only sim/run_sim.py
+  imports it. Promise "avg days late" is NOT broken_on - promised_date (that
+  gap is a constant ~1 day, an artifact of the daily sweep() cadence, not a
+  buyer signal) -- it's paid_date - promised_date for broken promises whose
+  invoice was eventually paid; unresolved ones count toward `broken` but not
+  the average, and say so ("no resolved-late data") rather than a misleading
+  number. "Response rate" (replies of any non-silent outcome / messages
+  sent) was grepped for name collisions first -- nothing in engine/,
+  report/ or sim/ computed anything response-rate-like before this; only
+  docs/winning_layer.md's aspirational prose used the phrase, no formula.
+  Seed-42 check: results.json's ONLY diff before/after is the added
+  buyer_panel key (confirmed via a stripped-key structural diff); the
+  on-disk audit trail is byte-identical, same SHA-256, both runs.
 - Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
   constants.py bans "Samadhaan" (and other statutory names/numbers) as a
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
@@ -131,4 +128,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   engine.config.legal() at runtime instead.
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
-- 680 tests passing (pytest -q).
+- 706 tests passing (pytest -q).

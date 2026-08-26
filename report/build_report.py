@@ -255,6 +255,54 @@ def _early_warning_rows() -> list[dict[str, Any]]:
     return rows
 
 
+#: engine/buyer_panel.py returns `None` for a figure the data cannot honestly
+#: support (no promise history, no messages sent yet, a broken promise with
+#: no resolving payment) -- these are the phrases shown instead of a bare
+#: "0%" or "n/a" that would read as a real, if unremarkable, measurement.
+_NO_PROMISE_HISTORY = "no promise history"
+_NO_RESOLVED_LATE_DATA = "no resolved-late data"
+_NOT_YET_CONTACTED = "not yet contacted"
+_NONE_OVERDUE_YET = "none overdue yet"
+
+
+def _buyer_panel_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
+    """Format engine.buyer_panel.buyer_panel()'s output for the template.
+
+    Pure formatting, like every other _*_rows function in this module --
+    results["agent"]["buyer_panel"] is computed once, at the end of
+    sim.run_sim.run_agent(), and nothing here recalculates any of it.
+    """
+    rows = []
+    for entry in results.get("agent", {}).get("buyer_panel") or []:
+        score = entry.get("score") or {}
+        promises, response, state = entry["promises"], entry["response"], entry["recovery_state"]
+        rows.append({
+            "buyer_id": entry["buyer_id"],
+            "name": entry.get("name") or entry["buyer_id"],
+            "outstanding": _money(entry["outstanding_paise"]),
+            "overdue_count": entry["overdue_count"],
+            "oldest_days_overdue": (f"{entry['oldest_days_overdue']}d"
+                                    if entry["oldest_days_overdue"] is not None else _NONE_OVERDUE_YET),
+            "score": score.get("score"),
+            "confidence": score.get("confidence"),
+            "trend": (score.get("trend") or {}).get("direction", "unknown"),
+            "promise_made": promises["made"],
+            "promise_in_flight": promises["in_flight"],
+            "promise_reliability": (f"{promises['reliability_pct']}%"
+                                    if promises["reliability_pct"] is not None else _NO_PROMISE_HISTORY),
+            "avg_days_late": (f"{promises['avg_days_late']}d" if promises["avg_days_late"] is not None
+                              else (_NO_RESOLVED_LATE_DATA if promises["broken"] else None)),
+            "messages_sent": response["messages_sent"],
+            "response_rate": (f"{response['response_rate_pct']}%"
+                              if response["response_rate_pct"] is not None else _NOT_YET_CONTACTED),
+            "in_ladder": state["in_ladder"],
+            "handed_off": state["handed_off"],
+            "stopped": state["stopped"],
+            "not_yet_due": state["not_yet_due"],
+        })
+    return rows
+
+
 def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
     """The credibility table: did the agent win on more than one world?
 
@@ -295,6 +343,7 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "per_rung": _per_rung_rows(results),
         "per_attempt": _per_attempt_rows(results),
         "exceptions": _exception_rows(results),
+        "buyer_panel": _buyer_panel_rows(results),
         "early_warnings": _early_warning_rows(),
         "trip_wires": _trip_wire_rows(),
         "handoff_reasons": sorted(handoff_reasons.items()),

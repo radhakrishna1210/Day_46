@@ -88,6 +88,55 @@
   <p class="reasons">{{ days_to_pay_note }}</p>
   {% endif %}
 
+  <h2>Buyer panel -- who needs attention right now</h2>
+  <p class="reasons">
+    Every buyer who currently has at least one outstanding invoice, worst
+    first by total outstanding. Score, confidence and trend are
+    engine/score.py's own figures, unchanged; promise reliability counts only
+    settled (kept or broken) promises, never one still in flight; response
+    rate is replies of any kind (payment, promise, dispute, partial payment)
+    against messages sent. A figure the data cannot honestly support says so
+    instead of printing a number.
+  </p>
+  {% if buyer_panel %}
+  <table class="exceptions">
+    <thead>
+      <tr>
+        <th>Buyer</th><th class="num">Outstanding</th><th class="num">Overdue</th>
+        <th class="num">Oldest</th><th class="num">Score</th><th>Confidence</th><th>Trend</th>
+        <th>Promise reliability</th><th class="num">Made</th><th class="num">In flight</th>
+        <th>Avg days late</th><th class="num">Sent</th><th>Response rate</th>
+        <th>Recovery state</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in buyer_panel %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td class="num">{{ row.outstanding }}</td>
+        <td class="num">{{ row.overdue_count }}</td>
+        <td class="num">{{ row.oldest_days_overdue }}</td>
+        <td class="num">{{ row.score if row.score is not none else "n/a" }}</td>
+        <td>{{ row.confidence or "n/a" }}</td>
+        <td>{{ row.trend }}</td>
+        <td>{{ row.promise_reliability }}</td>
+        <td class="num">{{ row.promise_made }}</td>
+        <td class="num">{{ row.promise_in_flight }}</td>
+        <td>{{ row.avg_days_late or "-" }}</td>
+        <td class="num">{{ row.messages_sent }}</td>
+        <td>{{ row.response_rate }}</td>
+        <td class="reasons">
+          {{ row.in_ladder }} in ladder, {{ row.handed_off }} handed off,
+          {{ row.stopped }} stopped{% if row.not_yet_due %}, {{ row.not_yet_due }} not yet due{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No buyer currently has an outstanding balance in this run.</p>
+  {% endif %}
+
   <h2>Is this just one lucky seed?</h2>
   {% if multi_seed %}
   <table>
