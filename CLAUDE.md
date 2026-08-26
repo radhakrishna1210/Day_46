@@ -99,22 +99,31 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - W1 done: engine.watchdog.early_warnings() -- rule-based, Option A
   (surfacing only, never a pre-due message; user chose this over a rung-0
-  courtesy contact). Returns a REAL risk_band (low/watch/high) for every
-  invoice in the window -- an earlier version only ever produced
-  "watch"/"high" and silently dropped everything else via continue, which
-  the user caught and made me fix (commit a101bc2). 2 of 3 categories (poor
-  score, majority-broken promises, prior-overdue pattern) is the low->watch
-  boundary, 3 of 3 is watch->high; low-band entries are real return values,
-  just filtered out (risk_band != "low") by main.py's printout and
-  sim/run_sim.py's audit logging so demo-facing output doesn't balloon to
-  every near-due invoice. Thresholds in config/rules.yaml early_warning.
-  Wired into main.py (new pipeline stage between score and law),
-  sim/run_sim.py (logs one early_warning_raised audit entry per invoice,
-  first day it crosses into watch/high), report/build_report.py +
-  report.html.j2 (new EARLY WARNING section, reads the audit trail like the
-  trip-wire section does). Every live-path change here was verified with an
-  explicit seed-42 before/after diff of results.json + audit_log.jsonl, not
-  just a test-pass claim.
+  courtesy contact). risk_band is a REAL three-value low/watch/high,
+  computed INSIDE early_warnings() itself for every invoice in the window
+  (2 of 3 categories -- poor score, majority-broken promises, prior-overdue
+  pattern -- is the low->watch boundary, 3 of 3 is watch->high).
+  early_warnings() decides nothing about what gets shown; filtering out
+  "low" happens purely at the CALLERS -- main.py's printout, and
+  sim/run_sim.py's _notable_early_warnings()/_raise_early_warnings() before
+  an entry ever reaches audit.record(). report/build_report.py does no
+  filtering of its own at all -- it is a pure read of whatever the trail
+  already has.
+  Honest history, not smoothed over: the original ship (commit 64b73b8) had
+  a real gap -- risk_band only ever produced "watch"/"high", everything else
+  silently dropped via a bare `continue`, despite a config comment I wrote
+  at the time claiming "low" was "computed but not surfaced" (it was
+  neither computed nor surfaced). The user caught this by asking me to
+  point at the actual band-assignment code rather than accept my summary;
+  fixed in a101bc2. The user then separately pointed out that the seed-42
+  before/after diff only proved no CHANGE on that one dataset's own
+  personas, not a structural guarantee that "low" can never leak out -- no
+  such test existed. 00136dd extracted the caller-side filter into two
+  named, directly-testable functions and added
+  tests/test_early_warning_wiring.py, which constructs a low-band invoice
+  directly (not seed-dependent) and asserts zero audit entries and zero
+  report rows; confirmed the guard is load-bearing by temporarily disabling
+  it (2 of 3 new tests failed, as expected), then restored.
 - Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
   constants.py bans "Samadhaan" (and other statutory names/numbers) as a
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
