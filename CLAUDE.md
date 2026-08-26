@@ -187,3 +187,4 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
 - LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
   despite the Architecture rules section above being unrevised.
 - 760 tests passing (pytest -q).
+- Gemini key rotated 2026-08-27, old key revoked — resolved, see memory.
