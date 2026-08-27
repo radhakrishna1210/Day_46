@@ -28,9 +28,9 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 59 |
+| TESTED | 60 |
 | HANDLED | 44 |
-| OUT OF SCOPE | 38 |
+| OUT OF SCOPE | 37 |
 | **Total** | **141** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
@@ -54,6 +54,11 @@ E4 (this pass) moved TC-141 from OUT OF SCOPE to TESTED: `sim/scenario_tc141.py`
 runs its exact sequence end to end through the real pipeline, driven by
 `python sim/run_sim.py --scenario tc141`, with tests in
 `tests/test_scenario_tc141.py`.
+
+Phase 10 corrected TC-070, which had gone stale: it still described
+buyer-level consolidation as unbuilt after W3 (`engine/consolidate.py`)
+shipped it. Moved from OUT OF SCOPE to TESTED, citing
+`tests/test_consolidate.py`'s 10 tests.
 
 ---
 # 1. Promise and Payment-Date Cases
@@ -1132,13 +1137,20 @@ A dispute on one invoice does not necessarily describe every invoice belonging t
 
 ## TC-070 — Buyer Receives Many Messages on the Same Day
 
-**Status: OUT OF SCOPE** -- `engine/rungs.py` enforces the 3-per-rung/5-total stop rules keyed by `invoice_id` only -- no buyer-level message cap or consolidation exists. Planned as Winning Layer Enhancement 14 / Phase W3 (`docs/winning_layer.md`), explicitly unchecked in CLAUDE.md's current status.
+**Status: TESTED** -- `engine/consolidate.py` groups a day's SEND decisions for the same buyer into at most two envelopes (courtesy tier: rung <= 1, escalated tier: rung >= 2), never one email per invoice. Proven by `tests/test_consolidate.py` (10 tests): same-buyer-same-tier bundling, different buyers never bundled together, rung-1 and rung-2+ content never mixed in one envelope, a tier larger than `config/rules.yaml`'s `consolidation.max_invoices_per_message` splits into multiple bundles instead of one oversized draft, and a disputed invoice's HANDOFF action never enters a bundle.
 
 ### Scenario
 Five invoices for the same buyer become overdue simultaneously.
 
+### What Happens Now
+`engine.brain.decide()` is unchanged and still runs once per invoice -- consolidation only changes how many outbound envelopes carry those already-made per-invoice decisions. The buyer receives at most one courtesy-tier and one escalated-tier envelope that day, each listing every eligible invoice at that tier (up to the configured per-envelope cap), instead of up to five separate messages.
+
+### Known Remaining Gaps
+- No cap across multiple days -- only a single day's SEND decisions are grouped; a buyer contacted on consecutive days still gets one envelope per day, not a rolling window.
+- The consolidated message's subject line does not total the ₹ amount across bundled invoices (see README's Future Work).
+
 ### Why This Matters
-Invoice-level message limits may not prevent buyer-level communication overload.
+Invoice-level message limits alone don't prevent buyer-level communication overload -- this is why W3 exists.
 
 ---
 

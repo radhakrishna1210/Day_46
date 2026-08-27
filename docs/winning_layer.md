@@ -25,6 +25,57 @@ The recommended implementation priority is deliberately limited. The strongest v
 
 ---
 
+## Implementation Status (added Phase 10)
+
+This document was written before any Winning Layer work started, and reads
+end to end as a forward-looking plan. Four slices of it have since actually
+been built, under the project's own W1-W4 labels (see CLAUDE.md's Current
+status). **Those labels do not map 1:1 onto this document's own
+Enhancement/Phase numbering above** -- they were renamed and reordered
+during real implementation, not built in the order or shape originally
+planned here. The rest of this document -- everything not listed below --
+remains unbuilt.
+
+**CURRENTLY BUILT:**
+
+- **W1 -- Early Warning**: rule-based pre-overdue risk surfacing
+  (`engine/watchdog.py::early_warnings()`), a low/watch/high band on
+  invoices approaching their due date. Human-facing only (report/buyer
+  panel) -- no pre-due message is ever sent to a buyer.
+- **W2 -- Buyer/Trader-Level Panel + Promise Reliability**: a per-buyer
+  rollup (`engine/buyer_panel.py`) of outstanding amount, overdue count,
+  oldest overdue, score/confidence/trend, promise reliability %, response
+  rate, and recovery state.
+- **W3 -- Buyer-Level Message Consolidation**: `engine/consolidate.py`
+  groups a day's already-decided SEND actions by buyer into rung tiers, so
+  one buyer gets at most two envelopes/day instead of one per invoice.
+- **W4 -- Experiment Refresh**: re-ran the full 6-seed baseline-vs-agent
+  comparison at HEAD and added per-seed edge-case-count transparency to the
+  multi-seed report table.
+
+**FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 3,
+4, 6-12 (Dynamic Trader Financial Profile as originally scoped, Cash-Flow
+Intelligence, Payment Propensity Prediction, Next-Best Recovery Action
+beyond the existing rung ladder, Expected Recovery/Cost Intelligence,
+Recovery Explanation beyond the existing audit trail, Recovery Strategy
+Simulation, Closed-Loop Learning), and the UI Screens 1-5. None of these
+have any code behind them -- no cash-flow trend, no payment-propensity
+score, no dashboard, no what-if simulator. They require either real
+transaction/payment data this standalone project doesn't have, or are
+explicitly out of the 12-day build's scope (dashboards, ML models -- see
+CLAUDE.md's scope guard).
+
+**Reconciliation -- actual W-label vs. this document's original plan:**
+
+| Actually built | Closest match in this document's original numbering |
+|---|---|
+| W1 Early Warning (low/watch/high band, pre-due-date) | A narrower slice of Enhancement 2 (Early Payment Risk Prediction) -- no probability score, just a fixed band |
+| W2 Buyer panel + promise reliability | Enhancement 5 (Promise Reliability) + Enhancement 13 (Trader-Level Recovery Intelligence) |
+| W3 Buyer-level message consolidation | Enhancement 14 / "Buyer-Level Communication Awareness" -- this document's own lowest-priority item (see Section 27, Priority Ranking, below) |
+| W4 Experiment refresh + edge-case transparency | Not one of this document's original Enhancements -- an experiment-honesty hardening pass, not a new product capability |
+
+---
+
 # 1. Starting Point After Day 12
 
 The original MVP should already contain the following working flow:

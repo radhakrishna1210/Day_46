@@ -29,8 +29,8 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
   ambiguous judgment calls (log the reasoning to audit).
 - All LLM calls go through engine/llm.py ONLY. It reads LLM_MODE from .env:
   "mock" = canned deterministic responses (default for dev and for judges
-  without a key), "live" = anthropic SDK using ANTHROPIC_API_KEY from .env.
-  Never scatter API calls across modules.
+  without a key), "live" = the google-genai SDK using GEMINI_API_KEY from
+  .env. Never scatter API calls across modules.
 - All tunables live in config/rules.yaml (ladder timings, score weights,
   stop limits) and config/legal.yaml (15/45 day rule, RBI bank rate,
   tax rate, marked "as of Aug 2026"). Code reads config; code never
@@ -59,7 +59,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - Build report:             python report/build_report.py
 
 ## Git & secrets
-- .env holds ANTHROPIC_API_KEY, TEST_INBOX_EMAIL, SMTP creds. .env is in
+- .env holds GEMINI_API_KEY, TEST_INBOX_EMAIL, SMTP creds. .env is in
   .gitignore. Never commit keys; check `git diff` before every commit.
 - Do NOT export ANTHROPIC_API_KEY globally in the shell — a global env var
   makes Claude Code bill the API instead of the Pro plan. Keep it in .env,
@@ -93,7 +93,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] W2 - Buyer-level panel + promise reliability
 - [x] W3 - Buyer-level message consolidation
 - [x] W4 - Re-run experiment, regenerate report with new numbers
-- [ ] 10 - README + ARCHITECTURE sync + hygiene
+- [x] 10 - README + ARCHITECTURE sync + hygiene
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
@@ -184,7 +184,22 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   literal string constant anywhere outside config/legal.yaml, INCLUDING in
   narration/log text, not just message drafts -- pull such names via
   engine.config.legal() at runtime instead.
-- LLM provider is Gemini via engine/llm.py (LLM_MODE=live), not Anthropic,
-  despite the Architecture rules section above being unrevised.
-- 760 tests passing (pytest -q).
+- 759 tests passing (pytest -q).
 - Gemini key rotated 2026-08-27, old key revoked — resolved, see memory.
+- Phase 10 done: ARCHITECTURE.md, README.md, docs/edge_cases.md (TC-070
+  corrected: OUT OF SCOPE -> TESTED, citing tests/test_consolidate.py;
+  totals now 60/44/37/141), and docs/winning_layer.md (added a
+  built-vs-future status banner + a W-label reconciliation table, since its
+  own Enhancement/Phase numbering never matched the actual shipped W1-W4)
+  all synced to what's actually built -- no engine/sim/report logic
+  touched, no results re-run. Deleted the dead engine/law.py::
+  samadhaan_draft() stub (superseded by engine/samadhaan.py since Day 5,
+  zero production callers) and its one guard test,
+  tests/test_law.py::test_samadhaan_draft_is_not_built_yet -- 1 guard test
+  removed (pinned a now-dead stub, not functional coverage), 759 tests
+  passing. Fixed this file's own two remaining stale Anthropic/
+  ANTHROPIC_API_KEY references (Architecture rules, Git & secrets) --
+  Gemini/GEMINI_API_KEY was already correct everywhere else, including in
+  the actual .env.example. No secrets found in git history (checked full
+  .env history + sk-/AIzaSy pickaxe search; two old "sk-test" hits were
+  placeholder test fixtures from the pre-Gemini era, not real keys).

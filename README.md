@@ -8,67 +8,289 @@
 
 An AI agent that helps Indian MSMEs collect overdue B2B invoices. It watches
 invoices, scores the buyer from payment history, computes the supplier's real
-legal position under the MSMED Act, picks an escalation rung, writes the message
-(English or Hinglish), remembers every promise a buyer makes, and stops before
-it becomes spam. Every money-related action is written to an audit trail with
-the reason behind it.
+legal position under the MSMED Act, picks an escalation rung, writes the
+message (English or Hinglish), remembers every promise a buyer makes,
+consolidates a buyer's invoices into one envelope instead of five, and stops
+before it becomes spam. Every money-related action is written to an audit
+trail with the reason behind it.
 
-**Status: Day 1 of 12 -- scaffold only. No business logic yet.**
+**Status:** the original 12-day MVP, four rounds of edge-case hardening
+(E1-E4), and four post-MVP additions (W1-W4: early warning, buyer panel,
+buyer-level message consolidation, experiment refresh) are all done -- 759
+tests passing, agent beats baseline on rupees recovered on 6/6 tested seeds.
+Demo video and final submission polish are what's left (see
+[Honest scope](#honest-scope-built-vs-future-work) below).
 
-## How to run
+**At a glance:**
+- Recovers **₹22,98,757 more** than a fixed-reminder baseline bot on the
+  same seeded invoices (seed 42) -- and wins on rupees recovered in **6/6**
+  tested seeds.
+- Every money-related decision is **explainable and audit-logged** -- no
+  silent actions, no invented legal numbers.
+- **759 tests passing**; of 141 documented edge cases, 60 have a dedicated
+  test, the rest are HANDLED or explicitly OUT OF SCOPE -- never left vague.
+- Full numbers in [Results](#results); what's built vs. not in
+  [Honest scope](#honest-scope-built-vs-future-work).
 
-> Placeholder -- the three-command version lands on Day 10. Right now this runs
-> the pipeline skeleton, which announces each stage and does nothing.
+**Contents:** [The problem](#the-problem) -- [What it does](#what-it-does)
+-- [Quickstart](#quickstart) -- [Results](#results) --
+[Architecture](#architecture) -- [Early warning (W1)](#early-warning-w1) --
+[Buyer / trader view (W2)](#buyer--trader-view-w2) --
+[Buyer-level message consolidation (W3)](#buyer-level-message-consolidation-w3)
+-- [Scope (deliberate)](#scope-deliberate) -- [Edge cases](#edge-cases) --
+[Honest scope: built vs. future work](#honest-scope-built-vs-future-work) --
+[Where this goes next](#where-this-goes-next) --
+[Legal disclaimer](#legal-disclaimer)
+
+---
+
+## The problem
+
+- **73 days** -- average time an Indian MSME waits to get paid, against a
+  **45-day** legal ceiling under the MSMED Act.
+- **₹3.83 crore** -- what the average SME has stuck 360+ days
+  (Recordent's 2026 SME Receivables Report).
+- **82.8/100** -- Razorpay's own Fix My Itch data scores this as a problem
+  worth solving.
+
+Almost nobody realizes the law is heavily on the small supplier's side. This
+agent turns that law into automatic, polite, factual pressure -- and proves
+it recovers measurably more money than a fixed reminder bot, on the same
+seeded data.
+
+---
+
+## What it does
+
+1. **Explainable decisions** -- every money-related action carries a reason
+   and is written to an append-only audit trail (`audit/audit_log.jsonl`):
+   timestamp, invoice, action, reason, and whether a rule or the AI decided
+   it. No silent actions.
+2. **Strategy simulation** -- a baseline bot (3 fixed reminders, same
+   message for everyone) and this agent run over the same seeded invoices
+   and buyers, so the uplift is measured, not asserted.
+3. **Closed-loop learning** -- promise outcomes feed back into the buyer
+   score and the escalation ladder: a kept promise builds the score, a
+   broken one escalates the next message and references it by date.
+4. **Next-best-action selection** -- the Brain picks exactly one action per
+   invoice per day: send at a given rung, wait (a promise is active), hand
+   off to a human (dispute or final rung), or stop (opt-out or exhausted
+   attempts).
+
+---
+
+## Quickstart
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env          # defaults to LLM_MODE=mock; no API key needed
-python data/generate.py --seed 42   # required first: the dataset is generated, not committed
-python main.py --seed 42
+cp .env.example .env                          # LLM_MODE=mock by default; no API key needed
+python data/generate.py --seed 42              # generates buyers.json, invoices.json (gitignored)
+python sim/run_sim.py --compare --seed 42 --days 120   # baseline vs agent -> report/out/results.json
+python report/build_report.py                  # -> report/out/report.html
 pytest -q
 ```
 
-Run `python data/generate.py --seed 42` before `main.py`. `buyers.json` and
-`invoices.json` are gitignored, so a fresh clone has no dataset until you
-generate one. The same seed always rebuilds byte-identical files.
+Separately, `python main.py --seed 42` runs the live single-pass agent
+pipeline (watchdog -> score -> law -> brain -> writer -> channels ->
+promises) with a real audit trail, and `--send-email` sends a real message
+to your own test inbox. It does **not** run the baseline comparison or
+build the report -- that's what the two commands above are for.
 
-Inspect the pieces that are built:
+`LLM_MODE=mock` (the default) gives deterministic canned responses, so the
+project runs end to end on a fresh clone with no API key. `LLM_MODE=live`
+calls the real Gemini API using `GEMINI_API_KEY` from `.env`.
 
-```bash
-python engine/watchdog.py                # today's overdue work queue
-python engine/score.py                   # every buyer scored, worst first
-python engine/score.py --explain BUY-01  # the arithmetic behind one score
-```
-
-No API key is required. `LLM_MODE=mock` gives deterministic canned responses, so
-the project runs end to end on a fresh clone.
+---
 
 ## Results
 
-> Placeholder -- baseline vs agent on the same 100 seeded invoices, plus the
-> full exceptions list of what we failed to recover and why. Day 9.
+Baseline vs agent, seed 42, 120-day simulation window
+(`report/out/results.json`, generated 2026-08-27):
+
+| Metric | Baseline | Agent |
+|---|---|---|
+| Recovered | ₹1,36,80,472 (₹1.37 Cr) | ₹1,59,79,229 (₹1.60 Cr) |
+| Outstanding at end of window | ₹1,69,13,928 (₹1.69 Cr) | ₹1,46,15,171 (₹1.46 Cr) |
+| Invoices fully paid | 36 | 41 |
+| Messages sent | 252 | 73 envelopes (141 invoice-level contacts before W3 consolidation) |
+| Avg days to pay (all paid invoices) | 93.3 | 95.5 |
+| Avg days to pay (matched set -- same 25 invoices both sides recovered) | 101.2 | 97.7 |
+| Handoffs to a human | 0 | 42 (17 disputed, 25 rung-4 escalation) |
+| Stops | 0 | 6 (opted out) |
+| Disputed invoices (current, at end of window) | 12 | 17 |
+| Not recovered in the window (exceptions) | 64 | 59 |
+
+**A note on the disputed-invoices row:** `results.json` also has a second,
+related field, `disputes`, that counts something different -- invoices that
+*became* disputed via a live simulated reply during the run, not a snapshot
+of who's disputed right now. The two agree for the baseline (it messages
+every overdue invoice regardless of dispute status, so it always gets the
+chance to see a live dispute reply) but not for the agent (which correctly
+never messages an invoice it already knows is disputed, so a buyer disputed
+from the very start of the simulated world can never show up in that
+event-counted field even though it's still disputed today) -- if you
+cross-reference the raw JSON, don't expect these two numbers to match.
+
+**Why the "avg days to pay" row needs the matched-set caveat:** the raw
+figure compares two *different* sets of paid invoices -- the agent
+recovers a harder set than baseline gives up on, which drags its raw
+average up even though it's the stronger performer. The matched-set row
+(the 25 invoices *both* sides actually recovered) is the fair comparison,
+and there the agent wins: 97.7 days vs 101.2. Reporting both, not just the
+flattering one, is the point.
+
+**Across all 6 tested seeds** (42, 7, 13, 99, 2024, 555): agent wins on
+rupees recovered **6/6**, and on matched-set days-to-pay **6/6**.
+
+| Seed | Baseline recovered | Agent recovered | Matched N | Baseline days | Agent days | Malformed invoices | Superseded promises |
+|---|---|---|---|---|---|---|---|
+| 42 | ₹1.37 Cr | ₹1.60 Cr | 25 | 101.2 | 97.7 | 0 | 0 |
+| 7 | ₹0.88 Cr | ₹1.45 Cr | 21 | 99.4 | 95.4 | 0 | 6 |
+| 13 | ₹1.32 Cr | ₹1.70 Cr | 25 | 91.5 | 87.2 | 2 | 2 |
+| 99 | ₹1.01 Cr | ₹1.45 Cr | 23 | 101.5 | 98.3 | 0 | 5 |
+| 2024 | ₹1.00 Cr | ₹1.47 Cr | 26 | 89.1 | 83.4 | 0 | 4 |
+| 555 | ₹0.96 Cr | ₹1.17 Cr | 28 | 96.7 | 95.0 | 1 | 5 |
+
+The last two columns exist so a "6/6" win doesn't read as "these edge cases
+never came up": 5 of the 6 seeds contain a buyer who renegotiated a promise
+before it fell due, and 2 of the 6 contain a structurally malformed invoice
+-- the win happens *despite* those, not in their absence.
+
+The full exceptions list (every invoice not recovered in the window, and
+why) is in `report/out/report.html` after you run the Quickstart above.
+
+---
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the flow diagram and a description of
-every block.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the flow diagram and a
+description of every block.
+
+### Rules vs AI
 
 Rules where mistakes are expensive, AI where language is messy:
 
 | Job | Rules or AI |
 |---|---|
-| Detect overdue, score buyers, law math, escalation ladder, stopping rules | Rules |
-| Reading buyer replies, writing messages, ambiguous judgment calls | AI (logged to audit) |
+| Detect overdue invoices, score buyers, law/interest/tax math, escalation ladder, stopping rules, buyer-level message grouping | Rules |
+| Reading buyer replies into structured intent, drafting messages, ambiguous judgment calls | AI -- Gemini (Flash-tier model), via `engine/llm.py`, logged to the audit trail |
+
+`engine/llm.py` is the *only* caller of the Gemini API. `draft_message` and
+`judgment_call` currently share one Flash-tier model rather than a
+cheap/strong split, because this key's free tier has zero Pro-tier quota and
+billing isn't available for it -- a cost tradeoff, not a design choice (see
+Future Work).
+
+---
+
+## Early warning (W1)
+
+Risk is surfaced **before** an invoice's statutory due date, not just after:
+`engine/watchdog.py::early_warnings()` puts every not-yet-overdue invoice
+into a low/watch/high band based on how close it is to falling overdue.
+
+- **Human-facing only** -- surfaced in the buyer panel and report, never
+  sent to a buyer. No pre-due message goes out because of an early warning.
+- The band is a fixed rule (days remaining until the due date), not a
+  prediction. There is no probability score, no cash-flow signal, and no
+  claim of predictive intelligence -- that's future work (see below), not
+  what's built today.
+
+---
+
+## Buyer / trader view (W2)
+
+`engine/buyer_panel.py` rolls invoice-level facts up to a per-buyer
+relationship view, surfaced in the report:
+
+- Total outstanding and overdue-invoice count
+- Oldest overdue invoice (days)
+- Buyer score, confidence (low/medium/high), and a trend (score N days ago
+  vs now)
+- Promise reliability: made / kept / broken / in-flight, reliability %,
+  average days late
+- Response rate: messages sent, replies received, response rate %
+- Recovery state: not yet due / in ladder / handed off / stopped
+
+Every field above is real and populated in `report/out/results.json`'s
+`buyer_panel` array -- nothing here is aspirational.
+
+---
+
+## Buyer-level message consolidation (W3)
+
+**The problem:** a buyer with five overdue invoices shouldn't necessarily
+get five separate emails on the same day.
+
+**What W3 does:** `engine/consolidate.py` groups a day's already-decided
+SEND actions for one buyer into rung tiers -- courtesy (rung ≤ 1) and
+escalated (rung ≥ 2), never mixed in one envelope, since a rung-1 message
+carries no legal content and an escalated one does. A buyer gets at most
+two envelopes on a given day instead of one per invoice. A tier with more
+than `config/rules.yaml`'s `consolidation.max_invoices_per_message` (6)
+invoices for one buyer splits into multiple envelopes rather than one
+oversized draft.
+
+`engine.brain.decide()` and its per-invoice stopping rules (max 3 messages
+per rung, max 5 total, quiet hours, opt-out) are completely unchanged --
+consolidation only changes how many envelopes carry those decisions, never
+how a single invoice is escalated.
+
+**Disputed invoices are excluded from consolidation.** A dispute triggers
+an immediate human handoff before the Brain ever chooses a SEND action, so
+a disputed invoice is never eligible to enter a bundle in the first place.
+
+On seed 42, this dropped 141 invoice-level contacts to 73 outbound
+envelopes with zero change to which invoices got contacted, on which days,
+or to any final recovery number -- see `docs/edge_cases.md`'s TC-070 for
+the full test evidence.
+
+---
 
 ## Scope (deliberate)
 
-- Email is really sent, and only to the owner's own test inbox. **No real person
-  is ever contacted.**
-- WhatsApp and SMS log "would send". The WhatsApp Business API needs business
-  verification, which does not fit in a 12-day build.
-- All data is synthetic and generated from a seed, so any run is reproducible.
+- Email is really sent, and only to the owner's own test inbox. **No real
+  person is ever contacted.**
+- WhatsApp and SMS log "would send". The WhatsApp Business API needs
+  business verification, which does not fit in a 12-day build.
+- All data is synthetic and generated from a seed, so any run is
+  reproducible.
 
-## Future Work
+---
+
+## Edge cases
+
+`docs/edge_cases.md` documents 141 edge cases the agent could encounter,
+each honestly marked:
+
+- **60 TESTED** -- has a passing test, named.
+- **44 HANDLED** -- correct in the code, no dedicated test, named.
+- **37 OUT OF SCOPE** -- neither, with the specific integration or data it
+  would need, named -- never left vague.
+
+---
+
+## Honest scope: built vs. future work
+
+**CURRENTLY BUILT:**
+
+- The original MVP: data factory, score engine, watchdog, law engine
+  (MSMED Act interest/tax math), brain, message writer (English/Hinglish),
+  channels (real email, stubbed WhatsApp/SMS), promise tracker, simulator,
+  and report.
+- **E1-E4** -- edge-case hardening: promise sanity bounds, invoice
+  validation, regression tests, and an end-to-end scripted scenario
+  (TC-141).
+- **W1-W4** -- early warning, buyer panel + promise reliability,
+  buyer-level message consolidation, and a refreshed 6-seed experiment (all
+  described above).
+
+**FUTURE WORK:** see the list below, and `docs/winning_layer.md` for the
+larger roadmap (predictive risk, cash-flow intelligence, payment
+propensity, and more) that needs real transaction data this standalone
+project doesn't have.
+
+### Future Work
 
 Ideas that came up during the build and were deliberately **not** built:
 
@@ -77,47 +299,79 @@ Ideas that came up during the build and were deliberately **not** built:
 - Live RBI bank-rate feed instead of a config value
 - Tally / Zoho invoice import
 - TReDS invoice-discounting suggestion for stuck invoices
-- Network-level buyer score across many vendors (the Razorpay-scale version)
+- Network-level buyer score across many vendors (the Razorpay-scale
+  version -- see "Where this goes next" below)
 - Dispute-resolution assistant
-- Financial-year seasonality in the synthetic data: a visible cluster of buyers
-  settling just before March 31, so the Section 43B(h) tax-deduction cliff can
-  be shown landing rather than asserted. Parked on Day 2 because the simulation
-  window (starts 2026-08-24, runs 90 days) never crosses March 31 -- revisit on
-  Day 8 if the window changes.
-- `draft_message` and `judgment_call` run on a Flash-tier Gemini model rather
-  than Pro, because this key's free tier has zero pro-tier quota and billing
-  isn't available for it -- a known quality-vs-cost tradeoff, not a design choice.
+- Financial-year seasonality in the synthetic data: a visible cluster of
+  buyers settling just before March 31, so the Section 43B(h) tax-deduction
+  cliff can be shown landing rather than asserted. Parked on Day 2 because
+  the simulation window (starts 2026-08-24, runs 120 days) never crosses
+  March 31 -- revisit if the window changes.
+- `draft_message` and `judgment_call` run on a Flash-tier Gemini model
+  rather than Pro, because this key's free tier has zero pro-tier quota
+  and billing isn't available for it -- a known quality-vs-cost tradeoff,
+  not a design choice.
 - Simulator reply lag: a persona's reaction lands the same simulated day a
-  message is sent. A real buyer takes a day or three, and the "days to pay"
-  number in the Day 9 report would mean more with that modelled.
-- Simulator fallback-message penalty: when the writer's guardrail rejects a
-  draft and falls back to the plain skeleton, the persona reacts identically
-  to a full LLM-drafted message today. A small penalty on the fallback path
-  would give the guardrail work a measurable effect on outcomes, not just on
-  audit-trail honesty.
-- Simulator partial-payment realism: every `pay_partial` reaction is tagged
-  as an unexplained, ambiguous reply (to exercise the brain's one LLM
-  judgment-call path) rather than sometimes arriving with a normal
+  message is sent. A real buyer takes a day or three, and the "days to
+  pay" numbers above would mean more with that modelled.
+- Simulator fallback-message penalty: when the writer's guardrail rejects
+  a draft and falls back to the plain skeleton, the persona reacts
+  identically to a full LLM-drafted message today. A small penalty on the
+  fallback path would give the guardrail work a measurable effect on
+  outcomes, not just on audit-trail honesty.
+- Simulator partial-payment realism: every `pay_partial` reaction is
+  tagged as an unexplained, ambiguous reply (to exercise the brain's one
+  LLM judgment-call path) rather than sometimes arriving with a normal
   explanation. Splitting some partial payments into a clean "partial,
   explained" case would stop that path from over-firing on every partial
   payment in the simulated world.
 - Ablation experiment: a third arm with the baseline's fixed 3-message
   schedule but score-aware timing and no legal/tax content, to isolate how
-  much of the agent's win over the baseline comes from smarter timing versus
-  the law engine's leverage. The most direct answer to "how much of this is
-  really the legal argument" a skeptical judge could ask -- not built for
-  Day 9 because it's a third full pipeline variant, not a report tweak.
+  much of the agent's win over the baseline comes from smarter timing
+  versus the law engine's leverage. The most direct answer to "how much of
+  this is really the legal argument" a skeptical judge could ask -- not
+  built because it's a third full pipeline variant, not a report tweak.
+- The consolidated message's subject line doesn't total the ₹ amount
+  across bundled invoices yet -- deferred from W3 to W4, and still not
+  built.
 - A reply that arrives during an LLM outage (`engine.promises.parse_reply`
   catching `LLMError`) is safe -- nothing is fabricated -- but is silently
-  recorded as noise, so a genuine promise or dispute said while the model was
-  down is lost rather than merely delayed. Found while building the E1
-  promise sanity bounds (TC-135, docs/edge_cases.md); out of scope for that
-  round because retrying or queuing the reply for a later pass is a
+  recorded as noise, so a genuine promise or dispute said while the model
+  was down is lost rather than merely delayed. Found while building the E1
+  promise sanity bounds (TC-135, `docs/edge_cases.md`); out of scope for
+  that round because retrying or queuing the reply for a later pass is a
   different kind of fix from a rule-based sanity bound.
+
+---
+
+## Where this goes next
+
+`docs/winning_layer.md` is the full roadmap beyond W1-W4: a dynamic trader
+financial profile, cash-flow intelligence, payment propensity prediction,
+next-best-action beyond the current rung ladder, expected-recovery/cost
+optimization, a strategy simulator, and closed-loop learning at a deeper
+level than promise tracking. None of it is built -- it's explicitly future
+work, not a claim of current capability.
+
+The honest reason it isn't built here: most of it needs real
+transaction/payment data that a standalone tool like this one structurally
+cannot see. This prototype demonstrates the *intelligence layer* -- the
+scoring, the legal-leverage math, the escalation logic, the closed loop
+between promises and score. Razorpay's payment rails and ecosystem access
+could, subject to appropriate permissions, privacy, and compliance,
+potentially supply what a standalone tool can't: buyer-side inflows,
+cross-supplier payment behavior, a network-level buyer score built from
+many vendors' data at once (the concrete example above). To be clear: this
+project does not have access to Razorpay's private transaction data today
+-- this is a description of the opportunity, not a claim about what this
+prototype already does.
+
+---
 
 ## Legal disclaimer
 
-The legal calculations here are **simplified for a demonstration, current as of
-Aug 2026, and are not legal advice.** All figures live in `config/legal.yaml`
-and should be verified against the current RBI bank rate and the prevailing text
-of the MSMED Act 2006 and the Income Tax Act before being relied on.
+The legal calculations here are **simplified for a demonstration, current
+as of Aug 2026, and are not legal advice.** All figures live in
+`config/legal.yaml` and should be verified against the current RBI bank
+rate and the prevailing text of the MSMED Act 2006 and the Income Tax Act
+before being relied on.

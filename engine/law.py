@@ -483,8 +483,3 @@ def legal_position(invoice: dict[str, Any], today: date) -> dict[str, Any]:
     position["facts_by_key"] = by_key
     position["facts"] = list(by_key.values())
     return position
-
-
-def samadhaan_draft(invoice: dict[str, Any], buyer: dict[str, Any], today: date) -> str:
-    """A ready-to-file MSME Samadhaan complaint draft with the facts filled in."""
-    raise NotImplementedError("step 3: law engine -- Day 5")

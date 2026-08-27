@@ -604,15 +604,6 @@ def test_an_undisputed_invoice_is_not_held() -> None:
 
 
 # ==========================================================================
-# Still to come
-# ==========================================================================
-
-def test_samadhaan_draft_is_not_built_yet() -> None:
-    with pytest.raises(NotImplementedError):
-        law.samadhaan_draft(invoice(), {"buyer_id": "BUY-01"}, date(2026, 8, 24))
-
-
-# ==========================================================================
 # Forward-looking interest -- what the NEXT week of delay costs
 # ==========================================================================
 # A static "interest to date" figure reads as a fine for the past. The same

@@ -176,7 +176,7 @@ ANY TIME: dispute detected → jump to human handoff immediately
 **Mostly rules; AI is consulted only for genuinely ambiguous cases** (e.g., "buyer partially paid and sent a confusing reply — what now?") and its reasoning is saved to the audit trail.
 
 ### Block 6 — Message Writer (`engine/writer.py`)
-**What:** The AI (Claude API) writes the actual message for the chosen rung.
+**What:** The AI (Gemini, via `engine/llm.py`) writes the actual message for the chosen rung.
 **It receives:** rung, buyer profile (corporate vs small trader), language preference, all the law numbers, promise history.
 **It adapts tone:** warm for a good buyer having a bad month, businesslike for a corporate, firm for a habitual delayer.
 **Hinglish mode:** for small-trader profiles, it drafts WhatsApp-style Hinglish: *"Sir, invoice #204 ka payment 12 din se pending hai. Request hai ki is week clear kar dein…"* — this is literally an example direction in the track, and no enterprise tool does it.
@@ -223,6 +223,37 @@ Not recovered        11 invoices   4 invoices   → full exceptions list
 ```
 **Plus the audit trail:** every action ever taken, with timestamp, reason, and rule/AI reasoning — exportable, viewable, honest.
 
+### Block 11 — The Winning Layer (built after Day 9, labels W1-W4)
+
+**What:** four post-MVP additions, built after Blocks 1-10 above and the
+E1-E4 edge-case hardening pass. `docs/winning_layer.md` is the full roadmap
+these only partially implement — see it for what's still future work.
+
+- **W1 Early Warning** (`engine/watchdog.py::early_warnings()`) — a
+  rule-based low/watch/high risk band on invoices approaching (not yet past)
+  their due date. Human-facing only, surfaced in the buyer panel/report; no
+  pre-due message is ever sent to a buyer. No predictive probability, no
+  cash-flow signal — just a fixed date-based band.
+- **W2 Buyer/Trader Panel** (`engine/buyer_panel.py`) — rolls invoice-level
+  facts up to a per-buyer view: outstanding amount, overdue count, oldest
+  overdue, score/confidence/trend, promise reliability % + average days
+  late, response rate, recovery state.
+- **W3 Buyer-Level Message Consolidation** (`engine/consolidate.py`) —
+  groups a day's already-decided SEND actions for one buyer into rung
+  tiers (courtesy: rung ≤ 1, escalated: rung ≥ 2), so a buyer gets at most
+  two envelopes/day instead of one email per invoice. `engine/brain.py`'s
+  per-invoice decisions and stopping rules are unchanged; this only changes
+  how many envelopes carry them. A disputed invoice's handoff never enters
+  a bundle — it's routed to a human before consolidation sees it.
+- **W4 Experiment Refresh** — re-ran the full 6-seed baseline-vs-agent
+  comparison at HEAD and added per-seed edge-case-count transparency (how
+  many seeds actually exercise the malformed-invoice/superseded-promise
+  fixes) to the multi-seed report table.
+
+**Rules, not AI** — same split as every earlier block: these are
+deterministic rollups and groupings over data the rest of the pipeline
+already produces, not new model calls.
+
 ---
 
 ## 7. Where AI is used vs plain code (say this in the pitch!)
@@ -245,42 +276,75 @@ One pitch line: *"Rules where mistakes are expensive, AI where language is messy
 ## 8. Tech stack (all free / near-free, no GPU needed)
 
 - **Python 3.11+** — the whole project
-- **Claude API** (Anthropic) — the AI parts. New platform accounts get ~$5 free credits — plenty for 100 invoices. Use a cheaper model (Haiku) for high-volume reply-parsing, a stronger one (Sonnet) for message writing. Your Claude Pro plan separately gives you **Claude Code** as your coding assistant — use it heavily.
+- **Gemini API** (Google, via `engine/llm.py`) — the AI parts: reply parsing, message drafting, ambiguous judgment calls. All three purposes currently run on a single Flash-tier model (`gemini-3.7-flash`, set in `config/rules.yaml`) rather than a cheap/strong split — this key's free tier has zero Pro-tier quota and billing isn't available for it, a known quality-vs-cost tradeoff (see README's Future Work). `engine/llm.py` reads `LLM_MODE` from `.env`: `mock` (default) gives deterministic canned responses, no key needed; `live` calls the real Gemini API with `GEMINI_API_KEY`. Your Claude Pro plan separately gives you **Claude Code** as your coding assistant — use it heavily; it's unrelated to which LLM the shipped app itself calls.
 - **SQLite** (built into Python) or plain JSON files — no database server needed
 - **smtplib** (built in) — real email sending
 - **Jinja2** — turn results into a clean HTML report
 - **pytest** — a few tests on the Law Engine math (judges love tested money-math)
-- Everything runs on a normal laptop. The heavy AI lifting happens on Anthropic's servers.
+- Everything runs on a normal laptop. The heavy AI lifting happens on Google's servers (or nowhere, in mock mode).
 
 ---
 
 ## 9. Repo structure (what the judges will open)
 
+This is the original Day-1 design. The actual repo (post E1-E4, W1-W4) has
+grown beyond it — see below for what's real today.
+
 ```
 revenue-recovery-agent/
-├── README.md              ← the pitch in text: problem, demo gif, results table, honest scope
+├── README.md              ← the pitch in text: problem, demo, results table, honest scope
 ├── ARCHITECTURE.md        ← the flow diagram + block descriptions (from this doc)
-├── main.py                ← one command runs the whole simulation
+├── main.py                ← runs the live single-pass agent pipeline (not the comparison/report — see below)
 ├── config/
-│   ├── rules.yaml         ← ladder timings, stop rules, score weights
-│   └── legal.yaml         ← 15/45 days, bank rate, tax rate (marked "as of Aug 2026")
+│   ├── rules.yaml         ← ladder timings, stop rules, score weights, consolidation cap, LLM model names
+│   ├── legal.yaml         ← 15/45 days, bank rate, tax rate (marked "as of Aug 2026")
+│   ├── messages.yaml      ← message/subject-line templates per rung and per consolidated bundle
+│   ├── replies.yaml       ← mock-mode canned reply fixtures
+│   └── supplier.yaml      ← the one supplier identity used across all invoices
 ├── data/
-│   ├── generate.py
+│   ├── generate.py        ← --seed, --out-dir, --persona-out
 │   ├── store.py           ← loads the generated seed data back off disk
 │   └── seed/              ← buyers.json, invoices.json (generated, gitignored)
 ├── engine/
 │   ├── config.py          ← the only reader of config/*.yaml
-│   ├── score.py  watchdog.py  law.py  brain.py
+│   ├── llm.py              ← the only caller of the Gemini API (mock/live modes)
+│   ├── money.py            ← integer-paise formatting, one source of truth
+│   ├── score.py  watchdog.py  law.py  rungs.py  brain.py
+│   ├── validate.py         ← catches structurally malformed invoices before law/brain see them (E2)
+│   ├── samadhaan.py        ← the real ready-to-file Samadhaan complaint draft
+│   ├── buyer_panel.py      ← W2: per-buyer rollup (outstanding, score, promise reliability, recovery state)
+│   ├── consolidate.py      ← W3: groups a day's SEND decisions by buyer into rung-tier envelopes
 │   ├── writer.py  channels.py  promises.py  audit.py
 ├── sim/
-│   ├── personas.py  run_sim.py
-│   └── hidden_personas.json  ← generated; engine/ must never read it
+│   ├── personas.py  run_sim.py        ← --compare, --seed, --days, --extra-seeds, --scenario
+│   ├── scenario_tc141.py              ← the E4 end-to-end scripted scenario fixture
+│   └── hidden_personas.json           ← generated by data/generate.py --persona-out; gitignored; engine/ must never read it
+├── docs/
+│   ├── edge_cases.md      ← 141 documented edge cases, each TESTED / HANDLED / OUT OF SCOPE
+│   └── winning_layer.md   ← the Winning Layer roadmap: what's built (W1-W4) vs still future
 ├── report/
-│   └── build_report.py    ← baseline-vs-agent HTML report + exceptions list
-├── audit/                 ← generated audit logs land here (append-only JSONL)
-└── tests/
-    └── test_law.py        ← interest math, 45-day cap, 15-day default
+│   ├── build_report.py    ← baseline-vs-agent HTML report + exceptions list + buyer panel + multi-seed table
+│   ├── templates/         ← the Jinja2 template(s) build_report.py renders
+│   └── out/                ← generated, gitignored: results.json, report.html
+├── audit/                 ← generated audit logs land here (append-only JSONL); audit/drafts/ holds Samadhaan drafts
+└── tests/                 ← 22 files, 759 tests. Beyond the obvious per-module tests, three are
+                              structural guards worth naming: test_sim_isolation.py (AST-scans
+                              engine/ + main.py to prove the agent never reads sim/hidden_personas.json),
+                              test_no_legal_constants.py (AST-scans for hardcoded legal numbers/citations
+                              outside config/legal.yaml), and test_run_sim.py (money-conservation
+                              invariant + a permanent guard that every SEND decision has exactly one
+                              matching writer audit entry, forever).
 ```
+
+`main.py --seed 42` runs the real per-invoice pipeline (watchdog → score →
+law → brain → writer → channels → promises) with a full audit trail, and
+`--send-email` sends a real message to the test inbox. It does **not** run
+the baseline-vs-agent comparison or build the report — those are
+`sim/run_sim.py --compare` and `report/build_report.py`, run separately (see
+README's Quickstart). The original "one command runs the whole simulation"
+plan for `main.py` was never finished — its last two pipeline stages stayed
+stubs ("not implemented (Day 8)" / "(Day 10)") once `sim/run_sim.py` and
+`report/build_report.py` were built as their own scripts instead.
 
 ### Support modules (not blocks — plumbing added during the build)
 
@@ -292,6 +356,8 @@ place each to live, rather than being copy-pasted across blocks.
 | `engine/config.py` | The single reader of `config/rules.yaml` and `config/legal.yaml`, cached. The rule "code reads config, code never embeds these numbers" needs one door, or every block grows its own YAML loader and they drift. `reload()` lets tests swap a rule set. |
 | `data/store.py` | Reads `data/seed/*.json` back. The dataset is generated rather than committed, so every entry point needs the same "not generated yet, here is the command" answer instead of its own traceback. Also groups invoices by buyer, which the score engine and the simulator both need. |
 | `engine/audit.py` | Named in the non-negotiables but not in the original block list. Every money-related action is appended here with timestamp, invoice, action, reason, and whether the reason came from a rule or the AI. |
+| `engine/money.py` | One source of truth for turning integer paise into a ₹ string. Added so "money is stored in paise, formatted as ₹ only for display" (CLAUDE.md's own rule) has one door instead of drifting rounding logic across every block that prints an amount. |
+| `engine/rungs.py` | The fact-skeleton contract between the Law Engine and the Message Writer — which numbers/sentences a given rung is allowed to state, so the writer's guardrail has something concrete to check against. |
 
 ---
 
@@ -317,6 +383,13 @@ place each to live, rather than being copy-pasted across blocks.
 ---
 
 ## 11. The 5-minute video script
+
+> Status: script only, not yet recorded (CLAUDE.md's checklist item 11 is
+> still open). Every beat named below corresponds to real, working code —
+> confirmed during the Phase 10 documentation audit (Brain rung selection,
+> Hinglish drafting, Law Engine interest/tax math, promise tracking, a real
+> email send, and the Samadhaan draft are all live) — this is a script to
+> record, not a description of a video that exists.
 
 - **0:00–0:30 — The problem, with numbers.** "Indian SMEs wait 73 days to get paid against a 45-day legal limit. The average SME has ₹3.83 crore stuck over a year. And 40% of India's B2B sales run on credit — that stat is from Razorpay's own blog."
 - **0:30–1:00 — What I built.** The one-liner + the architecture diagram, 20 seconds on the ladder.
@@ -359,7 +432,7 @@ Each line here signals "I knew about this and chose focus" — which is worth mo
 - **Audit trail** — a log of every action with the reason — so a human can check the agent later.
 - **Synthetic data** — realistic fake data we generate ourselves for safe testing.
 - **Persona** — a fake buyer's hidden personality in the simulator.
-- **LLM** — Large Language Model (the AI, e.g., Claude) — great with messy language, not for math.
+- **LLM** — Large Language Model (the AI; this project calls Gemini) — great with messy language, not for math.
 - **Baseline** — the dumb version we compare against to prove ours is better.
 - **MSME Samadhaan** — the government's online portal where MSMEs file delayed-payment complaints.
 
