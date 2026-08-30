@@ -47,7 +47,7 @@ if __package__ in (None, ""):
 
 from engine.money import enable_unicode_output, format_inr
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2      # 2: buyers carry the inflow signals (Phase 1)
 DEFAULT_SEED = 42
 
 #: Day 0 of the simulated world. Every date in the dataset is placed relative
@@ -86,22 +86,60 @@ PERSONA_COUNTS: tuple[tuple[str, int], ...] = (
 
 @dataclass(frozen=True)
 class Persona:
-    """How a persona behaved in the PAST -- this is what the score engine sees."""
+    """How a persona behaved in the PAST -- this is what the score engine sees.
+
+    The last three fields shape the buyer's money coming IN rather than their
+    payment behaviour going out. They exist so the two-axis score
+    (engine/ability_willingness.py) has something real to read: a buyer who
+    cannot pay and a buyer who will not pay look identical in payment history
+    alone, and telling them apart is the whole point of the ability axis.
+
+    The correlation is deliberate and one-directional -- the persona shapes
+    the numbers, and only the NUMBERS reach the buyer record. No module under
+    engine/ ever sees the tag that produced them, exactly as it never sees
+    the tag behind a delay pattern today (tests/test_sim_isolation.py).
+    """
 
     delay_min: int              # days past the statutory due date
     delay_max: int
     on_time_chance: float       # chance of paying on or before the due date
     broken_promise_chance: float
     dispute_chance: float
+    inflow_drift: float         # month-on-month drift in money coming in
+    inflow_volatility: float    # how lumpy that inflow is, month to month
+    failed_payment_chance: float  # per-attempt chance of a bounced payment
 
 
+#: Note which personas are healthy but unwilling. habitual_delayer and
+#: disputer both pay late, but neither is short of money -- their inflow is
+#: flat and steady, so ability stays high while willingness falls. That is
+#: what puts them in the "can pay but won't" quadrant instead of lumping them
+#: in with cash_tight, which is the entire distinction this phase adds.
 PERSONA_BEHAVIOUR: dict[str, Persona] = {
-    "forgetful": Persona(0, 8, 0.45, 0.05, 0.00),
-    "cash_tight": Persona(10, 30, 0.10, 0.25, 0.02),
-    "habitual_delayer": Persona(25, 60, 0.02, 0.45, 0.05),
-    "disputer": Persona(5, 25, 0.20, 0.10, 0.35),
-    "deadbeat": Persona(60, 150, 0.00, 0.55, 0.15),
+    "forgetful": Persona(0, 8, 0.45, 0.05, 0.00, 0.010, 0.06, 0.02),
+    "cash_tight": Persona(10, 30, 0.10, 0.25, 0.02, -0.075, 0.22, 0.35),
+    "habitual_delayer": Persona(25, 60, 0.02, 0.45, 0.05, 0.005, 0.09, 0.06),
+    "disputer": Persona(5, 25, 0.20, 0.10, 0.35, 0.000, 0.08, 0.05),
+    "deadbeat": Persona(60, 150, 0.00, 0.55, 0.15, -0.110, 0.26, 0.45),
 }
+
+#: How many months of inflow history a buyer carries, and the size of a
+#: typical month by profile. A corporate's monthly inflow dwarfs a small
+#: trader's, so the SAME invoice is a routine payment for one and a genuinely
+#: hard ask for the other -- which is exactly what the ability axis's
+#: invoice-to-capacity ratio is there to notice.
+INFLOW_MONTHS_MIN = 6
+INFLOW_MONTHS_MAX = 12
+INFLOW_BASE_PAISE: dict[str, tuple[int, int]] = {
+    "corporate": (600_000_000, 3_000_000_000),      # Rs 60L - Rs 3Cr a month
+    "small_trader": (60_000_000, 400_000_000),      # Rs 6L - Rs 40L a month
+}
+#: Recent payment attempts a failed-payment count is drawn over.
+FAILED_PAYMENT_ATTEMPTS = 6
+#: An inflow series never collapses below this fraction of where it started:
+#: a buyer still trading with us has not gone to zero, and a zero month would
+#: make the capacity ratio meaningless rather than merely bad.
+INFLOW_FLOOR_FRACTION = 0.15
 
 #: name, profile, city, state, GST state code, contact person, sector
 BUYER_SEEDS: tuple[tuple[str, str, str, str, str, str, str], ...] = (
@@ -413,6 +451,47 @@ def _build_buyers(rng: random.Random, low_confidence: list[int]) -> list[dict[st
     return buyers
 
 
+def _inflow_series(rng: random.Random, base: int, behaviour: Persona, months: int) -> list[int]:
+    """One buyer's monthly money-in, oldest first, most-recent LAST.
+
+    A level that drifts by the persona's drift each month and wobbles by its
+    volatility. Oldest first so a declining series reads the way a human
+    reads a bank statement -- and so "the last three months" is a slice off
+    the end, not the front.
+    """
+    series: list[int] = []
+    level = float(base)
+    floor = base * INFLOW_FLOOR_FRACTION
+    for _month in range(months):
+        wobble = rng.uniform(-behaviour.inflow_volatility, behaviour.inflow_volatility)
+        level = max(floor, level * (1.0 + behaviour.inflow_drift + wobble))
+        series.append(_round_paise(level))
+    return series
+
+
+def _add_inflow_signals(seed: int, buyers: list[dict[str, Any]], personas: list[str]) -> None:
+    """Attach the synthetic money-in signals to each buyer record, in place.
+
+    Runs on its OWN RNG stream, derived from the seed but separate from the
+    one that built the world. That is the same discipline _malformed_invoices()
+    follows and for the same reason: drawing these from the shared stream
+    would shift every subsequent draw, silently rewriting every invoice,
+    every delay and every headline number in report/out/. Same seed, same
+    world -- adding a field must not change the world it is added to.
+    """
+    rng = random.Random(f"{seed}:inflow")
+    for index, buyer in enumerate(buyers):
+        behaviour = PERSONA_BEHAVIOUR[personas[index]]
+        low, high = INFLOW_BASE_PAISE[buyer["profile"]]
+        base = rng.randint(low, high)
+        months = rng.randint(INFLOW_MONTHS_MIN, INFLOW_MONTHS_MAX)
+        buyer["monthly_inflow_paise"] = _inflow_series(rng, base, behaviour, months)
+        buyer["failed_payment_count"] = sum(
+            1 for _attempt in range(FAILED_PAYMENT_ATTEMPTS)
+            if rng.random() < behaviour.failed_payment_chance
+        )
+
+
 def _build_history(
     rng: random.Random,
     buyers: list[dict[str, Any]],
@@ -687,6 +766,8 @@ def generate(seed: int, with_malformed: bool = False) -> dict[str, Any]:
     low_confidence = sorted(rng.sample(range(N_BUYERS), N_LOW_CONFIDENCE_BUYERS))
     buyers = _build_buyers(rng, low_confidence)
     history = _build_history(rng, buyers, personas, low_confidence, no_agreement, ceiling)
+    # Deliberately last, on its own RNG stream -- see _add_inflow_signals().
+    _add_inflow_signals(seed, buyers, personas)
     current = _build_current(rng, buyers, no_agreement, ceiling)
     _apply_mess(rng, current, buyers, personas, no_agreement, ceiling)
     invoices = _assign_ids(history + current)

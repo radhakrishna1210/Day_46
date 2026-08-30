@@ -13,7 +13,8 @@ data/seed/, or the buyer score becomes a lookup instead of an inference.
 from __future__ import annotations
 
 import json
-from collections import Counter
+import random
+from collections import Counter, defaultdict
 from datetime import date
 
 import pytest
@@ -302,6 +303,146 @@ def test_personas_produce_distinguishable_payment_behaviour(world: dict, history
 
     average = {tag: sum(d) / len(d) for tag, d in totals.items()}
     assert average["forgetful"] < average["cash_tight"] < average["habitual_delayer"] < average["deadbeat"]
+
+
+# --- the inflow signals (Phase 1: the ability axis needs evidence) --------
+
+#: More than one seed, because these are statistical tendencies, not rules.
+#: A single seed's twenty buyers is four per persona -- too few to assert on
+#: without pinning noise instead of behaviour.
+INFLOW_SEEDS = (42, 7, 13, 99, 2024, 555)
+
+
+def _buyers_by_persona(seeds=INFLOW_SEEDS) -> dict[str, list[dict]]:
+    """Every generated buyer across several seeds, grouped by hidden persona."""
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for seed in seeds:
+        world = gen.generate(seed)
+        personas = world["personas"]["personas"]
+        for buyer in world["buyers"]["buyers"]:
+            grouped[personas[buyer["buyer_id"]]].append(buyer)
+    return grouped
+
+
+def _trend_pct(series: list[int]) -> float:
+    """First half of the series against the second half, as a percentage."""
+    half = len(series) // 2
+    older = sum(series[:half]) / half
+    newer = sum(series[half:]) / len(series[half:])
+    return (newer - older) / older * 100
+
+
+def test_every_buyer_carries_an_inflow_series_and_a_failed_payment_count(buyers: list[dict]) -> None:
+    for buyer in buyers:
+        series = buyer["monthly_inflow_paise"]
+        assert gen.INFLOW_MONTHS_MIN <= len(series) <= gen.INFLOW_MONTHS_MAX
+        assert all(isinstance(month, int) and month > 0 for month in series)
+        assert isinstance(buyer["failed_payment_count"], int)
+        assert 0 <= buyer["failed_payment_count"] <= gen.FAILED_PAYMENT_ATTEMPTS
+
+
+def test_the_inflow_signals_are_reproducible_for_the_same_seed() -> None:
+    first = [(b["monthly_inflow_paise"], b["failed_payment_count"])
+             for b in gen.generate(SEED)["buyers"]["buyers"]]
+    second = [(b["monthly_inflow_paise"], b["failed_payment_count"])
+              for b in gen.generate(SEED)["buyers"]["buyers"]]
+    assert first == second
+
+
+def test_a_different_seed_produces_different_inflow_signals() -> None:
+    first = [b["monthly_inflow_paise"] for b in gen.generate(SEED)["buyers"]["buyers"]]
+    other = [b["monthly_inflow_paise"] for b in gen.generate(SEED + 1)["buyers"]["buyers"]]
+    assert first != other
+
+
+def test_the_inflow_signals_are_drawn_from_their_own_random_stream() -> None:
+    """Adding a field must not change the world it is added to.
+
+    These signals arrived after the dataset already had a published, pinned
+    shape. Drawing them from the world's own rng would shift every later draw
+    and silently rewrite every invoice, every delay, and every headline
+    number in report/out/ -- so _add_inflow_signals() runs on a stream of its
+    own. This proves it, rather than trusting the comment that says so.
+    """
+    rng = random.Random(SEED)
+    personas = gen._assign_personas(rng)
+    low_confidence = sorted(rng.sample(range(gen.N_BUYERS), gen.N_LOW_CONFIDENCE_BUYERS))
+    buyer_records = gen._build_buyers(rng, low_confidence)
+
+    before = rng.getstate()
+    gen._add_inflow_signals(SEED, buyer_records, personas)
+    assert rng.getstate() == before, "_add_inflow_signals consumed the world's random stream"
+
+
+def test_the_inflow_signals_never_name_the_persona_that_shaped_them(buyers: list[dict]) -> None:
+    """The correlation is one-directional: persona -> numbers, never back."""
+    blob = json.dumps([{k: v for k, v in b.items()
+                        if k in ("monthly_inflow_paise", "failed_payment_count")}
+                       for b in buyers])
+    for tag in gen.PERSONA_BEHAVIOUR:
+        assert tag not in blob
+
+
+def test_a_cash_tight_persona_tends_toward_a_declining_inflow_series() -> None:
+    """The signal the ability axis exists to read. Statistical, not per-buyer."""
+    grouped = _buyers_by_persona()
+    average = {
+        tag: sum(_trend_pct(b["monthly_inflow_paise"]) for b in records) / len(records)
+        for tag, records in grouped.items()
+    }
+    assert average["cash_tight"] < -10
+    assert average["deadbeat"] < average["cash_tight"]
+    assert average["cash_tight"] < average["habitual_delayer"]
+    assert average["cash_tight"] < average["forgetful"]
+
+
+def test_a_forgetful_persona_looks_financially_healthy() -> None:
+    """Forgetful is the control case: they pay late for reasons money cannot explain."""
+    grouped = _buyers_by_persona()
+    trend = [_trend_pct(b["monthly_inflow_paise"]) for b in grouped["forgetful"]]
+    failed = [b["failed_payment_count"] for b in grouped["forgetful"]]
+    assert sum(trend) / len(trend) > 0
+    assert sum(failed) / len(failed) < 0.5
+
+
+def test_failed_payments_concentrate_in_the_personas_that_are_short_of_money() -> None:
+    grouped = _buyers_by_persona()
+    average = {tag: sum(b["failed_payment_count"] for b in records) / len(records)
+               for tag, records in grouped.items()}
+    for broke in ("cash_tight", "deadbeat"):
+        for solvent in ("forgetful", "habitual_delayer", "disputer"):
+            assert average[broke] > average[solvent], f"{broke} should bounce more than {solvent}"
+
+
+def test_a_habitual_delayer_looks_as_able_to_pay_as_a_prompt_payer() -> None:
+    """The distinction the whole phase exists for.
+
+    habitual_delayer and cash_tight both pay late, so the legacy score cannot
+    separate them. Their MONEY must look different, or the ability axis has
+    nothing to read and the split buys us nothing.
+    """
+    grouped = _buyers_by_persona()
+    delayer = [_trend_pct(b["monthly_inflow_paise"]) for b in grouped["habitual_delayer"]]
+    tight = [_trend_pct(b["monthly_inflow_paise"]) for b in grouped["cash_tight"]]
+    assert sum(delayer) / len(delayer) > sum(tight) / len(tight) + 10
+
+
+def test_a_corporate_buyer_has_a_bigger_typical_month_than_a_small_trader() -> None:
+    """So the same invoice is routine for one and a hard ask for the other."""
+    grouped: dict[str, list[int]] = defaultdict(list)
+    for seed in INFLOW_SEEDS:
+        for buyer in gen.generate(seed)["buyers"]["buyers"]:
+            grouped[buyer["profile"]].append(sum(buyer["monthly_inflow_paise"])
+                                             / len(buyer["monthly_inflow_paise"]))
+    corporate = sum(grouped["corporate"]) / len(grouped["corporate"])
+    trader = sum(grouped["small_trader"]) / len(grouped["small_trader"])
+    assert corporate > trader
+
+
+def test_the_schema_version_records_that_the_buyer_shape_changed(world: dict) -> None:
+    """Phase 1 added fields to the buyer record; the version says so."""
+    assert gen.SCHEMA_VERSION >= 2
+    assert world["buyers"]["meta"]["schema_version"] == gen.SCHEMA_VERSION
 
 
 # --- display --------------------------------------------------------------
