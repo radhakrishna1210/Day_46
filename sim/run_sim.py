@@ -882,9 +882,10 @@ def multi_seed_summary(
 
     The point is answering "did you just cherry-pick the seed?" directly
     rather than asking a judge to trust one number. Reuses the already-run
-    primary seed's results instead of re-running it, and always leaves the
-    on-disk dataset back on `primary_seed` before returning -- each extra
-    seed regenerates data/seed/ for itself along the way (via _load_world).
+    primary seed's results instead of re-running it, and always leaves both
+    the on-disk dataset and the audit trail back on `primary_seed` before
+    returning -- each extra seed regenerates data/seed/ for itself along the
+    way (via _load_world) and clears the trail (via run_agent).
     """
     def row(seed: int, baseline: dict[str, Any], agent: dict[str, Any]) -> dict[str, Any]:
         matched = matched_avg_days_to_pay(baseline, agent)
@@ -908,12 +909,22 @@ def multi_seed_summary(
         }
 
     rows = [row(primary_seed, primary_baseline, primary_agent)]
+
+    # The primary seed's trail is on disk right now, because its run_agent()
+    # has already finished. Every extra seed's run_agent() starts by clearing
+    # it, so hold the bytes here: without this, results.json reports the
+    # primary seed while audit/audit_log.jsonl holds the LAST extra seed's
+    # run, and nothing on disk says so. Restoring costs nothing -- it is the
+    # output we already paid for, not a second run of it.
+    primary_trail = audit.snapshot()
+
     for seed in extra_seeds:
         baseline = run_baseline(seed, days, verbose=False)
         agent = run_agent(seed, days, verbose=False)
         rows.append(row(seed, baseline, agent))
 
     generate.ensure_dataset(primary_seed)   # leave the dataset as we found it
+    audit.restore(primary_trail)            # and the audit trail with it
 
     money_wins = sum(1 for r in rows if r["money_win"])
     days_eligible = [r for r in rows if r["matched_n"] > 0]

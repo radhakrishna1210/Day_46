@@ -100,3 +100,25 @@ def clear() -> None:
     """Delete the log. For tests and for starting a fresh simulation run."""
     if LOG_PATH.exists():
         LOG_PATH.unlink()
+
+
+def snapshot() -> bytes:
+    """The log's exact bytes right now, to be handed back to restore() later.
+
+    A multi-seed comparison runs the simulation once per seed and every run
+    starts by clearing the log, so the trail a caller actually wants to keep
+    has to be held aside before the next run wipes it. Bytes, not text, so
+    what comes back is identical to what was written.
+    """
+    if not LOG_PATH.exists():
+        return b""
+    return LOG_PATH.read_bytes()
+
+
+def restore(saved: bytes) -> None:
+    """Put a snapshot() back, replacing whatever the log holds now."""
+    if not saved:
+        clear()
+        return
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOG_PATH.write_bytes(saved)

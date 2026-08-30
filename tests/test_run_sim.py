@@ -545,3 +545,21 @@ def test_run_baseline_never_touches_consolidation_machinery(
 
     report = run_sim.run_baseline(seed=42, days=30, verbose=False)
     assert report["messages_sent"] > 0
+
+
+def test_a_multi_seed_run_leaves_the_audit_trail_matching_the_primary_seed() -> None:
+    """multi_seed_summary() re-runs run_agent() once per extra seed, and every
+    run_agent() starts with audit.clear() -- so without an explicit restore the
+    trail left on disk describes the LAST extra seed while results.json reports
+    the primary one, and nothing says so. Proven byte-for-byte against the
+    primary seed's own trail, not by reading the code."""
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    primary_trail = audit.LOG_PATH.read_bytes()
+    assert primary_trail, "the primary run should have written a trail to compare against"
+
+    # One extra seed is enough: it is the extra seed's own run_agent() that
+    # clears the trail, so a second would add dataset churn, not proof.
+    run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(7,), days=20)
+
+    assert audit.LOG_PATH.read_bytes() == primary_trail
