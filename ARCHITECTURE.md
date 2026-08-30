@@ -342,9 +342,12 @@ law → brain → writer → channels → promises) with a full audit trail, and
 the baseline-vs-agent comparison or build the report — those are
 `sim/run_sim.py --compare` and `report/build_report.py`, run separately (see
 README's Quickstart). The original "one command runs the whole simulation"
-plan for `main.py` was never finished — its last two pipeline stages stayed
-stubs ("not implemented (Day 8)" / "(Day 10)") once `sim/run_sim.py` and
-`report/build_report.py` were built as their own scripts instead.
+plan for `main.py` was deliberately dropped once `sim/run_sim.py` and
+`report/build_report.py` were built as their own scripts instead: its last
+two pipeline stages print the command that does the work ("run separately:
+python sim/run_sim.py --compare …" / "… report/build_report.py") rather than
+running it, so the pipeline never pretends to have produced results it did
+not.
 
 ### Support modules (not blocks — plumbing added during the build)
 

@@ -2,9 +2,12 @@
 
     python main.py --seed 42
 
-Each stage is filled in on its planned day. Stages that are built do their work
-and report it; the rest announce themselves and say so plainly, because a
-pipeline that pretends to have run is worse than one that admits it has not.
+This is the live single-pass pipeline: every stage below does its work on the
+real clock and reports it. The last two -- the baseline-vs-agent simulator and
+the scoreboard -- are built, but as their own scripts (sim/run_sim.py and
+report/build_report.py); they name their command here rather than running it,
+because a pipeline that pretends to have run is worse than one that says
+plainly where the work actually happens.
 """
 
 from __future__ import annotations
@@ -16,10 +19,8 @@ from typing import Any, Callable
 
 from data import generate, store
 from engine.money import enable_unicode_output, format_inr
-from engine import (audit, brain, channels, consolidate, law, llm, promises, rungs, samadhaan,
+from engine import (audit, brain, channels, consolidate, law, llm, promises,
                     score, validate, watchdog, writer)
-from report import build_report
-from sim import personas, run_sim
 
 DEFAULT_SEED = 42
 
@@ -255,8 +256,9 @@ def print_messages(context: Context, limit: int = 5) -> None:
 def stage_promises(context: Context) -> str:
     """Sweep for broken promises so the next pass can escalate on them.
 
-    Buyer replies arrive from the simulator on Day 8; until then this is the
-    daily check that turns an unpaid commitment into a broken one.
+    Buyer replies are driven by the simulator (sim/run_sim.py), which runs its
+    own promise sweep day by day; in this live single pass, this is the daily
+    check that turns an unpaid commitment into a broken one.
     """
     broken = promises.sweep(context.promises, context.today,
                             log=not context.dry_run)
@@ -282,8 +284,11 @@ def stage_post_office(context: Context) -> str:
             context.deliveries.extend(channels.send_consolidated(
                 target, to, drafted, invoice_rungs=drafted["invoice_rungs"],
                 buyer_id=buyer["buyer_id"], today=context.today,
-                # A real wall clock, so quiet hours actually apply to a real
-                # send today rather than waiting for the simulator to exist.
+                # A real wall clock, because this is the live single pass and
+                # a real send can happen right now. The simulator
+                # (sim/run_sim.py) is a separate workflow over a seeded,
+                # time-travelling clock: it passes only its simulated `today`
+                # and leaves `now` unset.
                 now=datetime.now(),
                 enabled=context.send_email,
                 ignore_quiet_hours=context.ignore_quiet_hours,
@@ -305,11 +310,19 @@ def print_deliveries(context: Context, limit: int = 6) -> None:
         print(f"  ... and {len(context.deliveries) - limit} more")
 
 
-def _pending(day: str) -> Callable[[Context], str]:
-    """A stage that has not been built yet, and says so."""
-    def run(_context: Context) -> str:
-        return f"not implemented ({day})"
-    run.pending = True                                      # type: ignore[attr-defined]
+def _separately(command: str) -> Callable[[Context], str]:
+    """A stage that is built, but as its own entry point rather than here.
+
+    The simulator and the scoreboard are real (sim/run_sim.py and
+    report/build_report.py); they were deliberately built as separate
+    scripts instead of pipeline stages, because both re-run the world many
+    times over and neither belongs in a single live pass. This names the
+    command that does the work rather than running it from here, so the
+    pipeline neither pretends to have run it nor implies it is missing.
+    """
+    def run(context: Context) -> str:
+        return f"run separately: {command.format(seed=context.seed)}"
+    run.separate = True                                     # type: ignore[attr-defined]
     return run
 
 
@@ -333,8 +346,10 @@ PIPELINE: tuple[Stage, ...] = (
     Stage("message writer", "draft the message for the chosen rung", stage_writer),
     Stage("promise tracker", "read replies, remember and check promises", stage_promises),
     Stage("post office", "send the email, log the stubbed channels", stage_post_office),
-    Stage("simulator", "run baseline and agent over the same seeded world", _pending("Day 8")),
-    Stage("scoreboard", "build the comparison report and exceptions list", _pending("Day 10")),
+    Stage("simulator", "run baseline and agent over the same seeded world",
+          _separately("python sim/run_sim.py --compare --seed {seed} --days 120")),
+    Stage("scoreboard", "build the comparison report and exceptions list",
+          _separately("python report/build_report.py")),
 )
 
 
@@ -365,8 +380,9 @@ def run(seed: int, dry_run: bool = False, send_email: bool = False,
         if stage.name == "post office" and context.deliveries:
             print_deliveries(context)
 
-    built = sum(1 for stage in PIPELINE if not getattr(stage.run, "pending", False))
-    print(f"audit trail ({audit.__name__}): {built} of {len(PIPELINE)} stages doing real work")
+    built = sum(1 for stage in PIPELINE if not getattr(stage.run, "separate", False))
+    print(f"audit trail ({audit.__name__}): {built} pipeline stages complete; "
+          f"the simulator and the scoreboard run separately (commands above)")
     print("revenue recovery agent: done")
     return 0
 
