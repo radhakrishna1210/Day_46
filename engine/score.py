@@ -38,12 +38,6 @@ if __package__ in (None, ""):
 from engine.config import rules
 from engine.law import _as_date, statutory_due_date
 
-#: How far back to look for the "six months ago" comparison score.
-TREND_WINDOW_DAYS = 182
-
-#: A score has to move by more than this before we call it a trend.
-TREND_NOISE_FLOOR = 5
-
 
 def payment_delay_days(invoice: dict[str, Any]) -> int:
     """Days between the statutory due date and the day the money actually landed.
@@ -148,22 +142,26 @@ def _trend(invoices: list[dict[str, Any]], today: date, current: int) -> dict[st
     Unknown rather than steady when there is not enough old history to compare
     -- claiming a flat trend from one data point would be a lie.
     """
-    cutoff = today - timedelta(days=TREND_WINDOW_DAYS)
+    config = rules()["score"]["trend"]
+    window_days = int(config["window_days"])
+    noise_floor = float(config["noise_floor"])
+
+    cutoff = today - timedelta(days=window_days)
     earlier_history = settled_history(invoices, today=cutoff)
     if len(earlier_history) < 2:
         return {
             "direction": "unknown",
             "earlier_score": None,
             "delta": None,
-            "window_days": TREND_WINDOW_DAYS,
+            "window_days": window_days,
             "detail": "not enough history before the comparison window",
         }
 
     earlier, _raw, _breakdown = _score_from_history(earlier_history)
     delta = current - earlier
-    if delta > TREND_NOISE_FLOOR:
+    if delta > noise_floor:
         direction = "improving"
-    elif delta < -TREND_NOISE_FLOOR:
+    elif delta < -noise_floor:
         direction = "worsening"
     else:
         direction = "steady"
@@ -171,7 +169,7 @@ def _trend(invoices: list[dict[str, Any]], today: date, current: int) -> dict[st
         "direction": direction,
         "earlier_score": earlier,
         "delta": delta,
-        "window_days": TREND_WINDOW_DAYS,
+        "window_days": window_days,
         "detail": f"{earlier} six months ago, {current} now",
     }
 

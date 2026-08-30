@@ -28,6 +28,104 @@ score:
     good_from: 80
     poor_below: 50
 
+  # How the six-month trend is measured. Moved here from engine/score.py's
+  # module constants in Phase 1 -- they were the last pair of score tunables
+  # still embedded in code, and the two-axis split below adds enough more
+  # that perpetuating the exception was not worth it.
+  trend:
+    window_days: 182            # how far back "six months ago" looks
+    noise_floor: 5              # a score must move more than this to be a trend
+
+  # --- Two-axis score (engine/ability_willingness.py) ----------------------
+  # The legacy `score` above answers one blurred question: "how much trouble
+  # is this buyer?" It cannot separate a buyer who CANNOT pay from one who
+  # WILL not -- and those two deserve opposite treatment (a payment plan
+  # versus firmer escalation). These blocks score those axes separately.
+  #
+  # PHASE 1 SCOPE: computed and explained only. engine/brain.py does not read
+  # any of this yet and behaves exactly as it did before -- acting on the
+  # quadrant is Phase 2.
+
+  # WILLINGNESS -- "will they pay?" Deliberately starts as an exact relabel
+  # of the legacy formula above: same signals, same weights, so willingness
+  # equals the legacy score for the same history (a test pins this). It gets
+  # its own weights rather than reading score.weights so Phase 2 can tune the
+  # two apart without silently moving the legacy number every other module
+  # already reads.
+  #
+  # Known limitation, stated rather than hidden: average_delay_days is not a
+  # pure willingness signal -- a buyer who pays late because they are broke
+  # is penalised here too. Separating that properly needs per-invoice
+  # attribution we do not have; the ability axis below is what stops that
+  # conflation from reaching a decision on its own.
+  willingness:
+    base: 100
+    min: 0
+    max: 100
+    weights:
+      avg_delay_penalty: 1.2
+      broken_promise_penalty: 8
+      dispute_penalty: 5
+      on_time_bonus: 2
+
+  # ABILITY -- "can they pay?" The genuinely new axis, built from the
+  # synthetic inflow signals data/generate.py puts on the buyer record
+  # (monthly_inflow_paise, failed_payment_count) plus, when a specific
+  # invoice is being judged, its size against that buyer's recent typical
+  # month.
+  #
+  # Starts at a neutral base rather than at 100 like willingness: a clean
+  # payment record genuinely is evidence of good faith, but no amount of
+  # inflow data ever proves a buyer CAN pay -- it can only move the estimate
+  # up or down from "no reason to doubt them". A buyer with no inflow series
+  # at all scores exactly `base` and says so in its breakdown, the same way
+  # the legacy score reports "no history" instead of pretending to know.
+  ability:
+    base: 65
+    min: 0
+    max: 100
+    weights:
+      # Per PERCENT of inflow growth or decline across the series, signed:
+      # a buyer whose monthly inflow fell 30% loses 30 x 0.5 = 15 points.
+      inflow_trend_pct: 0.5
+      # Per percent of volatility (stdev/mean) ABOVE the floor below. Lumpy
+      # income is a real payment risk even when the average looks healthy.
+      inflow_volatility_pct: 0.25
+      # Per failed or bounced payment attempt on record.
+      failed_payment: 9
+      # Per unit of (invoice outstanding / typical monthly inflow). An
+      # invoice worth a whole month of inflow is a genuinely hard ask, and
+      # the same invoice is easy for one buyer and impossible for another.
+      invoice_to_capacity_ratio: 35
+    # Volatility below this percentage is ordinary business noise, not a
+    # signal -- the same "do not read meaning into small movements" rule
+    # trend.noise_floor applies to the legacy score.
+    volatility_floor_pct: 12
+    # "Recent typical month" is the MEDIAN of this many most recent months.
+    # Median, not mean, so one exceptional month cannot redefine capacity.
+    recent_months: 3
+    # Trend compares the mean of the first half of the series against the
+    # mean of the second half. Fewer months than this and the comparison is
+    # not worth making -- the same "two invoices is not evidence" rule the
+    # confidence block applies to payment history.
+    min_months_for_trend: 4
+
+  # The 2x2. One boundary per axis, at or above which that axis counts high:
+  #     high ability + high willingness -> good_customer
+  #     low  ability + high willingness -> cash_flow_problem      (can't pay)
+  #     high ability + low  willingness -> can_pay_but_wont
+  #     low  ability + low  willingness -> high_risk
+  #
+  # Deliberately NOT score.bands.good_from/poor_below. That block defines TWO
+  # edges for a THREE-way pacing split (good/medium/poor); a 2x2 needs
+  # exactly one edge per axis, so borrowing one of them would have silently
+  # coupled "when do we call a buyer able to pay" to "when does the brain
+  # start at rung 2". The value below happens to equal bands.poor_below
+  # today, but is free to move independently of it.
+  quadrant:
+    ability_high_from: 50
+    willingness_high_from: 50
+
 # --- Escalation ladder (engine/brain.py) ----------------------------------
 # Rung 0 WAIT | 1 SOFT NUDGE | 2 FIRM | 3 LEGAL FACTS | 4 STOP + HANDOFF
 ladder:
