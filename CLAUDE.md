@@ -94,112 +94,55 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] W3 - Buyer-level message consolidation
 - [x] W4 - Re-run experiment, regenerate report with new numbers
 - [x] 10 - README + ARCHITECTURE sync + hygiene
+- [x] P0 - Repo hygiene: committed the held doc/rename split, fixed the
+      multi-seed audit-trail clobbering bug, regenerated the Quickstart
+      artifacts self-consistently (d8abef4, 97e27e4, 449dccb)
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- W4 done: re-ran the full 6-seed comparison (42, 7, 13, 99, 2024, 555) at
-  HEAD via the real CLI (`sim/run_sim.py --compare --seed 42 --days 120`) --
-  agent wins 6/6 on rupees recovered, 6/6 on matched-set days-to-pay, no
-  regression on any seed. report/out/results.json + report.html regenerated
-  (has W1's early-warning section, W2's buyer panel, W3's messages_sent/
-  invoice_contacts split). Historical "Day 9" comparison done via throwaway
-  git worktrees at the exact pre-E1, post-E4/pre-W1, post-W1/pre-W2 and
-  post-W2/pre-W3 commits (never touching the main working tree's branch or
-  dataset) -- on SEED 42 specifically, every headline number (recovered,
-  outstanding, both days-to-pay figures, handoffs, exceptions) is
-  BYTE-IDENTICAL across all four historical checkpoints and HEAD; only
-  messages_sent moved (141->73, the W3 drop). Investigated WHY E1/E2 showed
-  zero effect on 42 rather than assuming it: checked all 6 seeds directly --
-  42 is the ONE seed of six with neither a malformed invoice (E2) nor a
-  superseded promise (E1/TC-014) anywhere in its data. The other 5 DO
-  exercise both (seed 555: 1 malformed + 5 superseded) -- re-running seed
-  555's PRE-E1 code in a worktree showed identical recovered/outstanding/
-  handoffs to HEAD too, and BOTH mechanisms are now verified with real
-  instrumented data, not inferred: (1) the malformed invoice (TC-050, future
-  issue_date) is only structurally invalid on day0-day1, and its own
-  statutory due date is 20 days out -- watchdog.overdue_invoices() confirmed
-  NEVER queues it on either invalid day, so brain.decide() never sees it
-  during the only window pre/post-E2 code could disagree about it; the two
-  code paths are not "coincidentally" the same, they structurally cannot
-  diverge for this invoice. (2) TC-014: instrumented brain.broken_promises()
-  to compare old-buggy vs new-fixed counts on every real call across the
-  full run -- 4 of the 5 superseded-promise invoices never differ at all
-  (the bug's precondition never arose); the 5th (INV-2026-0141) differs by
-  1 on 107 of 108 days, but on ALL 107 of those days chosen_rung already
-  equalled available_rung (the law ceiling) -- min(desired, ceiling) was
-  already clamping before the bug's extra +1 could matter, 0 of 107 days
-  had room for it to bite. E1/E2 are correctness fixes verified by their OWN
-  dedicated tests, not by this experiment's aggregate numbers. Money
-  conservation confirmed on all 12 runs (6 seeds x baseline+agent).
-  tests/test_sim_isolation.py: 24/24 passed, automatically covers
-  engine/consolidate.py too (glob-discovered). ADVISOR ITEMS 1+2 built (item
-  3, the ablation arm, stays parked in README Future Work): sim/run_sim.py
-  gained edge_case_counts(invoices, day0, promises_by_invoice) -- malformed
-  counted at day0 (not last_day: a clock-relative defect can self-resolve by
-  last_day and correctly stop being "invalid" there, but this count is about
-  whether E2 ever needed to act, not the final verdict), superseded
-  promises = invoices with >1 promise ever recorded. Threaded through
-  multi_seed_summary()'s per-seed rows and report/build_report.py's
-  _edge_case_note() -- the multi-seed table now shows two extra columns and
-  one summary sentence ("N of 6 seeds contain a malformed invoice...") so a
-  judge sees the 6/6 win happened DESPITE these edge cases, not in their
-  absence.
-- W3 done: engine/consolidate.py (pure: groups a day's already-decided SEND
-  Actions by buyer into rung TIERS -- courtesy=rung<=1, escalated=rung>=2,
-  never mixed, so one buyer may get up to two envelopes/day, never a single-
-  envelope guarantee -- deliberate, see the section-aware-guardrail
-  alternative rejected in the W3 plan). engine.brain.decide(), engine.rungs,
-  engine.law and sim.run_sim.run_baseline() are ALL untouched -- consolidation
-  is purely a post-decide grouping + a new writer path (writer.
-  write_consolidated_message/passes_guardrail_multi/fallback_message_multi)
-  + a new channels path (channels.send_consolidated: one real send, N audit
-  rows, one per invoice, linked by detail.bundle_invoice_ids -- keeps
-  entries_for()/_already_sent() working per-invoice unmodified). Wired into
-  both sim/run_sim.py's run_agent() day loop and main.py's stage_writer/
-  stage_post_office; every buyer-facing send, even a lone invoice, now goes
-  through the same "bundle of one" path -- no separate single-invoice code
-  path left to drift. messages_sent now counts outbound ENVELOPES;
-  run_agent()'s new invoice_contacts field is the OLD per-invoice-contact
-  semantics, also surfaced in report/build_report.py's headline table.
-  Digest-aware subject line (total ₹ in the subject) explicitly DEFERRED to
-  W4 -- not built. Seed-42 verified empirically, invoice-for-invoice: agent
-  invoice_contacts (141) == pre-change messages_sent (141) exactly, same 93
-  invoices, zero per-invoice differences; agent final.recovered_paise,
-  outstanding_paise, handoffs, stops, disputes, exceptions and paid_invoices
-  all identical before/after; only agent messages_sent dropped 141->73.
-  run_baseline()'s own output is a structurally empty diff before/after, and
-  tests/test_run_sim.py::test_run_baseline_never_touches_consolidation_
-  machinery proves it by making every consolidation entry point explode if
-  baseline ever reached one. STRUCTURAL check, not just aggregate sums: for
-  all 93 invoices the seed-42 run ever contacted, the exact SET of calendar
-  days each was contacted on is byte-identical before/after (0 mismatches) --
-  ruling out same-total-different-pattern. That one-time diff can't be re-run
-  once the old code is gone, so the permanent guard is
-  test_every_send_decision_has_exactly_one_matching_writer_entry: every
-  (invoice, day) brain.decide() chose SEND for has EXACTLY one writer audit
-  entry, forever, from a single run's own trail -- no dropped or duplicated
-  contact, whatever future change touches this path.
-- Gotcha for any future code touching sim/ or engine/: tests/test_no_legal_
-  constants.py bans "Samadhaan" (and other statutory names/numbers) as a
-  literal string constant anywhere outside config/legal.yaml, INCLUDING in
-  narration/log text, not just message drafts -- pull such names via
-  engine.config.legal() at runtime instead.
-- 759 tests passing (pytest -q).
-- Gemini key rotated 2026-08-27, old key revoked — resolved, see memory.
-- Phase 10 done: ARCHITECTURE.md, README.md, docs/edge_cases.md (TC-070
-  corrected: OUT OF SCOPE -> TESTED, citing tests/test_consolidate.py;
-  totals now 60/44/37/141), and docs/winning_layer.md (added a
-  built-vs-future status banner + a W-label reconciliation table, since its
-  own Enhancement/Phase numbering never matched the actual shipped W1-W4)
-  all synced to what's actually built -- no engine/sim/report logic
-  touched, no results re-run. Deleted the dead engine/law.py::
-  samadhaan_draft() stub (superseded by engine/samadhaan.py since Day 5,
-  zero production callers) and its one guard test,
-  tests/test_law.py::test_samadhaan_draft_is_not_built_yet -- 1 guard test
-  removed (pinned a now-dead stub, not functional coverage), 759 tests
-  passing. Fixed this file's own two remaining stale Anthropic/
-  ANTHROPIC_API_KEY references (Architecture rules, Git & secrets) --
-  Gemini/GEMINI_API_KEY was already correct everywhere else, including in
-  the actual .env.example. No secrets found in git history (checked full
-  .env history + sk-/AIzaSy pickaxe search; two old "sk-test" hits were
-  placeholder test fixtures from the pre-Gemini era, not real keys).
+- Phase 0 (repo hygiene) done, three commits: d8abef4 "refactor: rename
+  pending-stage stubs to reflect deliberate separate-command design"
+  (main.py's two stub stages now print "run separately: <command>" instead of
+  the false "not implemented (Day 8/10)", plus 5 unused imports dropped;
+  ARCHITECTURE.md updated to match -- stdout text only, no logic touched),
+  97e27e4 "docs: add full project walkthrough" (PROJECT_WALKTHROUGH.md,
+  ~700 lines), 449dccb "fix: restore primary seed's audit trail after
+  multi-seed comparison run".
+- The audit-trail bug 449dccb fixes was real and structural: run_agent()
+  starts with audit.clear(), so multi_seed_summary()'s extra-seeds loop left
+  audit/audit_log.jsonl holding the LAST extra seed's trail (seed 555) while
+  results.json reported the primary seed -- and nothing on disk said so. Fix
+  mirrors the existing generate.ensure_dataset(primary_seed) restore in the
+  same function: new engine/audit.py snapshot()/restore() (bytes, so the
+  round-trip is exact), captured before the loop and restored after it. Zero
+  extra simulation cost -- it puts back output already paid for, never
+  re-runs the primary seed. Guarded permanently by tests/test_run_sim.py::
+  test_a_multi_seed_run_leaves_the_audit_trail_matching_the_primary_seed,
+  which was verified to actually FAIL against the pre-fix code (git stash),
+  not merely pass against the new one.
+- Quickstart artifacts are now three-way self-consistent and traceable to
+  seed 42: results.json (multi_seed populated, all 6 seeds, 6/6 money and
+  6/6 days), report.html (renders every one of those figures), and
+  audit_log.jsonl -- whose sha256 after `--compare --seed 42 --days 120` is
+  byte-for-byte identical to a standalone run_agent(42, 120)'s own trail
+  (7656 rows, 141 sends across 93 invoices == results.json's agent
+  invoice_contacts of 141). Note pytest itself rewrites the trail, so run
+  the compare command last if you want seed 42's trail on disk.
+- 760 tests passing (759 + the new audit-trail guard). One caveat worth
+  knowing: during this phase a full-suite run threw a one-off
+  OSError [Errno 22] on data/seed/invoices.json inside the new test, on a
+  run that also took 466s instead of the usual ~50s -- this machine has
+  heavy intermittent disk contention (AV scanning). data/generate.py's
+  _write_json() is a plain non-atomic Path.write_text, so any test churning
+  the dataset can hit this. Trimmed the new test from 2 extra seeds to 1
+  (same proof, a third of the file churn); 4/4 green full-suite runs since.
+  If it ever recurs, make _write_json() atomic (tmp file + os.replace)
+  rather than chasing the test.
+- NEXT: Phase 1 -- Ability/Willingness score split. It starts fresh and
+  needs engine/score.py, brain.py, law.py, sim/personas.py and run_sim.py
+  exactly as they are now (Phase 0 deliberately left all five untouched).
+  Two known items still parked by decision, both to be folded into Phase 2
+  (which introduces payment_plan/counter_settlement): Action.kind's
+  string-based non-enum design with two silent-failure consumers in
+  consolidate.py/buyer_panel.py, and the dead stop_rules.max_per_rung config
+  key that engine/brain.py never reads.
