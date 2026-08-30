@@ -36,6 +36,7 @@ Demo video and final submission polish are what's left (see
 -- [Quickstart](#quickstart) -- [Results](#results) --
 [Architecture](#architecture) -- [Early warning (W1)](#early-warning-w1) --
 [Buyer / trader view (W2)](#buyer--trader-view-w2) --
+[Ability vs. willingness (Phase 1)](#ability-vs-willingness-the-two-axis-score-phase-1) --
 [Buyer-level message consolidation (W3)](#buyer-level-message-consolidation-w3)
 -- [Scope (deliberate)](#scope-deliberate) -- [Edge cases](#edge-cases) --
 [Honest scope: built vs. future work](#honest-scope-built-vs-future-work) --
@@ -214,6 +215,65 @@ relationship view, surfaced in the report:
 
 Every field above is real and populated in `report/out/results.json`'s
 `buyer_panel` array -- nothing here is aspirational.
+
+---
+
+## Ability vs. willingness: the two-axis score (Phase 1)
+
+**The problem:** the buyer score is one number, and one number cannot answer
+two different questions. Two buyers both pay 40 days late and both break
+promises, so they score the same -- but one is **broke** and one is
+**stalling**. Chasing the first one harder just burns a relationship the
+money was never behind; offering the second one a payment plan is a gift.
+
+`engine/ability_willingness.py` asks the two questions separately:
+
+- **Willingness -- "will they pay?"** The existing formula, relabelled:
+  delay, broken promises, disputes, on-time streak. Nothing new -- with the
+  shipped weights it equals the legacy score exactly, and a test pins that.
+- **Ability -- "can they pay?"** The new axis, read off the buyer's money
+  coming *in*: inflow trend, how lumpy that inflow is, failed payments, and
+  how big the specific invoice is against a typical month for that buyer.
+  The same Rs 5 lakh invoice is routine for a corporate and a hard ask for a
+  small trader; the ratio says so.
+
+Crossing them gives four buyers instead of one:
+
+| | **Low willingness** | **High willingness** |
+|---|---|---|
+| **High ability** | `can_pay_but_wont` -- has the money, choosing not to | `good_customer` -- can pay and does |
+| **Low ability** | `high_risk` -- neither means nor intent | `cash_flow_problem` -- wants to pay, money isn't there |
+
+Every weight and both quadrant boundaries live in `config/rules.yaml`
+(`score.ability`, `score.willingness`, `score.quadrant`), and both axes carry
+a full breakdown -- `explain_ability()` and `explain_willingness()` print the
+arithmetic in plain English, the same way `explain()` already does:
+
+```
+python engine/ability_willingness.py --explain BUY-07
+```
+
+> **Computed, not yet acted on.** As of Phase 1 the Brain does not read any
+> of this: no message changes, no escalation changes, and the whole
+> baseline-vs-agent experiment produces byte-identical numbers to before.
+> Acting on the quadrant -- a payment-plan conversation for
+> `cash_flow_problem`, firmer escalation for `can_pay_but_wont` -- is Phase
+> 2. It ships inert first so the numbers can be argued with before they are
+> allowed to move money.
+
+**Honest about the data:** the inflow signals are *synthetic*, generated per
+buyer and correlated with the simulator's hidden persona (a cash-strapped
+buyer's inflow declines and bounces; a habitual delayer's stays healthy
+because they are slow, not broke). No real transaction feed is wired in --
+that is what a Razorpay integration would supply. The correlation runs one
+way only: the persona shapes the numbers, and no module under `engine/` ever
+sees the tag, which `tests/test_sim_isolation.py` enforces automatically.
+
+**Honest about the formula:** `average_delay_days` is not a pure willingness
+signal -- a buyer who pays late because they are broke loses willingness
+points too. Separating that cleanly needs per-invoice attribution we do not
+have; the ability axis is what keeps that conflation from driving a decision
+on its own.
 
 ---
 

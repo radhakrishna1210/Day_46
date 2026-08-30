@@ -97,52 +97,58 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - [x] P0 - Repo hygiene: committed the held doc/rename split, fixed the
       multi-seed audit-trail clobbering bug, regenerated the Quickstart
       artifacts self-consistently (d8abef4, 97e27e4, 449dccb)
+- [x] P1 - Ability/Willingness score split: synthetic inflow signals on the
+      buyer record, a two-axis score + 4-way quadrant, all config-driven.
+      Computed and explained only -- the Brain does not read it yet (P2).
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 0 (repo hygiene) done, three commits: d8abef4 "refactor: rename
-  pending-stage stubs to reflect deliberate separate-command design"
-  (main.py's two stub stages now print "run separately: <command>" instead of
-  the false "not implemented (Day 8/10)", plus 5 unused imports dropped;
-  ARCHITECTURE.md updated to match -- stdout text only, no logic touched),
-  97e27e4 "docs: add full project walkthrough" (PROJECT_WALKTHROUGH.md,
-  ~700 lines), 449dccb "fix: restore primary seed's audit trail after
-  multi-seed comparison run".
-- The audit-trail bug 449dccb fixes was real and structural: run_agent()
-  starts with audit.clear(), so multi_seed_summary()'s extra-seeds loop left
-  audit/audit_log.jsonl holding the LAST extra seed's trail (seed 555) while
-  results.json reported the primary seed -- and nothing on disk said so. Fix
-  mirrors the existing generate.ensure_dataset(primary_seed) restore in the
-  same function: new engine/audit.py snapshot()/restore() (bytes, so the
-  round-trip is exact), captured before the loop and restored after it. Zero
-  extra simulation cost -- it puts back output already paid for, never
-  re-runs the primary seed. Guarded permanently by tests/test_run_sim.py::
-  test_a_multi_seed_run_leaves_the_audit_trail_matching_the_primary_seed,
-  which was verified to actually FAIL against the pre-fix code (git stash),
-  not merely pass against the new one.
-- Quickstart artifacts are now three-way self-consistent and traceable to
-  seed 42: results.json (multi_seed populated, all 6 seeds, 6/6 money and
-  6/6 days), report.html (renders every one of those figures), and
-  audit_log.jsonl -- whose sha256 after `--compare --seed 42 --days 120` is
-  byte-for-byte identical to a standalone run_agent(42, 120)'s own trail
-  (7656 rows, 141 sends across 93 invoices == results.json's agent
-  invoice_contacts of 141). Note pytest itself rewrites the trail, so run
-  the compare command last if you want seed 42's trail on disk.
-- 760 tests passing (759 + the new audit-trail guard). One caveat worth
-  knowing: during this phase a full-suite run threw a one-off
-  OSError [Errno 22] on data/seed/invoices.json inside the new test, on a
-  run that also took 466s instead of the usual ~50s -- this machine has
-  heavy intermittent disk contention (AV scanning). data/generate.py's
-  _write_json() is a plain non-atomic Path.write_text, so any test churning
-  the dataset can hit this. Trimmed the new test from 2 extra seeds to 1
-  (same proof, a third of the file churn); 4/4 green full-suite runs since.
-  If it ever recurs, make _write_json() atomic (tmp file + os.replace)
-  rather than chasing the test.
-- NEXT: Phase 1 -- Ability/Willingness score split. It starts fresh and
-  needs engine/score.py, brain.py, law.py, sim/personas.py and run_sim.py
-  exactly as they are now (Phase 0 deliberately left all five untouched).
-  Two known items still parked by decision, both to be folded into Phase 2
-  (which introduces payment_plan/counter_settlement): Action.kind's
-  string-based non-enum design with two silent-failure consumers in
-  consolidate.py/buyer_panel.py, and the dead stop_rules.max_per_rung config
-  key that engine/brain.py never reads.
+- Phase 1 done. New engine/ability_willingness.py: ability ("can they pay?",
+  from inflow trend/volatility/failed payments/invoice-vs-typical-month),
+  willingness ("will they pay?", a relabel of the legacy formula), quadrant()
+  (good_customer / cash_flow_problem / can_pay_but_wont / high_risk),
+  two_axis_score(), explain_ability(), explain_willingness(), plus a CLI
+  (`python engine/ability_willingness.py --explain BUY-07`). data/generate.py
+  now puts monthly_inflow_paise (6-12 months, most recent last) and
+  failed_payment_count on every buyer, correlated with the hidden persona via
+  three new Persona fields (inflow_drift, inflow_volatility,
+  failed_payment_chance). SCHEMA_VERSION 1 -> 2.
+- TWO DESIGN CHOICES I made where the plan left it open, both worth knowing
+  before Phase 2. (1) ability/willingness/quadrant are NOT extra keys on
+  score_buyer() -- they hang off a separate two_axis_score() that composes on
+  top of it. Forced: tests/test_score.py::test_score_record_is_self_describing
+  asserts set(result) == exactly 9 keys, so adding keys and "test_score.py
+  passes unmodified" were mutually exclusive. Better anyway, since ability
+  depends on a SPECIFIC invoice and score_buyer() is per-buyer. (2) The
+  quadrant has its OWN thresholds (score.quadrant.ability_high_from /
+  willingness_high_from, both 50), not score.bands -- bands defines two edges
+  for a three-way pacing split; a 2x2 needs one edge per axis, and borrowing
+  one would couple "is this buyer able" to "does the brain start at rung 2".
+- The additive promise was verified end to end, not asserted: invoices are
+  BYTE-IDENTICAL before/after on seeds 42/7/555 (only the intended
+  schema_version bump differs), and a fresh 6-seed --compare gives exactly the
+  same recovered_paise as pre-Phase-1 (baseline 1368047240, agent 1597922941,
+  6/6 and 6/6). The mechanism: _add_inflow_signals() runs on its OWN RNG
+  stream (random.Random(f"{seed}:inflow")) after the world is built -- drawing
+  from the shared rng would have shifted every later draw and rewritten every
+  invoice. tests/test_data.py::test_the_inflow_signals_are_drawn_from_their_
+  own_random_stream pins that permanently via rng.getstate().
+- 803 tests passing (760 + 43: 29 in the new tests/test_ability_willingness.py,
+  14 in test_data.py). Zero regressions; test_score.py ran unmodified. Also
+  moved score.py's last two hardcoded tunables into config as score.trend
+  .window_days/.noise_floor. New config keys for Phase 2 to reference:
+  score.trend.*, score.willingness.{base,min,max,weights.*},
+  score.ability.{base,min,max,weights.*,volatility_floor_pct,recent_months,
+  min_months_for_trend}, score.quadrant.*.
+- NEXT: Phase 2 -- make the Brain act on the quadrant (payment_plan /
+  counter_settlement action kinds). Three things waiting for it: (a)
+  tests/test_ability_willingness.py::test_the_brain_does_not_consume_the_two_
+  axis_score_in_this_phase is a deliberate tripwire that WILL fail the moment
+  brain.py imports this -- delete it as part of Phase 2, it marks the boundary
+  on purpose; (b) Action.kind's string-based non-enum design and its two
+  silent-failure consumers in consolidate.py/buyer_panel.py should be fixed
+  there, since that is the phase adding new kinds; (c) the dead
+  stop_rules.max_per_rung key is still unread by brain.py. Known limitation to
+  carry forward: willingness still inherits average_delay_days, which is
+  ability-contaminated (a broke buyer loses willingness points too) -- stated
+  in the config comment, ARCHITECTURE.md and README rather than hidden.

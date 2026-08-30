@@ -17,7 +17,7 @@ This document does **not** define implementation rules, decision rules, threshol
 
 ## Status Summary
 
-Every one of the 141 cases below carries a `**Status:**` line, using exactly
+Every one of the 142 cases below carries a `**Status:**` line, using exactly
 three values:
 
 - **TESTED** -- has a passing test; the test file and function are named.
@@ -28,10 +28,10 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 60 |
+| TESTED | 61 |
 | HANDLED | 44 |
 | OUT OF SCOPE | 37 |
-| **Total** | **141** |
+| **Total** | **142** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
 seven previously-incidental behaviours (TC-027, TC-033, TC-041, TC-042,
@@ -54,6 +54,10 @@ E4 (this pass) moved TC-141 from OUT OF SCOPE to TESTED: `sim/scenario_tc141.py`
 runs its exact sequence end to end through the real pipeline, driven by
 `python sim/run_sim.py --scenario tc141`, with tests in
 `tests/test_scenario_tc141.py`.
+
+Phase 1 (the ability/willingness split) added TC-142 -- the one genuinely new
+edge case that phase created: a buyer with no transaction history at all, now
+that a second score axis reads transaction data that may simply not be there.
 
 Phase 10 corrected TC-070, which had gone stale: it still described
 buyer-level consolidation as unbuilt after W3 (`engine/consolidate.py`)
@@ -2344,3 +2348,46 @@ It does not prescribe:
 - what database schema should be used
 
 Those decisions belong to the implementation/design phase.
+
+---
+
+## TC-142 — Buyer With No Transaction History at All
+
+**Status: TESTED** -- `tests/test_ability_willingness.py::test_a_buyer_with_no_inflow_history_scores_the_neutral_base_and_says_so`, `test_an_empty_inflow_series_is_treated_as_no_data_rather_than_as_zero_income` and `test_a_malformed_inflow_series_degrades_instead_of_raising`.
+
+### Initial State
+```text
+Buyer: brand-new, or a record written before schema_version 2
+monthly_inflow_paise: missing, empty, or malformed
+failed_payment_count: missing or malformed
+Invoice: overdue, needs an ability score
+```
+
+### The Risk
+The ability axis reads transaction data, and the legacy score axis does not.
+A buyer with no inflow history is therefore a case the score engine never had
+to handle before. Three wrong answers were available:
+
+1. **Score 0 ("cannot pay")** -- treats absence of evidence as evidence of
+   insolvency, and would push every new buyer into `high_risk` on their first
+   invoice.
+2. **Score 100 ("can pay")** -- the mirror-image lie.
+3. **Raise** -- a malformed record taking down the whole scoring pass.
+
+### Expected Behaviour
+Degrade the way `confidence` already degrades for a buyer with no payment
+history: return the configured neutral `base`, and say in the breakdown that
+this is a default rather than a finding. `ability()` emits an explicit
+`no inflow data` factor reading *"no transaction history for this buyer; this
+is the neutral default, not a clean bill of health"*, and every derived signal
+(`inflow_trend_pct`, `inflow_volatility_pct`,
+`typical_monthly_inflow_paise`, `invoice_to_capacity_ratio`) reports `None`
+rather than a fabricated zero. A malformed series is filtered element by
+element rather than trusted or rejected wholesale, so one bad month cannot
+either crash the pass or silently become a real data point.
+
+A short-but-present series is deliberately treated differently from an absent
+one: too few months to call a *trend* (`score.ability.min_months_for_trend`)
+still leaves enough to size an invoice against a typical month, so the trend
+factor abstains while the capacity ratio still contributes. Partial evidence
+is used partially instead of being thrown away.

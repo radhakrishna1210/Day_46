@@ -140,6 +140,79 @@ confidence = low (<3 invoices) / medium (3–9) / high (10+)
 **Also produces:** a breakdown (why the score is what it is) and a trend arrow (score 6 months ago vs now).
 **Rule, not AI.** A score must be explainable — Razorpay's bar says "every money action explainable."
 
+#### Block 2b — Ability and Willingness (`engine/ability_willingness.py`)
+
+The one number above hides a question it cannot answer. Two buyers both pay
+40 days late and both break promises. The score gives them the same number —
+but one is **broke** and one is **stalling**, and the right thing to do with
+them is opposite. Chasing a buyer harder when the money genuinely is not
+there just burns the relationship; offering a payment plan to a buyer who is
+simply choosing not to pay is a gift.
+
+So the score is split into two questions asked separately:
+
+- **Willingness — "will they pay?"** The old formula, relabelled: delay,
+  broken promises, disputes, on-time streak. Nothing new; this is what the
+  score was always really measuring.
+- **Ability — "can they pay?"** The genuinely new axis, read off the buyer's
+  money coming *in*: whether their monthly inflow is rising or falling, how
+  lumpy it is, how many payments have bounced, and — when we are judging one
+  specific invoice — how big that invoice is against a typical month for
+  them. The same ₹5 lakh invoice is pocket change to a corporate and a
+  serious ask for a small trader, and the ratio says so.
+
+Put the two on a grid and you get four buyers, not one:
+
+```
+                         WILLINGNESS
+                    low                 high
+              +-------------------+-------------------+
+       high   | can_pay_but_wont  |  good_customer    |
+              | has the money,    |  can pay and      |
+              | chooses not to    |  does pay         |
+  ABILITY     +-------------------+-------------------+
+       low    | high_risk         |  cash_flow_problem|
+              | neither means     |  wants to pay,    |
+              | nor intent        |  money isn't there|
+              +-------------------+-------------------+
+```
+
+**Where the evidence comes from.** `data/generate.py` puts two new fields on
+each buyer — `monthly_inflow_paise` (6–12 months of money in, most recent
+last) and `failed_payment_count`. They are correlated with the hidden
+simulator persona the same way payment delays already are: a `cash_tight`
+buyer's inflow declines and bounces, a `habitual_delayer`'s stays flat and
+healthy because they are not short of money, they are just slow. **The
+correlation runs one way only.** The persona shapes the numbers; only the
+numbers reach the buyer record, and no module under `engine/` ever sees the
+tag — the same one-way street the delay pattern already travels down, and
+`tests/test_sim_isolation.py` enforces it for this module automatically.
+
+**Rule, not AI**, like the rest of the scoring, and every weight and boundary
+lives in `config/rules.yaml` under `score.ability`, `score.willingness` and
+`score.quadrant`. Both axes carry a full breakdown, and
+`explain_ability()` / `explain_willingness()` print the arithmetic in plain
+English exactly as `explain()` does for the legacy score.
+
+> **Nothing acts on this yet.** As of Phase 1 the two axes and the quadrant
+> are *computed and explained only*. `engine/brain.py` does not import this
+> module, no message changes, and no escalation changes — the agent behaves
+> exactly as it did before. Wiring the quadrant into decisions (a payment-plan
+> conversation for `cash_flow_problem`, firmer escalation for
+> `can_pay_but_wont`) is **Phase 2**. Shipping it inert first means the
+> numbers can be argued with before they are allowed to move money.
+>
+> The legacy `score` is untouched by all of this: `score_buyer()` returns
+> exactly the record it always did, and the two-axis view is a separate
+> `two_axis_score()` composed on top of it. Every existing reader — brain,
+> writer, watchdog, buyer panel, the simulator — is unaffected.
+
+**Known limitation, stated rather than hidden:** `average_delay_days` is not
+a pure willingness signal — a buyer who pays late *because* they are broke is
+penalised on the willingness axis too. Separating that properly needs
+per-invoice attribution we do not have. The ability axis is what stops that
+conflation from reaching a decision on its own.
+
 ### Block 3 — Watchdog (`engine/watchdog.py`)
 **What:** Runs once per simulated day. Compares today's date with every unpaid invoice's due date. Anything overdue goes into the work queue.
 **Pure rule.** Just date math.
@@ -310,6 +383,7 @@ revenue-recovery-agent/
 │   ├── llm.py              ← the only caller of the Gemini API (mock/live modes)
 │   ├── money.py            ← integer-paise formatting, one source of truth
 │   ├── score.py  watchdog.py  law.py  rungs.py  brain.py
+│   ├── ability_willingness.py ← Phase 1: the two-axis score + quadrant (computed, not yet acted on)
 │   ├── validate.py         ← catches structurally malformed invoices before law/brain see them (E2)
 │   ├── samadhaan.py        ← the real ready-to-file Samadhaan complaint draft
 │   ├── buyer_panel.py      ← W2: per-buyer rollup (outstanding, score, promise reliability, recovery state)

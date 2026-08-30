@@ -52,18 +52,37 @@ remains unbuilt.
 - **W4 -- Experiment Refresh**: re-ran the full 6-seed baseline-vs-agent
   comparison at HEAD and added per-seed edge-case-count transparency to the
   multi-seed report table.
+- **Phase 1 -- Ability/Willingness Split**: `engine/ability_willingness.py`
+  scores "can they pay?" and "will they pay?" separately and places the
+  buyer in a four-way quadrant (`good_customer`, `cash_flow_problem`,
+  `can_pay_but_wont`, `high_risk`). A **first slice** of Cash-Flow
+  Intelligence (Enhancement 3) -- see the honest scoping below.
 
-**FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 3,
-4, 6-12 (Dynamic Trader Financial Profile as originally scoped, Cash-Flow
-Intelligence, Payment Propensity Prediction, Next-Best Recovery Action
-beyond the existing rung ladder, Expected Recovery/Cost Intelligence,
-Recovery Explanation beyond the existing audit trail, Recovery Strategy
-Simulation, Closed-Loop Learning), and the UI Screens 1-5. None of these
-have any code behind them -- no cash-flow trend, no payment-propensity
-score, no dashboard, no what-if simulator. They require either real
-transaction/payment data this standalone project doesn't have, or are
-explicitly out of the 12-day build's scope (dashboards, ML models -- see
-CLAUDE.md's scope guard).
+**PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
+the *reasoning* half and deliberately not the *data* half. What exists: a
+real inflow-trend calculation, a volatility measure, a failed-payment
+signal, an invoice-size-against-typical-month ratio, a 0-100 ability score
+with full breakdown, and a plain-English explanation -- all rule-based, all
+config-driven, all tested. What does **not** exist: any real transaction
+feed. The inflow series is *synthetic*, generated per buyer by
+`data/generate.py` and correlated with the simulator's hidden persona. Point
+a real payment/banking feed at `monthly_inflow_paise` and the scoring above
+works unchanged; until then this is a demonstration of the reasoning on
+plausible fake data, not a cash-flow product. Two further caveats worth
+stating: as of Phase 1 nothing *acts* on the score (`engine/brain.py` does
+not read it -- that is Phase 2), and there is still no probability model
+anywhere, so Payment Propensity Prediction (Enhancement 4) remains unbuilt.
+
+**FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 4,
+6-12 (Dynamic Trader Financial Profile as originally scoped, Payment
+Propensity Prediction, Next-Best Recovery Action beyond the existing rung
+ladder, Expected Recovery/Cost Intelligence, Recovery Explanation beyond the
+existing audit trail, Recovery Strategy Simulation, Closed-Loop Learning),
+and the UI Screens 1-5. None of these have any code behind them -- no
+payment-propensity score, no dashboard, no what-if simulator. They require
+either real transaction/payment data this standalone project doesn't have,
+or are explicitly out of the 12-day build's scope (dashboards, ML models --
+see CLAUDE.md's scope guard).
 
 **Reconciliation -- actual W-label vs. this document's original plan:**
 
@@ -73,6 +92,7 @@ CLAUDE.md's scope guard).
 | W2 Buyer panel + promise reliability | Enhancement 5 (Promise Reliability) + Enhancement 13 (Trader-Level Recovery Intelligence) |
 | W3 Buyer-level message consolidation | Enhancement 14 / "Buyer-Level Communication Awareness" -- this document's own lowest-priority item (see Section 27, Priority Ranking, below) |
 | W4 Experiment refresh + edge-case transparency | Not one of this document's original Enhancements -- an experiment-honesty hardening pass, not a new product capability |
+| Phase 1 Ability/willingness split + quadrant | A first slice of Enhancement 3 (Cash-Flow Intelligence) on synthetic inflow data -- the reasoning, not the data feed. Not Enhancement 4: there is no probability model. |
 
 ---
 
