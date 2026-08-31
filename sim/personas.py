@@ -97,6 +97,70 @@ DISPUTE_VARIANTS: tuple[str, ...] = (
     "dispute_po_mismatch",
 )
 
+#: Phase 4: what kind of action the message just sent was, per
+#: engine.brain's own kinds (SEND maps to "send" here; PAYMENT_PLAN and
+#: COUNTER_SETTLE keep their own names). "send" is the default and is the
+#: ONLY value every pre-Phase-4 call site implicitly used -- see react()'s
+#: own docstring for the backward-compatibility guarantee that depends on it.
+ACTION_KINDS = ("send", "payment_plan", "counter_settle")
+
+#: Persona -> how many points of PROMISE probability to take from SILENCE
+#: when offered a payment_plan instead of a plain send, at every rung. Only
+#: personas whose behaviour already correlates with genuine cash-flow
+#: constraint (data/generate.py's PERSONA_BEHAVIOUR: negative inflow drift,
+#: high inflow volatility, real failed-payment history) get a boost --
+#: cash_tight is the one persona built that way. This is the real-world
+#: intuition config/rules.yaml's negotiation.eligible_actions is already
+#: built on (payment_plan is offered to cash_flow_problem, not to
+#: can_pay_but_wont/high_risk): a buyer who wants to pay but cannot on the
+#: original schedule should engage meaningfully MORE when the obstacle
+#: (timing) is actually addressed. forgetful (good_customer) and
+#: habitual_delayer/disputer (can_pay_but_wont) are deliberately absent: a
+#: good payer accepting a plan they did not need is not a meaningful signal,
+#: and a buyer who is unwilling rather than unable has no more reason to
+#: promise for a schedule than for a plain ask. deadbeat (high_risk) is
+#: absent because payment_plan is not even offered to that quadrant.
+PAYMENT_PLAN_PROMISE_BOOST: dict[str, float] = {
+    "cash_tight": 0.25,
+}
+
+#: Persona -> chance that a PROMISE produced in response to a counter_settle
+#: offer is drawn specifically from the reduced-terms fixture
+#: (promise_partial_hinglish, which engine.promises.parse_reply() resolves
+#: to amount="partial" -- a genuine partial payment when the promise is
+#: later kept, via sim/run_sim.py's _advance_promises()) rather than
+#: uniformly from PROMISE_VARIANTS. Represents "continued lowballing" --
+#: accepted, but for less than proposed -- reusing the existing partial-
+#: promise mechanic rather than inventing a new outcome category, exactly
+#: as this phase's brief asks. Only can_pay_but_wont's persona
+#: (habitual_delayer) gets this: counter_settle is not offered to
+#: good_customer/cash_flow_problem at all, and disputer's own reaction table
+#: is already dominated by DISPUTE, not PROMISE, so there is nothing
+#: meaningful to bias there. The remaining chance still falls back to a
+#: uniform draw over PROMISE_VARIANTS, so a full-terms promise stays
+#: possible, just not favoured.
+#: 0.70, not 0.75 -- tests/test_no_legal_constants.py bans 0.75 repo-wide
+#: (it is config/legal.yaml's Samadhaan pre-deposit share), and this number
+#: has nothing to do with that: a coincidental collision in VALUE only, not
+#: in meaning, so the fix is picking a different number, not an exception.
+COUNTER_SETTLE_PARTIAL_BIAS: dict[str, float] = {
+    "habitual_delayer": 0.70,
+}
+
+#: The one PROMISE_VARIANTS entry that resolves to a partial promise -- see
+#: COUNTER_SETTLE_PARTIAL_BIAS above.
+_REDUCED_TERMS_VARIANT = "promise_partial_hinglish"
+
+
+def _boost_promise(table: dict[str, float], boost: float) -> dict[str, float]:
+    """Shift `boost` points of probability from SILENCE to PROMISE.
+
+    The row still sums to 1.0 either way -- boost is clamped to what SILENCE
+    actually has to give, so this can never push another outcome negative.
+    """
+    boost = min(boost, table[SILENCE])
+    return {**table, PROMISE: table[PROMISE] + boost, SILENCE: table[SILENCE] - boost}
+
 
 def load_hidden_personas(path: Path | None = None) -> dict[str, str]:
     """buyer_id -> persona tag, from sim/hidden_personas.json.
@@ -115,16 +179,33 @@ def _fixture_reply(key: str) -> str:
     return str(fixtures[key]["reply"])
 
 
-def react(persona: str, message_rung: int, rng: random.Random) -> dict[str, Any]:
+def react(
+    persona: str, message_rung: int, rng: random.Random, *, action_kind: str = "send",
+) -> dict[str, Any]:
     """How this persona responds to a message sent at this rung.
 
     Args:
         persona: one of PERSONAS.
         message_rung: the rung of the message just sent (1, 2 or 3 -- rung 0
             and 4 never reach a buyer, so callers never ask about them).
+            payment_plan/counter_settle always inherit an existing send-tier
+            rung too (engine/brain.py never assigns them rung 4), so this
+            bound holds for every action_kind.
         rng: seeded per (invoice, day) by the caller, so the same buyer facing
             the same message on the same simulated day gets the same roll
             whether this is the baseline run or the agent run.
+        action_kind: one of ACTION_KINDS. "send" (the default) reproduces
+            EVERY pre-Phase-4 call site's behaviour exactly -- this parameter
+            only ever changes the outcome for "payment_plan" (cash_tight gets
+            a real promise-rate boost; see PAYMENT_PLAN_PROMISE_BOOST) and
+            "counter_settle" (habitual_delayer's promises skew toward
+            reduced terms; see COUNTER_SETTLE_PARTIAL_BIAS). Every other
+            persona/action_kind combination -- including a payment_plan or
+            counter_settle reaching a persona with no configured
+            differentiation, which should not normally happen since
+            config/rules.yaml's negotiation.eligible_actions already keeps
+            each action within its intended quadrant, but is not itself
+            invalid here -- behaves exactly like "send".
 
     Returns:
         outcome: one of OUTCOMES.
@@ -136,15 +217,30 @@ def react(persona: str, message_rung: int, rng: random.Random) -> dict[str, Any]
         raise ValueError(f"unknown persona {persona!r}; expected one of {PERSONAS}")
     if message_rung not in (1, 2, 3):
         raise ValueError(f"personas only react to buyer-facing rungs (1-3), got {message_rung!r}")
+    if action_kind not in ACTION_KINDS:
+        raise ValueError(f"unknown action_kind {action_kind!r}; expected one of {ACTION_KINDS}")
 
     table = REACTION_TABLE[persona][message_rung]
+    if action_kind == "payment_plan":
+        boost = PAYMENT_PLAN_PROMISE_BOOST.get(persona, 0.0)
+        if boost:
+            table = _boost_promise(table, boost)
     outcomes = list(table)
     weights = [table[o] for o in outcomes]
     outcome = rng.choices(outcomes, weights=weights, k=1)[0]
 
     result: dict[str, Any] = {"outcome": outcome}
     if outcome == PROMISE:
-        variant = rng.choice(PROMISE_VARIANTS)
+        # `bias and rng.random() < bias`, not `rng.random() < bias` alone:
+        # a persona with no configured bias (or action_kind != counter_settle)
+        # must not consume an rng draw here at all, or its variant choice
+        # would silently differ from the plain-"send" path even though the
+        # OUTCOME (which branch runs) never would have changed either way.
+        bias = COUNTER_SETTLE_PARTIAL_BIAS.get(persona, 0.0) if action_kind == "counter_settle" else 0.0
+        if bias and rng.random() < bias:
+            variant = _REDUCED_TERMS_VARIANT
+        else:
+            variant = rng.choice(PROMISE_VARIANTS)
         result["reply"] = _fixture_reply(variant)
         result["variant"] = variant
     elif outcome == DISPUTE:

@@ -322,6 +322,104 @@ def test_load_results_reports_a_clear_error_when_missing(tmp_path) -> None:
         build_report.load_results(tmp_path / "nope.json")
 
 
+# --------------------------------------------------------------------------
+# Phase 4 Part B: the third (agent+EV) column, additive to results.json
+# --------------------------------------------------------------------------
+
+def test_headline_and_report_have_no_agent_ev_column_without_it(results_payload, tmp_path) -> None:
+    """results_payload (this file's own fixture) carries no "agent_ev" key --
+    the exact pre-Phase-4 shape. Every headline row must carry no "agent_ev"
+    key either, and the rendered HTML must not mention the third column."""
+    for row in build_report._headline_rows(results_payload):
+        assert "agent_ev" not in row
+    assert build_report._view(results_payload)["has_agent_ev"] is False
+    assert build_report._view(results_payload)["ev_ablation_note"] is None
+
+    out = tmp_path / "report.html"
+    build_report.build(results_payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Agent + EV" not in html
+    # The .agent-ev CSS rule is always in the static stylesheet -- what must
+    # be absent is an actual rendered cell using it, not the class name itself.
+    assert '"num agent-ev"' not in html
+
+
+def test_headline_and_report_show_a_third_column_with_agent_ev(results_payload, tmp_path) -> None:
+    """The contrast case: a real ev_mode: on run for the same seed, added the
+    way sim/run_sim.py's own --compare CLI does, actually produces a third
+    rendered column with real figures in it -- not just a flag with nothing
+    behind it."""
+    agent_ev = run_sim.run_agent(42, DAYS, verbose=False, ev_mode=True)
+    payload = {**results_payload, "agent_ev": agent_ev}
+
+    rows = build_report._headline_rows(payload)
+    assert rows[0]["agent_ev"] == build_report._money(agent_ev["final"]["recovered_paise"])
+    view = build_report._view(payload)
+    assert view["has_agent_ev"] is True
+    assert view["ev_ablation_note"] is not None
+
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Agent + EV" in html
+    assert build_report._money(agent_ev["final"]["recovered_paise"]) in html
+
+
+def _agent_ev_multi_seed_payload() -> dict:
+    """A minimal results.json shape with the ablation's own agent_ev_* keys
+    on every row -- the same minimal-fixture style _multi_seed_payload()
+    above uses for the W4 edge-case columns."""
+    rows = [
+        {"seed": seed, "baseline_recovered_paise": 100, "agent_recovered_paise": 150,
+         "money_win": True, "matched_n": 0, "matched_baseline_days": None,
+         "matched_agent_days": None, "days_win": False,
+         "malformed_invoices": 0, "superseded_promise_invoices": 0,
+         "agent_ev_recovered_paise": recovered, "agent_ev_money_win": win}
+        for seed, recovered, win in ((42, 180, True), (7, 140, False))
+    ]
+    return {
+        "multi_seed": {"rows": rows, "money_win_rate": "2/2", "days_win_rate": "n/a",
+                       "days_excluded": 2, "agent_ev_money_win_rate": "1/2"},
+    }
+
+
+def test_multi_seed_rows_carries_agent_ev_columns_additively() -> None:
+    payload = _agent_ev_multi_seed_payload()
+    view = build_report._multi_seed_rows(payload)
+    assert view["agent_ev_money_win_rate"] == "1/2"
+    assert view["rows"][0]["agent_ev_recovered"] == build_report._money(180)
+    assert view["rows"][0]["agent_ev_money_win"] is True
+    assert view["rows"][1]["agent_ev_money_win"] is False
+    # the existing columns are still exactly what they always were
+    assert view["rows"][0]["agent_recovered"] == build_report._money(150)
+
+
+def test_multi_seed_rows_without_agent_ev_has_no_agent_ev_keys() -> None:
+    payload = _multi_seed_payload({42: {}})
+    view = build_report._multi_seed_rows(payload)
+    assert "agent_ev_money_win_rate" not in view
+    assert not any(key.startswith("agent_ev_") for key in view["rows"][0])
+
+
+def test_build_report_renders_the_agent_ev_multi_seed_columns(tmp_path) -> None:
+    payload = {**_agent_ev_multi_seed_payload(), "seed": 42, "days": DAYS,
+              "generated": "2026-08-24T00:00:00",
+              "baseline": {"final": {"recovered_paise": 100, "outstanding_paise": 0,
+                                     "disputed_paise": 0, "disputed_count": 0},
+                          "avg_days_to_pay": None, "messages_sent": 0, "handoffs": 0,
+                          "exceptions": [], "per_attempt": {}},
+              "agent": {"final": {"recovered_paise": 150, "outstanding_paise": 0,
+                                  "disputed_paise": 0, "disputed_count": 0},
+                       "avg_days_to_pay": None, "messages_sent": 0, "handoffs": 0,
+                       "exceptions": [], "per_rung": {}},
+              "matched_avg_days_to_pay": {"n": 0, "baseline": None, "agent": None}}
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "agent+EV" in html
+    assert "₹ win vs agent" in html
+
+
 def test_build_report_works_after_a_real_json_round_trip(results_payload, tmp_path) -> None:
     """The real CLI path: results.json has STRING keys for per_rung/per_attempt
 

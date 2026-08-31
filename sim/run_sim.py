@@ -55,6 +55,7 @@ from engine import ability_willingness
 from engine import audit, brain, channels, consolidate, law, llm, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
+from engine.config import rules
 from engine.money import enable_unicode_output, format_inr
 from sim import personas
 
@@ -508,7 +509,9 @@ def _raise_early_warnings(
         )
 
 
-def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
+def run_agent(
+    seed: int, days: int, verbose: bool = False, ev_mode: bool = False,
+) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
     channels -> persona reacts -> promises) over `days` simulated days.
 
@@ -517,7 +520,25 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     should leave a fresh, self-consistent trail for the seed and window it
     was asked for) and every decision, draft and delivery is written with
     log=True, exactly as production would.
+
+    Args:
+        ev_mode: Phase 4's third experiment arm. False (the default) passes
+            config=None to every brain.decide() call, exactly as before this
+            phase -- decide() resolves that to the cached rules() itself, so
+            this is byte-identical to pre-Phase-4 output (see
+            tests/test_run_sim.py's snapshot-diff test). True passes
+            config/rules.yaml's own settings with brain.ev_mode forced "on",
+            computed once here rather than per invoice -- the same override
+            shape tests/test_brain.py's own ev_config() helper uses, not a
+            new pattern. sim.personas.react() already differentiates
+            payment_plan/counter_settle reactions (Phase 4 Part A); this is
+            what actually lets a real run reach them.
     """
+    decide_config = None
+    if ev_mode:
+        base_config = rules()
+        decide_config = {**base_config, "brain": {**base_config.get("brain", {}), "ev_mode": "on"}}
+
     buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
     # Built once: invoice dicts are mutated in place by _apply_payment (never
@@ -599,7 +620,8 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                 two_axis = ability_willingness.two_axis_score(
                     buyer, grouped.get(buyer["buyer_id"], []), today, invoice=invoice)
                 action = brain.decide(invoice, buyer, two_axis, position,
-                                      promises=plist, history=hist, log=True)
+                                      promises=plist, history=hist, log=True,
+                                      config=decide_config)
                 last_action_by_invoice[inv_id] = {
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,
                 }
@@ -651,7 +673,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                     invoice_contacts += 1
 
                     rng = _rng(seed, inv_id, today, "react")
-                    reaction = personas.react(persona, action.rung, rng)
+                    reaction = personas.react(persona, action.rung, rng, action_kind=action.kind)
                     outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=True)
                     hist.append({"date": today.isoformat(), "rung": action.rung,
                                 "channel": target, "outcome": outcome,
@@ -705,7 +727,7 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     )
 
     return {
-        "mode": "agent", "seed": seed, "days": days,
+        "mode": "agent", "seed": seed, "days": days, "ev_mode": ev_mode,
         "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
         # Kept alongside messages_sent, not in place of it: messages_sent now
@@ -868,7 +890,8 @@ def _print_summary(label: str, report: dict[str, Any]) -> None:
 
 def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
                    agent: dict[str, Any], matched_days: dict[str, Any],
-                   multi_seed: dict[str, Any] | None) -> None:
+                   multi_seed: dict[str, Any] | None,
+                   agent_ev: dict[str, Any] | None = None) -> None:
     payload = {
         "seed": seed, "days": days,
         "generated": datetime.now().isoformat(timespec="seconds"),
@@ -881,6 +904,12 @@ def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
         "matched_avg_days_to_pay": matched_days,
         "multi_seed": multi_seed,
     }
+    # Phase 4's third arm, added additively: an OLD results.json (or code
+    # still reading one) has no "agent_ev" key at all, and report/
+    # build_report.py's own .get("agent_ev") reads degrade to the existing
+    # two-column layout when it is absent -- see that module's own comment.
+    if agent_ev is not None:
+        payload["agent_ev"] = agent_ev
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -894,6 +923,7 @@ DEFAULT_EXTRA_SEEDS: tuple[int, ...] = (7, 13, 99, 2024, 555)
 def multi_seed_summary(
     primary_seed: int, primary_baseline: dict[str, Any], primary_agent: dict[str, Any],
     extra_seeds: tuple[int, ...], days: int,
+    *, primary_agent_ev: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Re-run the comparison on more seeds and report who won on each.
 
@@ -903,11 +933,23 @@ def multi_seed_summary(
     the on-disk dataset and the audit trail back on `primary_seed` before
     returning -- each extra seed regenerates data/seed/ for itself along the
     way (via _load_world) and clears the trail (via run_agent).
+
+    Args:
+        primary_agent_ev: Phase 4's third arm (run_agent(..., ev_mode=True)
+            for the primary seed), reused the same way primary_baseline/
+            primary_agent already are. None (the default) skips the ablation
+            entirely -- every row is exactly the baseline_*/agent_* shape
+            this function always produced, unchanged. Passing it in adds
+            agent_ev_* keys to every row, additively, and re-runs the SAME
+            ev_mode=True arm for every extra seed too, so the ablation is
+            judged on the identical seed set as the existing 6/6 comparison,
+            not a separately chosen one.
     """
-    def row(seed: int, baseline: dict[str, Any], agent: dict[str, Any]) -> dict[str, Any]:
+    def row(seed: int, baseline: dict[str, Any], agent: dict[str, Any],
+            agent_ev: dict[str, Any] | None) -> dict[str, Any]:
         matched = matched_avg_days_to_pay(baseline, agent)
         edge = agent["edge_case_counts"]
-        return {
+        result = {
             "seed": seed,
             "baseline_recovered_paise": baseline["final"]["recovered_paise"],
             "agent_recovered_paise": agent["final"]["recovered_paise"],
@@ -924,8 +966,20 @@ def multi_seed_summary(
             "malformed_invoices": edge["malformed_invoices"],
             "superseded_promise_invoices": edge["superseded_promise_invoices"],
         }
+        if agent_ev is not None:
+            # The ablation's own comparison basis is agent_ev vs. agent (ev
+            # OFF) -- not vs. baseline -- per this phase's brief: "does the
+            # negotiation layer actually add recovery on top of the existing
+            # agent". Whether the EV arm still beats the naive baseline is
+            # already implied (agent already does, per money_win above) and
+            # is not this ablation's own question.
+            result["agent_ev_recovered_paise"] = agent_ev["final"]["recovered_paise"]
+            result["agent_ev_money_win"] = (
+                agent_ev["final"]["recovered_paise"] >= agent["final"]["recovered_paise"]
+            )
+        return result
 
-    rows = [row(primary_seed, primary_baseline, primary_agent)]
+    rows = [row(primary_seed, primary_baseline, primary_agent, primary_agent_ev)]
 
     # The primary seed's trail is on disk right now, because its run_agent()
     # has already finished. Every extra seed's run_agent() starts by clearing
@@ -938,7 +992,8 @@ def multi_seed_summary(
     for seed in extra_seeds:
         baseline = run_baseline(seed, days, verbose=False)
         agent = run_agent(seed, days, verbose=False)
-        rows.append(row(seed, baseline, agent))
+        agent_ev = run_agent(seed, days, verbose=False, ev_mode=True) if primary_agent_ev is not None else None
+        rows.append(row(seed, baseline, agent, agent_ev))
 
     generate.ensure_dataset(primary_seed)   # leave the dataset as we found it
     audit.restore(primary_trail)            # and the audit trail with it
@@ -946,12 +1001,16 @@ def multi_seed_summary(
     money_wins = sum(1 for r in rows if r["money_win"])
     days_eligible = [r for r in rows if r["matched_n"] > 0]
     days_wins = sum(1 for r in days_eligible if r["days_win"])
-    return {
+    summary = {
         "rows": rows,
         "money_win_rate": f"{money_wins}/{len(rows)}",
         "days_win_rate": f"{days_wins}/{len(days_eligible)}" if days_eligible else "n/a",
         "days_excluded": len(rows) - len(days_eligible),
     }
+    if primary_agent_ev is not None:
+        ev_wins = sum(1 for r in rows if r["agent_ev_money_win"])
+        summary["agent_ev_money_win_rate"] = f"{ev_wins}/{len(rows)}"
+    return summary
 
 
 def main() -> int:
@@ -985,11 +1044,27 @@ def main() -> int:
         return 0
 
     print(f"simulator: seed={args.seed}, days={args.days}, "
-          f"mode={'baseline vs agent' if args.compare else 'agent only'}")
+          f"mode={'baseline vs agent vs agent+EV' if args.compare else 'agent only'}")
 
     if args.compare:
         baseline = run_baseline(args.seed, args.days, verbose=args.verbose)
         agent = run_agent(args.seed, args.days, verbose=args.verbose)
+        # agent's own audit trail is what everything downstream of here reads
+        # from disk -- the report's audit excerpt, early warnings and trip
+        # wires (report/build_report.py) and multi_seed_summary()'s own
+        # "restore the primary seed's trail" both assume it. run_agent()
+        # unconditionally clears and rewrites the shared trail on every call,
+        # so without snapshotting it here, the agent+EV run immediately
+        # below would silently become the trail everything else sees.
+        agent_trail = audit.snapshot()
+        # Phase 4's third arm: the same agent, with config/rules.yaml's
+        # brain.ev_mode forced on -- the long-deferred ablation of whether
+        # the negotiation layer (engine/negotiation.py, wired into
+        # engine/brain.py in Phase 3) adds recovery on TOP of the
+        # already-built agent, not just whether the agent beats a naive
+        # baseline (which agent vs. baseline above already answers).
+        agent_ev = run_agent(args.seed, args.days, verbose=args.verbose, ev_mode=True)
+        audit.restore(agent_trail)
         if args.verbose:
             print()
             print("-- baseline narrative --")
@@ -999,14 +1074,23 @@ def main() -> int:
             print("-- agent narrative --")
             for line in agent["narrative"]:
                 print(f"  {line}")
+            print()
+            print("-- agent+EV narrative --")
+            for line in agent_ev["narrative"]:
+                print(f"  {line}")
         print()
         _print_summary("baseline", baseline)
         print()
-        _print_summary("agent", agent)
+        _print_summary("agent (ev off)", agent)
+        print()
+        _print_summary("agent+EV (ev on)", agent_ev)
         gain = agent["final"]["recovered_paise"] - baseline["final"]["recovered_paise"]
+        ev_gain = agent_ev["final"]["recovered_paise"] - agent["final"]["recovered_paise"]
         print()
         print(f"agent recovered {format_inr(gain, 'Rs ')} more than the baseline "
               f"with {agent['messages_sent'] - baseline['messages_sent']:+d} messages")
+        print(f"agent+EV recovered {format_inr(abs(ev_gain), 'Rs ')} "
+              f"{'more' if ev_gain >= 0 else 'less'} than agent (ev off) -- the ablation")
         matched = matched_avg_days_to_pay(baseline, agent)
         if matched["n"]:
             print(f"avg days to pay, {matched['n']} invoices BOTH recovered "
@@ -1016,12 +1100,17 @@ def main() -> int:
         multi_seed = None
         if extra_seeds:
             print()
-            print(f"running {len(extra_seeds)} more seeds for the multi-seed table: {extra_seeds}")
-            multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days)
+            print(f"running {len(extra_seeds)} more seeds for the multi-seed table "
+                  f"(baseline, agent, agent+EV): {extra_seeds}")
+            multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days,
+                                            primary_agent_ev=agent_ev)
             print(f"agent won on rupees recovered in {multi_seed['money_win_rate']} seeds, "
                   f"on avg days-to-pay (fair comparison) in {multi_seed['days_win_rate']} seeds")
+            print(f"agent+EV beat agent (ev off) on rupees recovered in "
+                  f"{multi_seed['agent_ev_money_win_rate']} seeds -- the ablation")
 
-        _write_results(args.results_out, args.seed, args.days, baseline, agent, matched, multi_seed)
+        _write_results(args.results_out, args.seed, args.days, baseline, agent, matched, multi_seed,
+                       agent_ev=agent_ev)
         print(f"results written to {args.results_out}")
     else:
         agent = run_agent(args.seed, args.days, verbose=args.verbose)

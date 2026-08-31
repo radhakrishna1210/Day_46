@@ -140,34 +140,56 @@ def exceptions_list(results: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _headline_rows(results: dict[str, Any]) -> list[dict[str, str]]:
+    """Baseline vs. agent, plus a third agent+EV column when Phase 4's
+    ablation arm (results["agent_ev"]) is present -- absent from an OLDER
+    results.json (pre-Phase-4, or a --compare run of it), in which case
+    every row simply carries no "agent_ev" key and the template falls back
+    to its existing two-column layout, per that key's own additive contract
+    (see sim/run_sim.py's _write_results()).
+    """
     baseline, agent = results["baseline"], results["agent"]
+    agent_ev = results.get("agent_ev")
     matched = results.get("matched_avg_days_to_pay") or {"n": 0, "baseline": None, "agent": None}
+
+    def row(label: str, baseline_value: str, agent_value: str, ev_value: str | None = "n/a") -> dict[str, str]:
+        result = {"label": label, "baseline": baseline_value, "agent": agent_value}
+        if agent_ev is not None:
+            result["agent_ev"] = ev_value
+        return result
+
     return [
-        {"label": "₹ recovered",
-         "baseline": _money(baseline["final"]["recovered_paise"]),
-         "agent": _money(agent["final"]["recovered_paise"])},
-        {"label": "Avg days to pay (each run's own recovered invoices)",
-         "baseline": _days(baseline["avg_days_to_pay"]),
-         "agent": _days(agent["avg_days_to_pay"])},
-        {"label": f"Avg days to pay ({matched['n']} invoices BOTH recovered -- the fair comparison)",
-         "baseline": _days(matched["baseline"]), "agent": _days(matched["agent"])},
-        {"label": "Messages sent (envelopes -- W3 consolidates several "
-                  "invoices for one buyer into one message where the rung "
-                  "tier allows it)",
-         "baseline": str(baseline["messages_sent"]), "agent": str(agent["messages_sent"])},
-        {"label": "Invoice-contacts (each invoice touched, before bundling "
-                  "-- proves chasing itself did not shrink, only the "
-                  "envelope count did)",
-         # The baseline never bundles, so its own invoice-contacts figure is
-         # just its messages_sent -- not read from the results payload,
-         # since run_baseline() deliberately carries no such field (W3 left
-         # it untouched; see CLAUDE.md's W3 notes).
-         "baseline": str(baseline["messages_sent"]),
-         "agent": str(agent.get("invoice_contacts", agent["messages_sent"]))},
-        {"label": "Escalated to a human",
-         "baseline": str(baseline["handoffs"]), "agent": str(agent["handoffs"])},
-        {"label": "Not recovered",
-         "baseline": str(len(baseline["exceptions"])), "agent": str(len(agent["exceptions"]))},
+        row("₹ recovered",
+            _money(baseline["final"]["recovered_paise"]), _money(agent["final"]["recovered_paise"]),
+            _money(agent_ev["final"]["recovered_paise"]) if agent_ev else None),
+        row("Avg days to pay (each run's own recovered invoices)",
+            _days(baseline["avg_days_to_pay"]), _days(agent["avg_days_to_pay"]),
+            _days(agent_ev["avg_days_to_pay"]) if agent_ev else None),
+        # No third-way "matched, all three runs recovered" set is computed
+        # (matched_avg_days_to_pay() is a pairwise comparison) -- this row
+        # stays baseline-vs-agent only, "n/a" in the agent+EV column, rather
+        # than inventing a three-way intersection this phase never asked for.
+        row(f"Avg days to pay ({matched['n']} invoices BOTH recovered -- the fair comparison)",
+            _days(matched["baseline"]), _days(matched["agent"])),
+        row("Messages sent (envelopes -- W3 consolidates several "
+            "invoices for one buyer into one message where the rung "
+            "tier allows it)",
+            str(baseline["messages_sent"]), str(agent["messages_sent"]),
+            str(agent_ev["messages_sent"]) if agent_ev else None),
+        row("Invoice-contacts (each invoice touched, before bundling "
+            "-- proves chasing itself did not shrink, only the "
+            "envelope count did)",
+            # The baseline never bundles, so its own invoice-contacts figure is
+            # just its messages_sent -- not read from the results payload,
+            # since run_baseline() deliberately carries no such field (W3 left
+            # it untouched; see CLAUDE.md's W3 notes).
+            str(baseline["messages_sent"]), str(agent.get("invoice_contacts", agent["messages_sent"])),
+            str(agent_ev.get("invoice_contacts", agent_ev["messages_sent"])) if agent_ev else None),
+        row("Escalated to a human",
+            str(baseline["handoffs"]), str(agent["handoffs"]),
+            str(agent_ev["handoffs"]) if agent_ev else None),
+        row("Not recovered",
+            str(len(baseline["exceptions"])), str(len(agent["exceptions"])),
+            str(len(agent_ev["exceptions"])) if agent_ev else None),
     ]
 
 
@@ -319,13 +341,22 @@ def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
 
     Returns None when --compare was run with --extra-seeds "" (skipped), so
     the template can fall back to a plain note instead of an empty table.
+
+    Phase 4: when sim.run_sim.multi_seed_summary() was given a
+    primary_agent_ev (the ablation arm), every row additionally carries
+    agent_ev_recovered_paise/agent_ev_money_win, and the summary carries
+    agent_ev_money_win_rate -- checked on the first row only, since
+    multi_seed_summary() adds the ablation to either every row or none.
+    Absent (an older results.json, or a run with the ablation skipped),
+    this stays exactly the two-way table it always was.
     """
     multi = results.get("multi_seed")
     if not multi:
         return None
+    has_ev = "agent_ev_recovered_paise" in multi["rows"][0]
     rows = []
     for row in multi["rows"]:
-        rows.append({
+        entry = {
             "seed": row["seed"],
             "baseline_recovered": _money(row["baseline_recovered_paise"]),
             "agent_recovered": _money(row["agent_recovered_paise"]),
@@ -338,13 +369,20 @@ def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
             # this pairs with.
             "malformed_invoices": row.get("malformed_invoices", 0),
             "superseded_promise_invoices": row.get("superseded_promise_invoices", 0),
-        })
-    return {
+        }
+        if has_ev:
+            entry["agent_ev_recovered"] = _money(row["agent_ev_recovered_paise"])
+            entry["agent_ev_money_win"] = row["agent_ev_money_win"]
+        rows.append(entry)
+    result = {
         "rows": rows,
         "money_win_rate": multi["money_win_rate"],
         "days_win_rate": multi["days_win_rate"],
         "days_excluded": multi["days_excluded"],
     }
+    if has_ev:
+        result["agent_ev_money_win_rate"] = multi["agent_ev_money_win_rate"]
+    return result
 
 
 #: W4 advisor item 1 -- a plain-fact footnote, not an inline re-derivation of
@@ -375,6 +413,26 @@ def _edge_case_note(results: dict[str, Any]) -> str | None:
     )
 
 
+def _ev_ablation_note(results: dict[str, Any]) -> str | None:
+    """One sentence on Phase 4's ablation: does the negotiation layer
+    (engine/negotiation.py, wired into engine/brain.py's decide() in Phase 3)
+    actually add recovery on top of the already-built agent -- not just
+    whether the agent beats the naive baseline, which the pitch above this
+    already answers. Reports whatever the number actually is, a win or not.
+    """
+    agent, agent_ev = results.get("agent"), results.get("agent_ev")
+    if not agent_ev:
+        return None
+    delta = agent_ev["final"]["recovered_paise"] - agent["final"]["recovered_paise"]
+    verdict = "more" if delta > 0 else ("less" if delta < 0 else "the same as")
+    return (
+        f"With config/rules.yaml's brain.ev_mode switched on, the SAME agent "
+        f"recovered {_money(abs(delta))} {verdict} than it did with ev_mode off "
+        f"on this seed -- see \"Is this just one lucky seed?\" below for whether "
+        f"that holds across seeds too."
+    )
+
+
 def _view(results: dict[str, Any]) -> dict[str, Any]:
     handoff_reasons = results["agent"].get("handoff_reasons") or {}
     stop_reasons = results["agent"].get("stop_reasons") or {}
@@ -382,6 +440,8 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "seed": results["seed"],
         "days": results["days"],
         "generated": results.get("generated"),
+        "has_agent_ev": results.get("agent_ev") is not None,
+        "ev_ablation_note": _ev_ablation_note(results),
         "headline": _headline_rows(results),
         "per_rung": _per_rung_rows(results),
         "per_attempt": _per_attempt_rows(results),

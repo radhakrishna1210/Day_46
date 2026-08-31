@@ -31,6 +31,7 @@
   th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .headline td.agent, .headline th.agent { color: var(--accent); font-weight: 600; }
+  .headline td.agent-ev, .headline th.agent-ev { color: #7a1fa2; font-weight: 600; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
   .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
   .badge.disputed { background: #fde8e8; color: var(--bad); }
@@ -72,7 +73,10 @@
   <h2>Headline</h2>
   <table class="headline">
     <thead>
-      <tr><th>Metric</th><th class="num">Baseline</th><th class="num agent">Agent</th></tr>
+      <tr>
+        <th>Metric</th><th class="num">Baseline</th><th class="num agent">Agent</th>
+        {% if has_agent_ev %}<th class="num agent-ev">Agent + EV</th>{% endif %}
+      </tr>
     </thead>
     <tbody>
       {% for row in headline %}
@@ -80,12 +84,16 @@
         <td>{{ row.label }}</td>
         <td class="num">{{ row.baseline }}</td>
         <td class="num agent">{{ row.agent }}</td>
+        {% if has_agent_ev %}<td class="num agent-ev">{{ row.agent_ev }}</td>{% endif %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% if days_to_pay_note %}
   <p class="reasons">{{ days_to_pay_note }}</p>
+  {% endif %}
+  {% if ev_ablation_note %}
+  <p class="reasons">{{ ev_ablation_note }}</p>
   {% endif %}
 
   <h2>Buyer panel -- who needs attention right now</h2>
@@ -143,6 +151,9 @@
     <thead>
       <tr>
         <th>Seed</th><th class="num">₹ baseline</th><th class="num">₹ agent</th><th>₹ win</th>
+        {% if multi_seed.agent_ev_money_win_rate %}
+        <th class="num">₹ agent+EV</th><th>₹ win vs agent</th>
+        {% endif %}
         <th class="num">Days baseline</th><th class="num">Days agent</th><th>Days win</th>
         <th class="num">Malformed invoices</th><th class="num">Superseded promises</th>
       </tr>
@@ -154,6 +165,10 @@
         <td class="num">{{ row.baseline_recovered }}</td>
         <td class="num">{{ row.agent_recovered }}</td>
         <td class="{{ 'win' if row.money_win else 'lose' }}">{{ "✓" if row.money_win else "✗" }}</td>
+        {% if multi_seed.agent_ev_money_win_rate %}
+        <td class="num">{{ row.agent_ev_recovered }}</td>
+        <td class="{{ 'win' if row.agent_ev_money_win else 'lose' }}">{{ "✓" if row.agent_ev_money_win else "✗" }}</td>
+        {% endif %}
         {% if row.matched_n %}
         <td class="num">{{ row.matched_baseline_days }}</td>
         <td class="num">{{ row.matched_agent_days }}</td>
@@ -174,6 +189,13 @@
     ({{ multi_seed.days_excluded }} seed(s) excluded -- no invoice was recovered by both runs
     at this window length){% endif %}.
   </p>
+  {% if multi_seed.agent_ev_money_win_rate %}
+  <p class="win-rate">
+    The Phase 4 ablation: agent+EV (ev_mode on) beat the SAME agent with ev_mode
+    off on ₹ recovered in <strong>{{ multi_seed.agent_ev_money_win_rate }}</strong> seeds --
+    reported as it came out, not tuned toward a clean win.
+  </p>
+  {% endif %}
   {% if edge_case_note %}
   <p class="win-rate">{{ edge_case_note }}</p>
   {% endif %}

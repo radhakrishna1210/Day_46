@@ -606,3 +606,137 @@ def test_a_multi_seed_run_leaves_the_audit_trail_matching_the_primary_seed() -> 
     run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(7,), days=20)
 
     assert audit.LOG_PATH.read_bytes() == primary_trail
+
+
+# ============================================================================
+# Phase 4 Part B: the ev_mode ablation arm
+# ============================================================================
+
+def test_run_agent_ev_mode_false_is_byte_identical_to_the_default() -> None:
+    """ev_mode is a new parameter -- omitting it and passing False explicitly
+    must be indistinguishable, the same discipline as ev_mode: off proved for
+    config/rules.yaml's own flag in Phase 3."""
+    default_run = run_sim.run_agent(seed=42, days=DAYS, verbose=False)
+    explicit_run = run_sim.run_agent(seed=42, days=DAYS, verbose=False, ev_mode=False)
+    assert default_run == explicit_run
+
+
+def test_run_agent_ev_mode_true_actually_exercises_the_ev_branch() -> None:
+    """Not just "the two runs produce different numbers" -- which could
+    happen for the wrong reasons -- but a direct check that engine.brain.
+    decide()'s EV branch (Phase 3) actually ran and chose something ev_mode:
+    off never would: at least one payment_plan action, and at least one
+    differentiated handoff flavor, in the audit trail."""
+    run_sim.run_agent(seed=42, days=DAYS, verbose=False, ev_mode=True)
+    brain_entries = [e for e in audit.entries() if e.get("actor") == "brain"]
+
+    kinds = {e["action"] for e in brain_entries}
+    assert "payment_plan" in kinds, "no payment_plan action ever appeared -- was the EV branch exercised?"
+
+    negotiation_actions = {
+        (e.get("detail") or {}).get("negotiation_action")
+        for e in brain_entries if e["action"] == "handoff"
+    }
+    assert {"human_handoff", "legal_escalation"} <= negotiation_actions, (
+        "expected both handoff flavors to appear over a 45-day run -- "
+        f"only saw {negotiation_actions}"
+    )
+
+
+def test_ev_mode_true_recovers_at_least_as_much_as_ev_mode_false_on_this_seed() -> None:
+    """Not the honest multi-seed ablation finding itself (see this phase's
+    report for that, and CLAUDE.md's notes) -- just a smoke-level sanity
+    check that a real run with ev_mode: on completes, conserves money, and
+    is not a wild regression on the one seed every other test in this file
+    already exercises."""
+    ev_off = run_sim.run_agent(seed=42, days=DAYS, verbose=False, ev_mode=False)
+    ev_on = run_sim.run_agent(seed=42, days=DAYS, verbose=False, ev_mode=True)
+    assert ev_on["final"]["recovered_paise"] >= 0
+    assert ev_on["ev_mode"] is True
+    assert ev_off["ev_mode"] is False
+
+
+def test_multi_seed_summary_without_primary_agent_ev_has_no_agent_ev_keys() -> None:
+    """primary_agent_ev defaults to None -- every existing caller (and every
+    row this function has ever produced) is completely unaffected by Phase 4
+    unless it explicitly opts in."""
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    summary = run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(), days=20)
+    assert "agent_ev_money_win_rate" not in summary
+    assert not any(key.startswith("agent_ev_") for key in summary["rows"][0])
+
+
+def test_multi_seed_summary_with_primary_agent_ev_adds_keys_additively() -> None:
+    """agent_ev_* keys are added on top of the existing baseline_*/agent_*
+    ones -- their own values must not change just because the ablation ran
+    alongside them."""
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    agent_ev = run_sim.run_agent(42, 20, verbose=False, ev_mode=True)
+
+    without = run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(), days=20)
+    with_ev = run_sim.multi_seed_summary(
+        42, baseline, agent, extra_seeds=(), days=20, primary_agent_ev=agent_ev)
+
+    # Every pre-existing key/value is untouched.
+    row_without, row_with = without["rows"][0], with_ev["rows"][0]
+    for key in row_without:
+        assert row_with[key] == row_without[key], f"{key} changed just from running the ablation"
+    assert without["money_win_rate"] == with_ev["money_win_rate"]
+    assert without["days_win_rate"] == with_ev["days_win_rate"]
+
+    # The new keys are actually there, additively.
+    assert row_with["agent_ev_recovered_paise"] == agent_ev["final"]["recovered_paise"]
+    assert row_with["agent_ev_money_win"] == (
+        agent_ev["final"]["recovered_paise"] >= agent["final"]["recovered_paise"])
+    assert "agent_ev_money_win_rate" in with_ev
+
+
+def test_write_results_omits_agent_ev_when_not_given(tmp_path) -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    out = tmp_path / "results.json"
+    run_sim._write_results(out, 42, 20, baseline, agent, {"n": 0, "baseline": None, "agent": None}, None)
+    import json
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert "agent_ev" not in payload
+
+
+def test_the_agent_ev_arm_does_not_clobber_the_agent_trail_on_disk() -> None:
+    """run_agent() unconditionally clears and rewrites the shared on-disk
+    audit trail on every call -- so computing the agent_ev arm right after
+    the plain agent arm (exactly the order sim/run_sim.py's own --compare
+    CLI uses) would silently leave the agent_ev run's trail on disk instead,
+    even though report/build_report.py's audit excerpt/early-warning/
+    trip-wire sections and multi_seed_summary()'s own "restore the primary
+    trail" both assume it is the plain agent's. Proven the same way
+    test_a_multi_seed_run_leaves_the_audit_trail_matching_the_primary_seed
+    proves the sibling case: byte-for-byte against the real trail, snapshot
+    and restore around the ablation arm exactly as main()'s --compare branch
+    does, not by reading the code."""
+    run_sim.run_agent(42, 20, verbose=False)
+    agent_trail = audit.LOG_PATH.read_bytes()
+    assert agent_trail, "the agent run should have written a trail to compare against"
+
+    snapshot = audit.snapshot()
+    run_sim.run_agent(42, 20, verbose=False, ev_mode=True)
+    assert audit.LOG_PATH.read_bytes() != agent_trail, (
+        "fixture assumption: the ablation run must actually produce a "
+        "different trail, or this test cannot tell restore() apart from a no-op"
+    )
+    audit.restore(snapshot)
+
+    assert audit.LOG_PATH.read_bytes() == agent_trail
+
+
+def test_write_results_includes_agent_ev_when_given(tmp_path) -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    agent_ev = run_sim.run_agent(42, 20, verbose=False, ev_mode=True)
+    out = tmp_path / "results.json"
+    run_sim._write_results(out, 42, 20, baseline, agent, {"n": 0, "baseline": None, "agent": None},
+                           None, agent_ev=agent_ev)
+    import json
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["agent_ev"]["final"]["recovered_paise"] == agent_ev["final"]["recovered_paise"]
