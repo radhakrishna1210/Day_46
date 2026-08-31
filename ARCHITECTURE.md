@@ -392,16 +392,112 @@ identical rung, this only changes an audit-log label, not what is sent.
 `_LADDER_KINDS` both now also recognise `payment_plan`/`counter_settle` as
 ordinary buyer-facing sends — see their own docstrings.
 
-> **PHASE 3 SCOPE.** No message-content differentiation by action —
-> `engine/writer.py` is untouched. No new persona reaction behaviour —
-> `sim/personas.py`'s `react()` never sees a `payment_plan`/`counter_settle`
-> message differently from any other message at that rung (`payment_plan`/
-> `counter_settle` always inherit an existing send-tier rung, 1–3, never
-> rung 4). No reactive "buyer proposed a settlement, evaluate accepting it"
-> path — `negotiation.rank_actions()`'s signature takes buyer-profile
-> inputs, not buyer-reply text. `sim/run_sim.py`'s CLI carries no `ev_mode`
-> flag and no third experiment arm; it is a config-file switch only in this
-> phase. All of the above are candidates for a later phase.
+> **PHASE 3 SCOPE, as shipped then.** No message-content differentiation by
+> action — `engine/writer.py` remains untouched to this day. No new persona
+> reaction behaviour, and no `ev_mode` CLI flag / third experiment arm — both
+> are exactly what Phase 4 (below) adds. No reactive "buyer proposed a
+> settlement, evaluate accepting it" path — `negotiation.rank_actions()`'s
+> signature still takes buyer-profile inputs, not buyer-reply text, and
+> remains out of scope even after Phase 4.
+
+#### Block 2e — Persona Differentiation + the EV Ablation (Phase 4)
+
+Phase 3 wired `payment_plan`/`counter_settle` into `Action.kind`, but nothing
+made a buyer react to one any differently than an ordinary send, and nothing
+in `sim/run_sim.py` could actually turn `ev_mode` on for a real simulation
+run. Phase 4 closes both gaps.
+
+**Part A — `sim/personas.py::react()` gains a keyword-only `action_kind`
+parameter** (`"send"` by default, matching every pre-Phase-4 call site
+byte-for-byte — proved by a pinned pre-Phase-4 snapshot test). Two
+config-free, code-level tables gate the differentiation, keyed by persona:
+
+```
+PAYMENT_PLAN_PROMISE_BOOST   cash_tight: 0.25  -- shifts 0.25 of probability
+                              from SILENCE to PROMISE when offered a
+                              payment_plan. cash_tight is the persona behind
+                              the cash_flow_problem quadrant (negative inflow
+                              drift, real failed payments) -- exactly the
+                              buyer negotiation.eligible_actions already
+                              intends payment_plan for. Measured effect:
+                              +0.20 to +0.27 absolute promise-rate lift
+                              across rungs 1-3 (1000-trial sanity check).
+COUNTER_SETTLE_PARTIAL_BIAS  habitual_delayer: 0.70 -- when a counter_settle
+                              offer lands a PROMISE, 70% of the time it is
+                              drawn from the EXISTING promise_partial_hinglish
+                              fixture (already resolves to a genuine partial
+                              payment when kept) rather than uniformly from
+                              PROMISE_VARIANTS -- "continued lowballing"
+                              represented by reusing an existing mechanic,
+                              not inventing a new outcome category.
+```
+
+Both tables are consulted only for their own `action_kind`; every other
+persona/action_kind combination (including a payment_plan or counter_settle
+reaching a persona with no configured entry — structurally shouldn't happen,
+since `negotiation.eligible_actions` already keeps each action within its
+intended quadrant, but not itself invalid here) behaves exactly like `"send"`.
+`sim/run_sim.py`'s day loop threads this through with one extra keyword at
+the existing `personas.react()` call site: `action_kind=action.kind`.
+
+**A finding worth stating rather than burying:** `counter_settle`'s own
+differentiation, while implemented and directly unit-tested, does not
+currently manifest in a real end-to-end simulation run. `can_pay_but_wont`'s
+EV ranking (`config/rules.yaml`'s `negotiation.recovery_probability`/
+`recovery_fraction`) puts `legal_facts` (100% recovery fraction) far enough
+ahead of `counter_settle` (70% fraction, and the only message action still
+penalised by broken promises) that `counter_settle` never wins the ranking
+at any outstanding amount or broken-promise count under the shipped grid —
+confirmed structurally, not just observed on one run. It remains eligible
+and reachable; it is just never the top pick today. Left as an honest,
+visible result — the same spirit as Phase 2's own `good_customer` finding —
+rather than hand-tuning the grid to manufacture a scenario where it wins.
+
+**Part B — the third experiment arm.** `run_agent(seed, days, verbose=False,
+ev_mode=False)` gained an `ev_mode` parameter: `False` (the default) passes
+`config=None` to every `brain.decide()` call, exactly as before Phase 4;
+`True` passes `config/rules.yaml`'s own settings with `brain.ev_mode` forced
+`"on"`, computed once per run. `multi_seed_summary()` gained an optional
+`primary_agent_ev` argument (`None` by default — every existing caller and
+every row shape is completely unaffected unless a caller opts in); passing
+it adds `agent_ev_recovered_paise`/`agent_ev_money_win` to every row and
+`agent_ev_money_win_rate` to the summary, additively, and re-runs the
+identical `ev_mode: on` arm for every extra seed — the same seed set as the
+existing 6-seed comparison, not a separately chosen one. `results.json`
+gains an additive top-level `"agent_ev"` section; `report/build_report.py`
+and its Jinja template render a third "Agent + EV" column when present and
+degrade to the existing two-column layout when it is absent.
+
+`sim/run_sim.py`'s `--compare` CLI now runs and reports all three arms by
+default. **An ordering bug caught during this phase's own review:**
+`run_agent()` unconditionally clears and rewrites the shared on-disk audit
+trail on every call, and `report/build_report.py`'s audit excerpt / early
+warnings / trip wires, plus `multi_seed_summary()`'s own "restore the
+primary seed's trail" logic, both assume that trail belongs to the plain
+`agent` (ev off) run. Computing `agent_ev` immediately after `agent` — the
+natural order — would silently leave `agent_ev`'s trail on disk instead.
+Fixed by snapshotting `agent`'s trail (`audit.snapshot()`) before computing
+`agent_ev` and restoring it (`audit.restore()`) immediately after, before
+anything downstream reads `audit.entries()` again.
+
+**The ablation finding — the number Phase 2/3 deferred, reported as it came
+out:** on the same 6 seeds as the existing baseline-vs-agent comparison, at
+120 days, `agent_ev` (ev_mode on) beat plain `agent` (ev_mode off) on rupees
+recovered in **5 of 6 seeds** — seed 2024 shows a small loss (-₹51,765);
+every other seed gains, from +₹45,978 (seed 555) to +₹9,81,368 (seed 42).
+Mechanistically, this gain traces almost entirely to `payment_plan`: most of
+what EV changes relative to `ev_mode: off` — `firm` vs `soft_nudge` for a
+`good_customer`, `human_handoff` vs `legal_escalation` for a handoff — maps
+to the identical `Action.kind`/rung/skeleton either way, so it changes only
+the audit trail's stated reasoning, never what a simulated buyer sees or how
+they react (rung 4 in particular sends nothing to a buyer at all). The one
+action that changes `Action.kind` in a way `sim/personas.py` actually reacts
+to differently is `payment_plan`, and that is where this result comes from.
+
+> **PHASE 4 SCOPE.** Still no message-content differentiation by action —
+> `engine/writer.py` remains untouched. `counter_settle`'s persona behaviour
+> is implemented and tested but currently unreachable via a real `decide()`
+> ranking, per the finding above. No reactive settlement-offer handling.
 
 ### Block 3 — Watchdog (`engine/watchdog.py`)
 **What:** Runs once per simulated day. Compares today's date with every unpaid invoice's due date. Anything overdue goes into the work queue.
@@ -472,19 +568,26 @@ It also classifies: promise / dispute / refusal / question / noise.
 
 **Why this matters:** the bar demands *measured* money recovered. A simulator lets us run a fair experiment (below) instead of showing one cherry-picked success — which the track explicitly mocks ("one cherry-picked match proves nothing" is their phrase for Track 4, same spirit here).
 
+**Phase 4:** `react()` also reacts to *what kind* of action produced the
+message — see Block 2e for the `payment_plan`/`counter_settle` differentiation
+and which personas it applies to.
+
 ### Block 10 — Scoreboard (`report/build_report.py`)
-**The experiment:** run TWO agents on the SAME 100 invoices, same random seed:
+**The experiment:** run agents on the SAME 100 invoices, same random seed:
 - **Baseline:** 3 fixed reminders, same message for everyone (≈ what Razorpay Payment Links reminders do today)
 - **Our agent:** everything above
+- **Our agent + EV** (Phase 4): the same agent with `config/rules.yaml`'s `brain.ev_mode` on — the ablation of whether the negotiation layer adds recovery on top of the agent, not just whether the agent beats the baseline
 **Report (also the star slide of the video):**
 ```
-                     Baseline      Our Agent
-₹ recovered          ₹6.1L         ₹8.4L        (+₹2.3L)
-Avg days to pay      71            52           (−19 days)
-Messages sent        300           187          (fewer = less annoying)
-Escalated to human   0             6            (correctly!)
-Not recovered        11 invoices   4 invoices   → full exceptions list
+                     Baseline      Our Agent    Agent + EV
+₹ recovered          ₹6.1L         ₹8.4L        ₹9.4L        (agent +₹2.3L, +EV +₹1.0L more)
+Avg days to pay      71            52           n/a          (−19 days agent vs baseline)
+Messages sent        300           187          164          (fewer = less annoying)
+Escalated to human   0             6            6            (correctly!)
+Not recovered        11 invoices   4 invoices   4 invoices   → full exceptions list
 ```
+The Agent + EV column only renders when `results.json` carries Phase 4's
+additive `agent_ev` section — see Block 2e for the ablation's actual finding.
 **Plus the audit trail:** every action ever taken, with timestamp, reason, and rule/AI reasoning — exportable, viewable, honest.
 
 ### Block 11 — The Winning Layer (built after Day 9, labels W1-W4)
@@ -585,7 +688,9 @@ revenue-recovery-agent/
 │   ├── consolidate.py      ← W3: groups a day's SEND decisions by buyer into rung-tier envelopes
 │   ├── writer.py  channels.py  promises.py  audit.py
 ├── sim/
-│   ├── personas.py  run_sim.py        ← --compare, --seed, --days, --extra-seeds, --scenario
+│   ├── personas.py                    ← Phase 4: react() differentiates payment_plan/counter_settle
+│   ├── run_sim.py                     ← --compare, --seed, --days, --extra-seeds, --scenario
+│   │                                     Phase 4: run_agent(ev_mode=...) is the third experiment arm
 │   ├── scenario_tc141.py              ← the E4 end-to-end scripted scenario fixture
 │   └── hidden_personas.json           ← generated by data/generate.py --persona-out; gitignored; engine/ must never read it
 ├── docs/

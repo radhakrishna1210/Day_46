@@ -121,58 +121,64 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       ev_mode: on -- 6 by the general-action choice (step 13), and
       human_handoff/legal_escalation by a separate handoff-FLAVOR choice at
       the existing rung-4 step (step 8) once a handoff is already certain.
+- [x] P4 - Persona differentiation + the EV ablation: sim/personas.py's
+      react() gained action_kind= (default "send", byte-identical to
+      pre-P4); cash_tight promises 20-27pts more often for a payment_plan,
+      habitual_delayer lowballs a counter_settle via the existing partial-
+      promise fixture. run_agent(ev_mode=True) is the real third experiment
+      arm; multi_seed_summary()'s new primary_agent_ev param and
+      results.json's agent_ev section are both additive/opt-in.
+      report/build_report.py + the Jinja template render a third column
+      when present. ABLATION FINDING: agent+EV beats plain agent on rupees
+      recovered in 5/6 seeds (seed 2024 the one loss) -- see notes for the
+      mechanism. Caught and fixed a real audit-trail-ordering bug along the
+      way (see notes).
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 3 CLOSED (committed across 3 commits -- see git log). decide()'s
-  new EV branch (step 13, general action) + a handoff-flavor choice folded
-  into the existing rung-4 step (step 8), config/rules.yaml's brain.ev_mode
-  (off) + negotiation.eligible_actions, new Action kinds
-  payment_plan/counter_settle, both landmines fixed (consolidate.py
-  _eligible(), buyer_panel.py _LADDER_KINDS), sim/run_sim.py's day loop
-  feeding brain.decide() a two_axis_score(). Both Phase 1/2 tripwires
-  replaced with their inverse. All 8 of negotiation.ACTIONS are reachable
-  through decide() under ev_mode: on.
-- TWO CORRECTNESS FOLLOW-UPS during review, worth knowing if this area is
-  touched again: (1) the handoff-reachability gate was FIRST written as
-  "available_rung == HANDOFF_RUNG" (the legal ceiling), strictly MORE
-  permissive than decide()'s own non-EV rung-4 step -- a first-ever contact
-  can have a wide-open ceiling while the escalation walk's own `chosen`
-  sits at rung 1-2 (backlog formula never desires more than base+1 on a
-  first contact). Fixed to gate on `chosen` reaching HANDOFF_RUNG instead,
-  the IDENTICAL condition step 8 uses -- which means step 13 (the general
-  action) can NEVER select human_handoff/legal_escalation, since step 8
-  already intercepts first whenever that's true. (2) Rather than leaving
-  those two permanently dead, step 8 ITSELF now optionally picks which
-  handoff FLAVOR to record (once chosen already reached HANDOFF_RUNG,
-  unconditionally, ev_mode or not) -- never changes whether a handoff
-  fires, only the negotiation_action label in its audit detail.
-- SANITY CHECK RESULT (per this phase's own brief): the proposed
-  eligible_actions table held for cash_flow_problem/can_pay_but_wont/
-  high_risk exactly as Phase 2 reported. good_customer's top action shifted
-  from legal_facts to firm once legal pressure was excluded from its
-  candidate set -- harmless, since soft_nudge/firm/legal_facts all map to
-  the identical kind="send" at the identical rung (writer.py untouched), so
-  this only changes the audit-trail label, not what's sent.
-- DESIGN CALL not spelled out in the brief: score["signals"]["broken_promises"]
-  (the buyer's historical settled-invoice reliability, from
-  engine.score.signals(), unchanged by two_axis_score()) is what feeds
-  negotiation.rank_actions()'s broken_promises= argument -- NOT
-  engine.brain.broken_promises(promises, today, grace) (this invoice's own
-  active/unresolved promise count, already used elsewhere in decide() for
-  rung-jumping). Deliberate: EV is modelling the buyer's general
-  follow-through record, the same signal recovery_probability's own
-  promise_adjustment block is about, not this one invoice's ladder state.
-- 850 tests passing (829 + 21). Zero regressions -- proven two ways: the
-  full suite, and a snapshot-diff test pinning run_agent(seed=42, days=45)'s
-  headline numbers from immediately before this phase (captured via
-  `git stash` to the pre-Phase-3 tree and back). Known limitations carried
-  forward unchanged: willingness still inherits average_delay_days
-  (ability-contaminated, stated not hidden); Action.kind is still
-  string-based, not an enum; stop_rules.max_per_rung is still dead config.
-  New limitation this phase adds: with ev_mode on, soft_nudge/firm/
-  legal_facts/payment_plan/counter_settle all draft through the SAME
-  rung-based skeleton (engine/writer.py untouched) -- the chosen
-  negotiation action changes only the audit trail's stated reasoning,
-  not the message a buyer actually reads. Message-content differentiation by
-  action, and any reactive settlement-offer handling, remain future work.
+- Phase 4 done and committed (see git log for the hash(es)). Part A:
+  sim/personas.py's react() gained action_kind= ("send" default,
+  byte-identical to pre-P4, pinned by a snapshot test); cash_tight boosts
+  PROMISE probability for payment_plan (PAYMENT_PLAN_PROMISE_BOOST),
+  habitual_delayer skews toward the existing promise_partial_hinglish
+  fixture for counter_settle (COUNTER_SETTLE_PARTIAL_BIAS) -- both gated so
+  a persona with no configured entry behaves exactly like "send", with zero
+  extra rng draws (matters: an unconditional rng.random() call, even one
+  whose result is never used, still perturbs the NEXT draw). Part B:
+  run_agent(seed, days, ev_mode=False) is the real third arm; sim/run_sim.py
+  --compare now runs and reports all three (baseline/agent/agent+EV) by
+  default on the same 6-seed set. multi_seed_summary()'s primary_agent_ev
+  param and results.json's agent_ev section are both optional/additive.
+  report/build_report.py + report.html.j2 render a 3rd column when present.
+- ABLATION FINDING, the number Phase 2/3 deferred: agent+EV beats plain
+  agent on rupees recovered in 5/6 seeds (seed 2024: -Rs 51,765; every other
+  seed +Rs 45,978 to +Rs 9,81,368). MECHANISM, worth remembering before
+  touching this area again: almost the entire effect traces to payment_plan
+  specifically -- every OTHER thing EV changes (firm vs soft_nudge,
+  human_handoff vs legal_escalation) maps to the IDENTICAL Action.kind/rung/
+  skeleton either way (writer.py untouched, rung 4 sends nothing to a
+  buyer), so it only relabels the audit trail and cannot move simulated
+  behavior at all. payment_plan is the only action that changes Action.kind
+  in a way personas.react() actually treats differently.
+- A FINDING SURFACED, NOT FIXED: counter_settle's persona behaviour (Part A)
+  is implemented and directly unit-tested, but never actually fires in a
+  real run -- can_pay_but_wont's EV ranking always puts legal_facts (100%
+  recovery fraction, never penalised by broken promises) ahead of
+  counter_settle (70% fraction, IS penalised) at every outstanding amount
+  and broken-promise count under the shipped config/rules.yaml grid. Stated
+  plainly rather than re-tuning the grid to manufacture a win, same
+  treatment as Phase 2's own good_customer finding.
+- A REAL BUG CAUGHT ON REVIEW: run_agent() unconditionally clears+rewrites
+  the shared on-disk audit trail every call. Computing agent_ev right after
+  agent (the natural CLI order) silently left agent_ev's trail on disk where
+  report/build_report.py's excerpt/early-warnings/trip-wires and
+  multi_seed_summary()'s own "restore the primary trail" both expect
+  agent's. Fixed with the same snapshot/restore pattern multi_seed_summary()
+  already uses, right around the agent_ev call in main()'s --compare branch.
+- 877 tests passing (850 + 27). Zero regressions -- full suite plus a
+  git-stash-verified byte-identical proof for personas.react()'s default
+  action_kind and run_agent()'s default ev_mode. Known limitations carried
+  forward: no message-content differentiation by action (engine/writer.py
+  untouched), no reactive settlement-offer handling, counter_settle inert
+  in practice (above). willingness/average_delay_days, Action.kind's
+  string-based design, and stop_rules.max_per_rung remain as before.

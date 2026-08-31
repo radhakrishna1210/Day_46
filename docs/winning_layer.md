@@ -78,6 +78,16 @@ remains unbuilt.
   `legal_escalation` -- gets recorded, without ever changing whether the
   handoff itself fires. Behind a config flag, `brain.ev_mode`, shipped
   **off** by default.
+- **Phase 4 -- Persona Differentiation + the EV Ablation**: `sim/personas.py`'s
+  `react()` gained an `action_kind` parameter so a buyer correlated with
+  genuine cash-flow constraint (`cash_tight`) actually engages more when
+  offered a `payment_plan`, and one correlated with unwillingness
+  (`habitual_delayer`) lowballs a `counter_settle` offer rather than
+  accepting it in full -- reusing existing promise mechanics, not a new
+  outcome category. `run_agent(..., ev_mode=True)` is the long-deferred
+  third experiment arm this makes meaningful: measured across the same
+  6-seed comparison, agent+EV beats the plain agent on rupees recovered in
+  **5/6** seeds -- reported honestly, loss included.
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
 the *reasoning* half and deliberately not the *data* half. What exists: a
@@ -156,6 +166,27 @@ relationship-cost finding Phase 2 surfaced is addressed by the
 the identical `send` at the identical already-chosen rung in this phase,
 that residual has no effect on what is actually sent.
 
+**PARTIALLY BUILT -- Phase 4, the missing measurement:** Phase 3 shipped the
+wiring inert (`ev_mode: off`); Phase 4 is what actually measured its effect.
+`sim/personas.py::react()` now reacts differently to a `payment_plan`
+(`cash_tight`, the `cash_flow_problem` persona, promises 20-27 points more
+often -- a real, 1000-trial-verified effect) and to a `counter_settle`
+(`habitual_delayer` lowballs via the existing partial-promise fixture rather
+than accepting in full). **A finding worth stating plainly:** `counter_settle`
+itself never actually gets chosen by a live `decide()` ranking under the
+shipped `recovery_probability`/`recovery_fraction` grid -- `legal_facts`'s
+100% recovery fraction beats it at every outstanding amount and
+broken-promise count for `can_pay_but_wont`. Its persona behaviour is real
+and tested, but currently inert in practice, the same "visible, not hidden"
+treatment Phase 2 gave the `good_customer` finding. `run_agent(seed, days,
+ev_mode=True)` and a `results.json` `agent_ev` section are the third
+experiment arm this differentiation makes meaningful: on the identical
+6-seed comparison, agent+EV beats plain agent on rupees recovered in **5/6**
+seeds (seed 2024 is the one loss), and the gain traces almost entirely to
+`payment_plan` -- every other EV-driven relabeling (`firm` vs. `soft_nudge`,
+`human_handoff` vs. `legal_escalation`) maps to an identical `Action.kind`/
+rung/skeleton either way, so it cannot itself move simulated behaviour.
+
 **FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 4,
 8-12 (Dynamic Trader Financial Profile as originally scoped, Payment
 Propensity Prediction, Recovery Explanation beyond the existing audit trail,
@@ -176,6 +207,7 @@ data this standalone project doesn't have, or are explicitly out of the
 | Phase 1 Ability/willingness split + quadrant | A first slice of Enhancement 3 (Cash-Flow Intelligence) on synthetic inflow data -- the reasoning, not the data feed. Not Enhancement 4: there is no probability model. |
 | Phase 2 Recovery probability + EV ranking | A first slice of Enhancement 6 (Next-Best Recovery Action) + Enhancement 7 (Expected Recovery and Cost) -- the ranking, not the acting. `P(recover)` is a stated assumption grid, not a measured or learned probability. |
 | Phase 3 Wiring EV into the Brain | The rest of that same slice of Enhancement 6/7 -- the acting, behind `brain.ev_mode`, shipped off. No message-content differentiation by action (that needs `engine/writer.py`), no reactive settlement-offer handling. |
+| Phase 4 Persona differentiation + the EV ablation | Measures what Phase 3 wired: `payment_plan`/`counter_settle` persona reactions, and a third `run_agent(ev_mode=True)` experiment arm. Still no message-content differentiation and no reactive settlement handling. `counter_settle`'s own effect is unmeasurable in practice -- it never wins a live EV ranking under the shipped grid. |
 
 ---
 

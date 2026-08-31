@@ -16,20 +16,25 @@ trail with the reason behind it.
 
 **Status:** the original 12-day MVP, four rounds of edge-case hardening
 (E1-E4), four post-MVP additions (W1-W4: early warning, buyer panel,
-buyer-level message consolidation, experiment refresh), and three
+buyer-level message consolidation, experiment refresh), and four
 negotiation-model phases (ability/willingness split, recovery-probability +
-EV ranking, and wiring that ranking into the Brain behind a config flag) are
-all done -- 844 tests passing, agent beats baseline on rupees recovered on
-6/6 tested seeds. Demo video and final submission polish are what's left
-(see [Honest scope](#honest-scope-built-vs-future-work) below).
+EV ranking, wiring that ranking into the Brain behind a config flag, and
+persona differentiation + a third experiment arm ablating it) are all done --
+877 tests passing, agent beats baseline on rupees recovered on 6/6 tested
+seeds, and the EV layer beats the plain agent on 5/6. Demo video and final
+submission polish are what's left (see
+[Honest scope](#honest-scope-built-vs-future-work) below).
 
 **At a glance:**
 - Recovers **₹22,98,757 more** than a fixed-reminder baseline bot on the
   same seeded invoices (seed 42) -- and wins on rupees recovered in **6/6**
   tested seeds.
+- The negotiation layer (Phase 4's ablation) recovers a further **₹9,81,368**
+  on top of that on seed 42, and wins on **5/6** seeds -- reported honestly,
+  including the one seed where it doesn't.
 - Every money-related decision is **explainable and audit-logged** -- no
   silent actions, no invented legal numbers.
-- **844 tests passing**; of 143 documented edge cases, 62 have a dedicated
+- **877 tests passing**; of 143 documented edge cases, 62 have a dedicated
   test, the rest are HANDLED or explicitly OUT OF SCOPE -- never left vague.
 - Full numbers in [Results](#results); what's built vs. not in
   [Honest scope](#honest-scope-built-vs-future-work).
@@ -41,6 +46,7 @@ all done -- 844 tests passing, agent beats baseline on rupees recovered on
 [Ability vs. willingness (Phase 1)](#ability-vs-willingness-the-two-axis-score-phase-1) --
 [Recovery probability + EV (Phase 2)](#recovery-probability--expected-value-phase-2) --
 [Wiring EV into the Brain (Phase 3)](#wiring-the-ev-ranking-into-the-brain-phase-3) --
+[Persona differentiation + the EV ablation (Phase 4)](#persona-differentiation--the-ev-ablation-phase-4) --
 [Buyer-level message consolidation (W3)](#buyer-level-message-consolidation-w3)
 -- [Scope (deliberate)](#scope-deliberate) -- [Edge cases](#edge-cases) --
 [Honest scope: built vs. future work](#honest-scope-built-vs-future-work) --
@@ -90,7 +96,7 @@ seeded data.
 pip install -r requirements.txt
 cp .env.example .env                          # LLM_MODE=mock by default; no API key needed
 python data/generate.py --seed 42              # generates buyers.json, invoices.json (gitignored)
-python sim/run_sim.py --compare --seed 42 --days 120   # baseline vs agent -> report/out/results.json
+python sim/run_sim.py --compare --seed 42 --days 120   # baseline vs agent vs agent+EV -> report/out/results.json
 python report/build_report.py                  # -> report/out/report.html
 pytest -q
 ```
@@ -109,21 +115,31 @@ calls the real Gemini API using `GEMINI_API_KEY` from `.env`.
 
 ## Results
 
-Baseline vs agent, seed 42, 120-day simulation window
-(`report/out/results.json`, generated 2026-08-27):
+Baseline vs agent vs agent+EV, seed 42, 120-day simulation window
+(`report/out/results.json`, regenerated for Phase 4; the baseline/agent
+columns are byte-identical to the original 2026-08-27 run, since `ev_mode`
+defaults off):
 
-| Metric | Baseline | Agent |
-|---|---|---|
-| Recovered | ₹1,36,80,472 (₹1.37 Cr) | ₹1,59,79,229 (₹1.60 Cr) |
-| Outstanding at end of window | ₹1,69,13,928 (₹1.69 Cr) | ₹1,46,15,171 (₹1.46 Cr) |
-| Invoices fully paid | 36 | 41 |
-| Messages sent | 252 | 73 envelopes (141 invoice-level contacts before W3 consolidation) |
-| Avg days to pay (all paid invoices) | 93.3 | 95.5 |
-| Avg days to pay (matched set -- same 25 invoices both sides recovered) | 101.2 | 97.7 |
-| Handoffs to a human | 0 | 42 (17 disputed, 25 rung-4 escalation) |
-| Stops | 0 | 6 (opted out) |
-| Disputed invoices (current, at end of window) | 12 | 17 |
-| Not recovered in the window (exceptions) | 64 | 59 |
+| Metric | Baseline | Agent | Agent + EV |
+|---|---|---|---|
+| Recovered | ₹1,36,80,472 (₹1.37 Cr) | ₹1,59,79,229 (₹1.60 Cr) | ₹1,69,60,597 (₹1.70 Cr) |
+| Outstanding at end of window | ₹1,69,13,928 (₹1.69 Cr) | ₹1,46,15,171 (₹1.46 Cr) | ₹1,36,33,802 (₹1.36 Cr) |
+| Invoices fully paid | 36 | 41 | 42 |
+| Messages sent | 252 | 73 envelopes (141 invoice-level contacts before W3 consolidation) | 64 envelopes (132 invoice-level contacts) |
+| Avg days to pay (all paid invoices) | 93.3 | 95.5 | 96.6 |
+| Avg days to pay (matched set -- same 25 invoices baseline+agent both recovered) | 101.2 | 97.7 | n/a (see note) |
+| Handoffs to a human | 0 | 42 (17 disputed, 25 rung-4 escalation) | 41 |
+| Stops | 0 | 6 (opted out) | 6 (opted out) |
+| Disputed invoices (current, at end of window) | 12 | 17 | 17 |
+| Not recovered in the window (exceptions) | 64 | 59 | 58 |
+
+**Agent+EV recovered ₹9,81,368 more than the plain agent** on this seed --
+the Phase 4 ablation of whether the negotiation layer adds recovery on top
+of the already-built agent. The matched-set days-to-pay row has no
+three-way figure: `matched_avg_days_to_pay()` is a pairwise comparison
+(baseline vs. agent), and a three-way intersection wasn't worth building
+for one report row -- see the [Phase 4 section](#persona-differentiation--the-ev-ablation-phase-4)
+for the full ablation story, including the one seed where it loses.
 
 **A note on the disputed-invoices row:** `results.json` also has a second,
 related field, `disputes`, that counts something different -- invoices that
@@ -160,6 +176,24 @@ The last two columns exist so a "6/6" win doesn't read as "these edge cases
 never came up": 5 of the 6 seeds contain a buyer who renegotiated a promise
 before it fell due, and 2 of the 6 contain a structurally malformed invoice
 -- the win happens *despite* those, not in their absence.
+
+**The Phase 4 ablation, on the identical 6 seeds:** agent+EV beat the plain
+agent (`ev_mode` off) on rupees recovered in **5 of 6 seeds**.
+
+| Seed | Agent recovered | Agent+EV recovered | EV win vs. agent |
+|---|---|---|---|
+| 42 | ₹1.60 Cr | ₹1.70 Cr | ✓ (+₹9,81,368) |
+| 7 | ₹1.45 Cr | ₹1.48 Cr | ✓ (+₹3,53,080) |
+| 13 | ₹1.70 Cr | ₹1.72 Cr | ✓ (+₹1,38,856) |
+| 99 | ₹1.45 Cr | ₹1.50 Cr | ✓ (+₹5,18,172) |
+| 2024 | ₹1.47 Cr | ₹1.47 Cr | ✗ (-₹51,765) |
+| 555 | ₹1.17 Cr | ₹1.17 Cr | ✓ (+₹45,978) |
+
+Reported as it came out, including seed 2024's loss -- see the
+[Phase 4 section](#persona-differentiation--the-ev-ablation-phase-4) for why
+this gain traces almost entirely to `payment_plan`, the one action that
+changes what a simulated buyer actually experiences rather than only the
+audit trail's stated reasoning.
 
 The full exceptions list (every invoice not recovered in the window, and
 why) is in `report/out/report.html` after you run the Quickstart above.
@@ -424,11 +458,87 @@ changes *whether* a handoff fires, the rung, the reason text, or the
 Samadhaan draft -- only whether the audit detail additionally distinguishes
 "handed to a human" from "flagged for legal escalation."
 
-> **PHASE 3 SCOPE.** No message-content differentiation by action. No new
-> persona reaction behaviour. No reactive "buyer proposed a settlement,
-> evaluate accepting it" path -- `rank_actions()` takes buyer-profile
-> inputs, not buyer-reply text. No CLI flag or third experiment arm for
-> `ev_mode` -- a config-file switch only, for now.
+> **PHASE 3 SCOPE, as shipped then.** No message-content differentiation by
+> action. No new persona reaction behaviour, and no CLI flag or third
+> experiment arm for `ev_mode` -- both are exactly what Phase 4 (next)
+> adds. No reactive "buyer proposed a settlement, evaluate accepting it"
+> path -- still out of scope even after Phase 4.
+
+---
+
+## Persona differentiation + the EV ablation (Phase 4)
+
+**The problem:** Phase 3 wired `payment_plan`/`counter_settle` into
+`Action.kind`, but `sim/personas.py::react()` still treated every buyer-facing
+contact the same regardless of kind, and nothing in `sim/run_sim.py` could
+actually turn `ev_mode` on for a real simulation run -- so the negotiation
+layer's real-world effect had never been measured.
+
+**Part A -- personas react differently to a payment plan.** `react()` gained
+a keyword-only `action_kind` parameter, `"send"` by default (proved
+byte-identical to pre-Phase-4 output for every call site that doesn't opt
+in). Two persona-keyed tables gate the differentiation:
+
+- **`payment_plan`** -- `cash_tight` (the persona behind the
+  `cash_flow_problem` quadrant: negative inflow drift, real failed payments)
+  promises **20-27 percentage points more often** when offered a structured
+  plan than a plain send at the same rung (1000-trial sanity check, every
+  rung). Every other persona reacts exactly as it would to a plain send --
+  a good payer accepting a plan it didn't need, or an unwilling payer
+  offered something `negotiation.eligible_actions` should never route to it
+  anyway, are both non-events, not an invented improvement.
+- **`counter_settle`** -- `habitual_delayer` (the `can_pay_but_wont`
+  persona this action targets) promises with **reduced terms** (the
+  existing `promise_partial_hinglish` fixture, which already resolves to a
+  genuine partial payment when kept) far more often under a counter-settle
+  offer than a plain send -- "continued lowballing," reusing an existing
+  mechanic rather than inventing a new outcome category.
+
+**A finding worth stating plainly:** `counter_settle`'s persona behaviour is
+implemented and directly tested, but it does not currently show up in a real
+simulation run. `can_pay_but_wont`'s EV ranking puts `legal_facts` (100%
+recovery fraction) far enough ahead of `counter_settle` (70% fraction, and
+the only message action still penalised by broken promises) that
+`counter_settle` never wins the ranking under the shipped grid, at any
+outstanding amount or broken-promise count. It stays eligible and reachable
+-- just never the top pick today. Left visible, the same spirit as Phase 2's
+own `good_customer` finding, rather than re-tuned to manufacture a win.
+
+**Part B -- the third experiment arm.** `run_agent(..., ev_mode=False)`
+(the default, byte-identical to before this phase) can now be run with
+`ev_mode=True`, which forces `config/rules.yaml`'s `brain.ev_mode` to `"on"`
+for every decision in that run. `sim/run_sim.py --compare` now runs and
+reports all three arms -- baseline, agent, agent+EV -- by default, on the
+identical 6-seed set as the existing comparison. `results.json` gains an
+additive `agent_ev` section; the HTML report renders a third column when it
+is present and falls back to the existing two-column layout when it isn't.
+
+**The ablation finding, reported as it came out:** on the same 6 seeds, at
+120 days, agent+EV beat the plain agent (`ev_mode` off) on rupees recovered
+in **5 of 6 seeds** -- gains from +₹45,978 (seed 555) to +₹9,81,368
+(seed 42); seed 2024 shows a small loss of -₹51,765. Mechanistically, this
+traces almost entirely to `payment_plan`: most of what EV changes relative
+to `ev_mode` off -- `firm` vs. `soft_nudge` for a `good_customer`,
+`human_handoff` vs. `legal_escalation` for a handoff -- maps to the
+identical `Action.kind`/rung/skeleton either way, so it only changes the
+audit trail's stated reasoning, never what a simulated buyer sees (rung 4
+sends nothing to a buyer at all). `payment_plan` is the one action that
+changes `Action.kind` in a way personas actually react to differently, and
+that is where this result comes from.
+
+**A real ordering bug caught during this phase's own review:** `run_agent()`
+unconditionally rewrites the shared on-disk audit trail on every call, and
+the report's audit excerpt / early warnings / trip wires, plus
+`multi_seed_summary()`'s own "restore the primary seed's trail" logic, both
+assume that trail belongs to the plain `agent` run. Computing `agent_ev`
+right after `agent` -- the natural order -- would have silently left
+`agent_ev`'s trail on disk instead. Fixed by snapshotting `agent`'s trail
+before computing `agent_ev` and restoring it immediately after.
+
+> **PHASE 4 SCOPE.** Still no message-content differentiation by action --
+> `engine/writer.py` remains untouched. `counter_settle`'s persona
+> behaviour is real but currently unreachable via a live `decide()` ranking.
+> No reactive settlement-offer handling.
 
 ---
 
@@ -499,13 +609,16 @@ each honestly marked:
 - **W1-W4** -- early warning, buyer panel + promise reliability,
   buyer-level message consolidation, and a refreshed 6-seed experiment (all
   described above).
-- **Phase 1-3** -- the ability/willingness two-axis score + quadrant,
-  recovery probability + expected value per candidate action, and wiring
-  that ranking into the Brain's `decide()` (all described above). The
-  wiring ships behind `config/rules.yaml`'s `brain.ev_mode`, off by
-  default, so the seeded demo result is unaffected unless it is switched
-  on; even on, no message content yet differs by the chosen action -- see
-  the Phase 3 section's own scope note.
+- **Phase 1-4** -- the ability/willingness two-axis score + quadrant,
+  recovery probability + expected value per candidate action, wiring that
+  ranking into the Brain's `decide()`, and persona differentiation +
+  a third experiment arm ablating it (all described above). The wiring
+  ships behind `config/rules.yaml`'s `brain.ev_mode`, off by default, so
+  the seeded demo result is unaffected unless it is switched on; even on,
+  no message content yet differs by the chosen action -- see the Phase 3
+  section's own scope note. Switched on, it recovers more money on 5/6
+  seeds -- the Phase 4 section has the honest per-seed numbers, including
+  the one seed where it doesn't.
 
 **FUTURE WORK:** see the list below, and `docs/winning_layer.md` for the
 larger roadmap (predictive risk, cash-flow intelligence, payment
