@@ -52,8 +52,13 @@ def test_config_files_parse() -> None:
 def test_stop_limits_are_in_config_not_code() -> None:
     yaml = pytest.importorskip("yaml")
     rules = yaml.safe_load((ROOT / "config" / "rules.yaml").read_text(encoding="utf-8"))
-    assert rules["stop_rules"]["max_per_rung"] == 3
     assert rules["stop_rules"]["max_total"] == 5
+    # Per-rung caps live on each rung itself, not as one flat stop_rules
+    # value -- see config/rules.yaml's own comment on why that dead key was
+    # removed rather than wired up.
+    assert {r["id"]: r["max_messages"] for r in rules["ladder"]["rungs"]} == {
+        0: 0, 1: 2, 2: 3, 3: 3, 4: 0,
+    }
 
 
 def test_mock_llm_is_deterministic() -> None:

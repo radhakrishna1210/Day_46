@@ -296,8 +296,14 @@ early_warning:
     high_from_signals: 3
 
 # --- Hard stopping rules (enforced in code, never by the LLM) -------------
+# A flat "max messages per rung" doesn't exist as its own limit: each rung in
+# the ladder block above states its OWN max_messages (rung 1: 2, rungs 2-3:
+# 3), which is what engine/brain.py's per-rung exhaustion check (step 9)
+# actually reads. A prior stop_rules.max_per_rung: 3 key here was never read
+# by any code -- it neither matched rung 1's real cap nor did anything --
+# removed rather than wired, since introducing a NEW enforced limit this
+# close to submission is a real behaviour change, not a cleanup.
 stop_rules:
-  max_per_rung: 3
   max_total: 5
   quiet_hours:
     start: "21:00"              # no messages from 21:00 ...
