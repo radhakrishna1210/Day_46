@@ -106,44 +106,47 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       EV = P(recover) x expected_recovery_paise - cost_paise, all
       config-driven, cost priced from real Gemini 3.7 Flash pricing.
       Computed and ranked only -- the Brain did not read it yet (that was P3).
-- [x] P3 - Wired the Brain to EV: engine/brain.py's decide() can now replace
+- [x] P3 - Wired the Brain to EV, DONE (closed after two correctness
+      follow-ups -- see notes): engine/brain.py's decide() can now replace
       its unconditional SEND fallthrough with negotiation.rank_actions()'s
       top pick, behind config/rules.yaml's brain.ev_mode (shipped "off").
       New config/rules.yaml negotiation.eligible_actions table gates
-      candidates per quadrant (the good_customer relationship-cost fix);
-      the legal ceiling gates human_handoff/legal_escalation separately.
+      candidates per quadrant (the good_customer relationship-cost fix).
       New Action.kind values payment_plan/counter_settle; both landmines
       fixed (consolidate.py _eligible(), buyer_panel.py _LADDER_KINDS).
       sim/run_sim.py's day loop now feeds brain.decide() a two_axis_score()
       instead of score_buyer() (byte-identical with ev_mode off, proven by
-      a pinned seed-42 snapshot test in tests/test_run_sim.py).
+      a pinned seed-42 snapshot test in tests/test_run_sim.py). All 8 of
+      negotiation's actions are now reachable through decide() under
+      ev_mode: on -- 6 by the general-action choice (step 13), and
+      human_handoff/legal_escalation by a separate handoff-FLAVOR choice at
+      the existing rung-4 step (step 8) once a handoff is already certain.
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 3 done and committed (see git log for the hash(es)). decide()'s new
-  EV branch, config/rules.yaml's brain.ev_mode (off) + negotiation.
-  eligible_actions, new Action kinds payment_plan/counter_settle, both
-  landmines fixed (consolidate.py _eligible(), buyer_panel.py
-  _LADDER_KINDS), sim/run_sim.py's day loop feeding brain.decide() a
-  two_axis_score(). Both Phase 1/2 tripwires replaced with their inverse.
-- CORRECTION found on follow-up review, worth knowing if this area is
-  touched again: the handoff-reachability gate was FIRST written as
-  "available_rung == HANDOFF_RUNG" (the legal ceiling), which is strictly
-  MORE permissive than decide()'s own non-EV rung-4 step -- a first-ever
-  contact can have a wide-open ceiling while the escalation walk's own
-  `chosen` sits at rung 1-2 (the backlog formula never desires more than
-  base+1 on a first contact), so the ceiling-only gate could have sent EV
-  straight to a handoff sooner than the ordinary walk ever would. Fixed to
-  gate on `chosen` reaching HANDOFF_RUNG instead -- the IDENTICAL condition
-  decide()'s own step 8 uses. Net effect, stated plainly rather than buried:
-  since step 8 already intercepts and returns HANDOFF, unconditionally,
-  every time that condition is true (before the EV branch ever runs),
-  human_handoff/legal_escalation are as-shipped PERMANENTLY UNREACHABLE
-  through decide()'s EV branch -- EV can only choose a different kind of
-  action among what the escalation walk already made reachable, never jump
-  a case to a human sooner than it would have anyway. Kept as live,
-  independently-tested code in eligible_negotiation_actions() (not deleted)
-  in case that invariant ever changes.
+- Phase 3 CLOSED (committed across 3 commits -- see git log). decide()'s
+  new EV branch (step 13, general action) + a handoff-flavor choice folded
+  into the existing rung-4 step (step 8), config/rules.yaml's brain.ev_mode
+  (off) + negotiation.eligible_actions, new Action kinds
+  payment_plan/counter_settle, both landmines fixed (consolidate.py
+  _eligible(), buyer_panel.py _LADDER_KINDS), sim/run_sim.py's day loop
+  feeding brain.decide() a two_axis_score(). Both Phase 1/2 tripwires
+  replaced with their inverse. All 8 of negotiation.ACTIONS are reachable
+  through decide() under ev_mode: on.
+- TWO CORRECTNESS FOLLOW-UPS during review, worth knowing if this area is
+  touched again: (1) the handoff-reachability gate was FIRST written as
+  "available_rung == HANDOFF_RUNG" (the legal ceiling), strictly MORE
+  permissive than decide()'s own non-EV rung-4 step -- a first-ever contact
+  can have a wide-open ceiling while the escalation walk's own `chosen`
+  sits at rung 1-2 (backlog formula never desires more than base+1 on a
+  first contact). Fixed to gate on `chosen` reaching HANDOFF_RUNG instead,
+  the IDENTICAL condition step 8 uses -- which means step 13 (the general
+  action) can NEVER select human_handoff/legal_escalation, since step 8
+  already intercepts first whenever that's true. (2) Rather than leaving
+  those two permanently dead, step 8 ITSELF now optionally picks which
+  handoff FLAVOR to record (once chosen already reached HANDOFF_RUNG,
+  unconditionally, ev_mode or not) -- never changes whether a handoff
+  fires, only the negotiation_action label in its audit detail.
 - SANITY CHECK RESULT (per this phase's own brief): the proposed
   eligible_actions table held for cash_flow_problem/can_pay_but_wont/
   high_risk exactly as Phase 2 reported. good_customer's top action shifted
@@ -160,7 +163,7 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   rung-jumping). Deliberate: EV is modelling the buyer's general
   follow-through record, the same signal recovery_probability's own
   promise_adjustment block is about, not this one invoice's ladder state.
-- 846 tests passing (829 + 17). Zero regressions -- proven two ways: the
+- 850 tests passing (829 + 21). Zero regressions -- proven two ways: the
   full suite, and a snapshot-diff test pinning run_agent(seed=42, days=45)'s
   headline numbers from immediately before this phase (captured via
   `git stash` to the pre-Phase-3 tree and back). Known limitations carried

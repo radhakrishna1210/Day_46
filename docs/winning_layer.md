@@ -73,7 +73,10 @@ remains unbuilt.
   walk's own chosen rung has already reached rung 4 (what is reachable
   today for a handoff specifically -- deliberately not just whether the
   legal ceiling is open; see the honest scoping below for why that
-  distinction mattered). Behind a config flag, `brain.ev_mode`, shipped
+  distinction mattered). Separately, once a handoff is already certain via
+  the existing rung-4 step, EV can choose WHICH FLAVOR -- `human_handoff` or
+  `legal_escalation` -- gets recorded, without ever changing whether the
+  handoff itself fires. Behind a config flag, `brain.ev_mode`, shipped
   **off** by default.
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
@@ -118,11 +121,25 @@ straight to a human handoff sooner than the ordinary escalation walk ever
 would have. The fix gates on `chosen` reaching `HANDOFF_RUNG` instead -- the
 identical condition the non-EV step already uses -- which, because that step
 intercepts and returns a handoff unconditionally whenever it's true, before
-the EV branch ever runs, means `human_handoff`/`legal_escalation` end up
-permanently unreachable through `decide()`'s EV branch as shipped. That is
-the correct, conservative behaviour: EV may choose a different *kind* of
-action among what the existing walk already makes reachable, never make
-*more* reachable than it already does.
+the general-action choice ever runs, means `human_handoff`/`legal_escalation`
+can never be selected as the *general* action. That is the correct,
+conservative behaviour: EV may choose a different *kind* of action among
+what the existing walk already makes reachable, never make *more* reachable
+than it already does.
+
+**The other half, added in a follow-up so those two actions are not simply
+dead weight in the config:** a handoff is very often reached directly, from
+real per-invoice history, with no general-action choice ever running at
+all. Once `chosen >= HANDOFF_RUNG` is already true -- a handoff will happen
+regardless, `ev_mode` or not -- the existing, unchanged rung-4 step now also
+asks, only with `ev_mode: on` and a quadrant present, *which flavor* the
+audit trail should record, by intersecting `human_handoff`/`legal_escalation`
+with whatever `eligible_actions[quadrant]` offers and ranking the survivors
+by EV. `good_customer` offers neither and falls straight through to the
+same plain, undifferentiated `HANDOFF` it always produced -- no fallback
+action is invented. This never changes *whether* a handoff fires, the rung,
+the reason text, or the Samadhaan draft; only whether the audit detail
+distinguishes "handed to a human" from "flagged for legal escalation."
 
 What does **not** exist even with the flag on: any
 message-content differentiation by the chosen action -- `soft_nudge`,

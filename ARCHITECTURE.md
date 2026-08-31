@@ -296,10 +296,13 @@ brain:
 **Where it sits in `decide()`'s control flow.** Every existing step is
 unchanged and still runs first, in the same order: opt-out (1), dispute (2),
 settled (3), not-yet-due (4), max-contacts (5), active promise (6), rung
-selection (7), the rung-4 handoff stop (8), rung exhaustion (9), weekends
-(10), message spacing (11), and the ambiguous-partial-payment LLM check (12).
-Only after all twelve of those have run — meaning a `SEND` really is about
-to happen, at rung `chosen` — does the new step 13 fire:
+selection (7). Step 8, the existing rung-4 handoff stop, now does slightly
+more than it used to (see "Choosing the handoff *flavor*" below), but
+**whether** it fires — `chosen >= HANDOFF_RUNG` — is completely unchanged
+by this phase. Rung exhaustion (9), weekends (10), message spacing (11) and
+the ambiguous-partial-payment LLM check (12) are all unchanged too. Only
+after all of those have run — meaning a `SEND` really is about to happen,
+at rung `chosen` — does the new step 13 fire, choosing the general action:
 
 1. Read `score.get("quadrant")`. A caller still passing a plain
    `engine.score.score_buyer()` dict (no `quadrant` key) — `main.py`,
@@ -324,19 +327,17 @@ to happen, at rung `chosen` — does the new step 13 fire:
    which requires real per-invoice history (a broken-promise jump, a rung
    fully exhausted, enough elapsed time at the top rung already used — see
    step 7/7b), ever would have. Gating on `chosen` instead means
-   `human_handoff`/`legal_escalation` are only candidates once step 8's own
-   condition (`chosen >= HANDOFF_RUNG`) is satisfied — and since step 8
-   unconditionally intercepts and returns a `HANDOFF` whenever that is true,
-   the EV branch in practice never actually gets to choose one: as of
-   Phase 3, `human_handoff`/`legal_escalation` are permanently excluded from
-   what EV can select through `decide()`, by construction. That is the
-   correct, conservative outcome, not an oversight: EV may choose a
-   different *kind* of action among what is already reachable today, never
-   make *more* reachable than the existing escalation walk already allows.
-   `tests/test_brain.py` proves both halves: `eligible_negotiation_actions()`
-   itself still behaves correctly in isolation at `chosen_rung ==
-   HANDOFF_RUNG`, and `decide()` never reaches that state through its own
-   EV branch.
+   `human_handoff`/`legal_escalation` are only candidates at step 13 once
+   step 8's own condition (`chosen >= HANDOFF_RUNG`) is satisfied — and since
+   step 8 unconditionally intercepts and returns a `HANDOFF` whenever that is
+   true, step 13 in practice never actually gets to choose one:
+   `human_handoff`/`legal_escalation` are permanently excluded from what
+   *step 13* can select, by construction. That is the correct, conservative
+   outcome for THIS step, not an oversight: EV may choose a different *kind*
+   of action among what is already reachable today, never make *more*
+   reachable than the existing escalation walk already allows. What EV
+   *can* still do once a handoff is already certain is choose which flavor —
+   see the next section.
 3. Rank the survivors with `negotiation.rank_actions()`, using
    `score["signals"]["broken_promises"]` (the buyer's historical
    reliability, not this invoice's own active-promise count) and
@@ -348,13 +349,33 @@ to happen, at rung `chosen` — does the new step 13 fire:
    | `wait` | `wait` | `chosen`, reviewed in `CEILING_REVIEW_DAYS` |
    | `soft_nudge`, `firm`, `legal_facts` | `send` | `chosen` (unchanged) |
    | `payment_plan`, `counter_settle` | `payment_plan`, `counter_settle` (new) | `chosen` |
-   | `human_handoff`, `legal_escalation` | `handoff` | `4` (not reachable via this call site as of Phase 3 — see gate 2's note above; the mapping is kept for correctness if that invariant ever changes) |
+   | `human_handoff`, `legal_escalation` | `handoff` | `4` (not reachable via step 13 — see gate 2's note above; the mapping is kept for correctness if that invariant ever changes; reachable via step 8's OWN handoff-flavor logic below) |
 
    Every mapped action carries `detail={"negotiation_action": ..., "ev": ...}`
    so the EV reasoning lands in the audit trail even though `payment_plan`
    and `counter_settle` reuse the exact same rung-based skeleton `send`
    always did — `engine/writer.py` is untouched, so no message differs in
    content by which action won; only the stated reasoning does.
+
+**Choosing the handoff *flavor* (step 8, not step 13).** Step 13's own gate
+means `human_handoff`/`legal_escalation` can never actually fire *through
+step 13*. But a handoff is not always reached through step 13's kind of
+escalation — it is very often reached directly by step 8, from real
+per-invoice history (a broken-promise jump, a rung fully exhausted), with no
+"general action" ever chosen at all. Step 8 is where those two negotiation
+actions genuinely get to matter: once `chosen >= HANDOFF_RUNG` is already
+true — a handoff will happen regardless, `ev_mode` or not — step 8 now also
+asks, only when `ev_mode: on` and a quadrant is present, *which* of
+`human_handoff`/`legal_escalation` the audit trail should record, by
+intersecting the two with whatever `negotiation.eligible_actions[quadrant]`
+offers and ranking the survivors by EV (a `cash_flow_problem` buyer offers
+only `human_handoff`; `can_pay_but_wont`/`high_risk` offer both;
+`good_customer` offers neither and falls through to the exact same plain,
+undifferentiated `HANDOFF` it always produced). This **never** changes
+whether a handoff fires, what rung it's at, the reason text, or the
+Samadhaan draft — only whether `detail` additionally carries
+`{"negotiation_action": ..., "ev": ...}` distinguishing "handed to a human"
+from "flagged for legal escalation" in the audit trail.
 
 **The `good_customer` finding, addressed.** Block 2c's own report flagged
 that the raw EV grid ranks `legal_facts` above `soft_nudge` even for the

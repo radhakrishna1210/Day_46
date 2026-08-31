@@ -370,35 +370,33 @@ uses:
   `can_pay_but_wont`/`high_risk` never see `payment_plan`. `wait` is
   eligible everywhere.
 - **What is reachable today:** `human_handoff`/`legal_escalation` are
-  dropped from the candidate list unless the escalation walk's own
-  `chosen` rung has ALREADY reached rung 4 -- the *identical* condition the
-  non-EV rung-4 step already uses, deliberately **not** "is the legal
-  ceiling open." Those two are not the same thing: the ceiling opening only
-  means the law would *permit* rung 4 today, not that this invoice's own
-  contact history has organically escalated there. A first-ever contact,
-  for instance, can have a wide-open ceiling while `chosen` sits at rung 1
-  or 2, because `decide()`'s backlog formula for a first contact never
-  desires more than `base + 1`. Gating on the ceiling alone (an earlier
-  version of this gate did exactly that, caught on review) would have let
-  EV send that case to a human handoff sooner than the ordinary escalation
-  walk ever would have. Gating on `chosen` instead means those two actions
-  are only candidates once the non-EV rung-4 step's own condition already
-  holds -- and since that step intercepts unconditionally, before the EV
-  branch ever runs, whenever it's true, `human_handoff`/`legal_escalation`
-  end up permanently excluded from what EV can select through `decide()`,
-  by construction: EV may choose a different *kind* of action among what is
-  already reachable today, never make *more* reachable than the existing
-  walk already allows. Proven with two dedicated tests: a `high_risk` buyer
-  whose unrestricted top action is `legal_escalation` falls back to the
-  next-eligible candidate both when the legal ceiling is closed, and --
-  the sharper case -- when the ceiling is wide open but a first-ever
-  contact means `chosen` hasn't gotten there yet either way.
+  dropped from this candidate list -- the one used for choosing the general
+  action -- unless the escalation walk's own `chosen` rung has ALREADY
+  reached rung 4, the *identical* condition the non-EV rung-4 step already
+  uses, deliberately **not** "is the legal ceiling open." Those two are not
+  the same thing: the ceiling opening only means the law would *permit*
+  rung 4 today, not that this invoice's own contact history has organically
+  escalated there. A first-ever contact, for instance, can have a wide-open
+  ceiling while `chosen` sits at rung 1 or 2, because `decide()`'s backlog
+  formula for a first contact never desires more than `base + 1`. Gating on
+  the ceiling alone (an earlier version of this gate did exactly that,
+  caught on review) would have let EV send that case to a human handoff
+  sooner than the ordinary escalation walk ever would have. Gating on
+  `chosen` instead means those two actions are only candidates, for choosing
+  the *general* action, once the non-EV rung-4 step's own condition already
+  holds -- and since that step intercepts unconditionally before the general
+  choice ever runs, whenever it's true, `human_handoff`/`legal_escalation`
+  end up permanently excluded from *that* choice, by construction: EV may
+  choose a different *kind* of action among what is already reachable
+  today, never make *more* reachable than the existing walk already allows.
+  Proven with two dedicated tests: a `high_risk` buyer whose unrestricted
+  top action is `legal_escalation` falls back to the next-eligible candidate
+  both when the legal ceiling is closed, and -- the sharper case -- when the
+  ceiling is wide open but a first-ever contact means `chosen` hasn't gotten
+  there yet either way.
 
 The winner maps onto `Action`: `wait` stays a `wait`; `soft_nudge`/`firm`/
 `legal_facts` stay a `send` at the already-chosen rung, unchanged;
-`human_handoff`/`legal_escalation` map to a `handoff` at rung 4, though as
-just described that mapping is not reachable via `decide()`'s own EV branch
-as of Phase 3 -- kept for correctness in case that invariant ever changes;
 `payment_plan`/`counter_settle` are two genuinely new `Action.kind` values,
 buyer-facing sends at the already-chosen rung. Every mapped action carries
 the EV reasoning in its audit detail. `engine/writer.py` is untouched, so
@@ -409,6 +407,22 @@ residual half of the `good_customer` finding (`firm` still edges out
 `soft_nudge` on raw probability) is left alone rather than patched: with no
 message-content difference between them yet, it has no effect on what is
 actually sent.
+
+**Where `human_handoff`/`legal_escalation` actually get to matter.** The
+general-action choice above can never select them, but a handoff is very
+often reached directly -- from real per-invoice history, not through that
+choice at all. Once `chosen >= HANDOFF_RUNG` is already true -- a handoff
+will happen regardless, `ev_mode` or not -- the *existing, unchanged*
+rung-4 step additionally asks, only with `ev_mode: on` and a quadrant
+present, *which flavor* the audit trail should record: it intersects
+`human_handoff`/`legal_escalation` with whatever `eligible_actions[quadrant]`
+offers (`cash_flow_problem` offers only `human_handoff`;
+`can_pay_but_wont`/`high_risk` offer both; `good_customer` offers neither
+and falls straight through to the exact same plain, undifferentiated
+`HANDOFF` it always produced) and ranks the survivors by EV. This never
+changes *whether* a handoff fires, the rung, the reason text, or the
+Samadhaan draft -- only whether the audit detail additionally distinguishes
+"handed to a human" from "flagged for legal escalation."
 
 > **PHASE 3 SCOPE.** No message-content differentiation by action. No new
 > persona reaction behaviour. No reactive "buyer proposed a settlement,
