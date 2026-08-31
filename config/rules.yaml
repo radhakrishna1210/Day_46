@@ -385,6 +385,113 @@ consolidation:
   # llm.max_tokens.draft_message, which is sized for one invoice.
   max_invoices_per_message: 6
 
+# --- Recovery probability + expected value (engine/negotiation.py) --------
+# Phase 2: for a fixed set of candidate recovery actions, a rule-based
+# P(recover), an expected recovered amount, a cost, and
+# EV = P(recover) x expected_recovery_paise - cost_paise.
+#
+# PHASE 2 SCOPE: computed and ranked only. engine/brain.py does not read any
+# of this yet -- tests/test_negotiation.py carries the tripwire, the direct
+# sibling of test_ability_willingness.py's Phase 1 one. Acting on the ranking
+# (choosing an action, wiring payment_plan/counter_settle into Action.kind)
+# is Phase 3.
+#
+# These are OUR policy assumptions about probability and cost, not statute --
+# the same reasoning already written down for law_gates above ("These are OUR
+# conservatism policy, not statute, which is why they live here and not in
+# config/legal.yaml") applies here even more directly: there is no historical
+# recovery-rate data behind a single one of these numbers.
+negotiation:
+  # P(recover) if THIS action is the one taken from here, per quadrant, as a
+  # percentage. ASSUMPTIONS, not measured outcomes -- the same honesty
+  # already given to config/legal.yaml's buyer_tax_rate (30%, stated as an
+  # assumption, not a statutory figure). A flat grid rather than a weighted
+  # composition (see engine/negotiation.py's module docstring for why).
+  # Tune until rank_actions() prescribes the sensible thing per quadrant
+  # (tests/test_negotiation.py) -- a starting point, not a specification.
+  recovery_probability:
+    good_customer:       {wait: 60, soft_nudge: 85, firm: 88, legal_facts: 90,
+                           payment_plan: 80, counter_settle: 75,
+                           human_handoff: 92, legal_escalation: 95}
+    cash_flow_problem:   {wait: 20, soft_nudge: 30, firm: 35, legal_facts: 30,
+                           payment_plan: 70, counter_settle: 55,
+                           human_handoff: 60, legal_escalation: 40}
+    can_pay_but_wont:    {wait: 10, soft_nudge: 15, firm: 45, legal_facts: 65,
+                           payment_plan: 25, counter_settle: 50,
+                           human_handoff: 70, legal_escalation: 85}
+    high_risk:           {wait: 5,  soft_nudge: 8,  firm: 15, legal_facts: 20,
+                           payment_plan: 15, counter_settle: 20,
+                           human_handoff: 35, legal_escalation: 45}
+
+  # Per broken promise on file, points subtracted from recovery_probability --
+  # ONLY for actions whose success depends on the buyer's own follow-through.
+  # legal_escalation and human_handoff remove that discretion, so a broken
+  # promise does not lower their odds the same way.
+  promise_adjustment:
+    penalty_per_broken_promise: 4
+    applies_to: [soft_nudge, firm, payment_plan, counter_settle]
+
+  # Fraction of the outstanding amount actually recovered WHEN the action
+  # succeeds. wait/soft_nudge/firm/legal_facts collect the full amount when
+  # they work -- there is no partial version of "the buyer paid the invoice".
+  # payment_plan is a SCHEDULE, not a discount, so it still targets the full
+  # amount. counter_settle is explicitly a partial settlement (the "70% now,
+  # waive the rest" case) -- ASSUMPTION, tune per real settlement norms.
+  # human_handoff and legal_escalation assume a human negotiator or the
+  # Samadhaan process settles for somewhat less than face value -- also
+  # ASSUMPTIONS, not statistics; there is no real recovery-rate data behind
+  # either number.
+  recovery_fraction:
+    wait: 1.0
+    soft_nudge: 1.0
+    firm: 1.0
+    legal_facts: 1.0
+    payment_plan: 1.0
+    counter_settle: 0.70
+    human_handoff: 0.75
+    legal_escalation: 0.65
+
+  cost:
+    # Real Gemini 3.7 Flash pricing (Standard/paid tier), cited the same way
+    # config/legal.yaml cites every legal figure -- source URL + retrieval
+    # date, right here.
+    #   Source: https://ai.google.dev/gemini-api/docs/pricing
+    #   Retrieved: 2026-08-31
+    #   input:  $0.75 per 1,000,000 tokens (through 2026-12-31)
+    #   output: $3.75 per 1,000,000 tokens (through 2026-12-31; rising to
+    #           $1.50 / $7.50 on 2027-01-01 -- re-check before relying on
+    #           this past that date)
+    # Every purpose below is costed on OUTPUT tokens only: llm.max_tokens.*
+    # caps engine/llm.py's max_output_tokens, so this is a ceiling on what
+    # ONE call's generation could cost, not a measured input+output total --
+    # a deliberate ceiling estimate, per this phase's own instructions.
+    # engine/llm.py's --calibrate flow records the real input+output token
+    # split (last_usage) on a live-mode spot check if that is ever wanted;
+    # that costs a real API call, so it is not what populates the numbers
+    # below.
+    #   USD -> INR: 95.91, retrieved 2026-08-31 from
+    #   https://www.xe.com/en-us/currencyconverter/convert/?Amount=1&From=USD&To=INR
+    #   (mid-market rate -- a demo-grade conversion, not a treasury-grade
+    #   one, same assumption-quality as buyer_tax_rate in config/legal.yaml)
+    #   paise/output-token = 3.75 * 95.91 / 1,000,000 * 100 = 0.03596625
+    #     draft_message: 2000 tokens (llm.max_tokens.draft_message)
+    #                    x 0.03596625 = 71.9 -> 72
+    #     parse_reply:    600 tokens (llm.max_tokens.parse_reply)
+    #                    x 0.03596625 = 21.6 -> 22
+    #     judgment_call:  600 tokens (llm.max_tokens.judgment_call)
+    #                    x 0.03596625 = 21.6 -> 22
+    llm_call_paise:
+      draft_message: 72
+      parse_reply: 22      # not used by any action below yet -- kept costed
+      judgment_call: 22    # for Phase 3's reuse, per this phase's own brief
+    # ASSUMED value of one minute of the MSME owner's own time: Rs 10/minute
+    # (Rs 600/hour) -- a round, modest proxy for a small business owner's own
+    # opportunity cost, not a researched wage figure. Same assumption-quality
+    # as buyer_tax_rate in config/legal.yaml: stated, not measured.
+    human_minute_paise: 1000
+    human_handoff_minutes: 10
+    legal_escalation_minutes: 20
+
 # --- Channels (engine/channels.py) ----------------------------------------
 channels:
   email: real                   # actually sent, only to TEST_INBOX_EMAIL
