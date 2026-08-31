@@ -916,3 +916,71 @@ def test_ev_mode_off_is_inert_regardless_of_what_the_score_carries() -> None:
         after = brain.decide(scenario["record"], buyer(), two_axis, position,
                              [], scenario["history"], log=False)
         assert before == after, f"ev_mode: off diverged for {scenario['record']['invoice_id']}"
+
+
+# --- letting EV pick the handoff FLAVOR once a handoff is already certain --
+# (a follow-up to the two tests above: those proved reachability is never
+# MORE permissive under ev_mode; these prove EV can still add value once
+# reachability is already settled, by choosing which flavor of an
+# already-certain handoff gets recorded.)
+
+@pytest.mark.parametrize("quadrant, expected_candidates", [
+    (aw.CASH_FLOW_PROBLEM, (negotiation.HUMAN_HANDOFF,)),
+    (aw.CAN_PAY_BUT_WONT, (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)),
+    (aw.HIGH_RISK, (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)),
+])
+def test_ev_mode_picks_the_handoff_flavor_once_a_handoff_is_already_certain(
+    quadrant: str, expected_candidates: tuple[str, ...],
+) -> None:
+    """RUNG_FOUR_HISTORY is a REAL rung-4 case: the escalation walk itself
+    (not just the legal ceiling) reaches HANDOFF_RUNG. With ev_mode on, the
+    Brain still hands off -- unconditionally, exactly as without EV, same
+    reason, same Samadhaan draft -- but the audit detail now distinguishes
+    which flavor: human_handoff vs. legal_escalation, by the same EV ranking
+    used everywhere else in decide()."""
+    old = invoice(acceptance="2025-06-01")
+    position = law.legal_position(old, TODAY)
+
+    off = brain.decide(old, buyer(), score(45), position, [], RUNG_FOUR_HISTORY, log=False)
+    assert off.kind == brain.HANDOFF and off.rung == brain.HANDOFF_RUNG, "fixture assumption"
+    assert "negotiation_action" not in off.detail, "ev_mode off must add no negotiation detail"
+
+    action = brain.decide(old, buyer(), score_with_quadrant(quadrant, value=45), position,
+                          [], RUNG_FOUR_HISTORY, config=ev_config())
+    assert action.kind == brain.HANDOFF
+    assert action.rung == brain.HANDOFF_RUNG
+    assert action.reason == off.reason, "which flavor is chosen must not change the reason text"
+    assert action.detail["samadhaan_draft"] == off.detail["samadhaan_draft"]
+
+    expected = negotiation.rank_actions(
+        quadrant, aw.outstanding_paise(old), broken_promises=0, candidates=expected_candidates,
+    )[0]
+    assert action.detail["negotiation_action"] == expected["action"]
+    assert action.detail["ev"] == expected
+
+
+def test_ev_mode_falls_back_to_a_plain_handoff_when_the_quadrant_offers_neither_flavor() -> None:
+    """good_customer's eligible_actions table lists neither human_handoff nor
+    legal_escalation. Even on this SAME real rung-4 case other quadrants
+    just differentiated, EV has nothing to rank among, so the Brain falls
+    through to the exact same plain, undifferentiated HANDOFF it produces
+    with ev_mode off -- no negotiation_action is invented, and nothing about
+    the handoff itself (reason, rung, draft) changes."""
+    config = ev_config()
+    handoff_actions = {negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION}
+    assert not handoff_actions & set(config["negotiation"]["eligible_actions"][aw.GOOD_CUSTOMER]), (
+        "fixture assumption: good_customer offers no handoff flavor at all"
+    )
+
+    old = invoice(acceptance="2025-06-01")
+    position = law.legal_position(old, TODAY)
+    off = brain.decide(old, buyer(), score(45), position, [], RUNG_FOUR_HISTORY, log=False)
+    on = brain.decide(old, buyer(), score_with_quadrant(aw.GOOD_CUSTOMER, value=45), position,
+                      [], RUNG_FOUR_HISTORY, config=config, log=False)
+
+    assert on.kind == brain.HANDOFF
+    assert on.rung == brain.HANDOFF_RUNG
+    assert "negotiation_action" not in on.detail
+    assert "ev" not in on.detail
+    assert on.reason == off.reason
+    assert on.detail["samadhaan_draft"] == off.detail["samadhaan_draft"]

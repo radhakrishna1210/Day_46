@@ -34,14 +34,16 @@ only for a caller that supplies a two-axis score (engine.ability_willingness.
 two_axis_score()'s output, carrying a "quadrant" key) -- that fallthrough is
 replaced by an EV-informed choice among engine.negotiation's action space,
 narrowed to whatever config/rules.yaml's negotiation.eligible_actions allows
-for this buyer's quadrant and to whatever the escalation walk has ALREADY
-made reachable today for a handoff specifically (chosen must already equal
-HANDOFF_RUNG, the identical condition the non-EV rung-4 step above uses --
-NOT merely the legal ceiling being open; see eligible_negotiation_actions()).
-Two new Action kinds exist for it: PAYMENT_PLAN and COUNTER_SETTLE, both
-buyer-facing sends at the already-chosen rung, same as SEND. With ev_mode
-off (the default) or no quadrant on the score, decide() is
-byte-for-byte what it always was -- see tests/test_brain.py's snapshot test.
+for this buyer's quadrant. Two new Action kinds exist for it: PAYMENT_PLAN
+and COUNTER_SETTLE, both buyer-facing sends at the already-chosen rung, same
+as SEND. Reaching a handoff at all is NEVER affected by ev_mode -- chosen
+reaching HANDOFF_RUNG is decided entirely by the rung selection above,
+exactly as before this phase. (See the rung-4 branch's own comment: it
+calls eligible_negotiation_actions() too, but only to let EV pick WHICH
+FLAVOR of an already-certain handoff to record -- human_handoff or
+legal_escalation -- never whether one happens.) With ev_mode off (the
+default) or no quadrant on the score, decide() is byte-for-byte what it
+always was -- see tests/test_brain.py's snapshot test.
 """
 
 from __future__ import annotations
@@ -203,18 +205,35 @@ def eligible_negotiation_actions(
         ever would have -- exactly the over-eager failure mode this
         parameter name is written to rule out.
 
-        In practice, this makes human_handoff/legal_escalation permanently
-        excluded whenever this function is called from decide()'s own EV
-        branch: that branch only runs once chosen_rung is confirmed BELOW
-        HANDOFF_RUNG (decide()'s step 8 already intercepts and returns a
-        HANDOFF, unconditionally, in every case where chosen_rung reaches
-        HANDOFF_RUNG, before the EV branch ever runs). That is the correct,
-        conservative behaviour, not a bug: EV may choose a different KIND of
-        action among whatever is already reachable today, never make MORE
-        reachable than the existing escalation walk already allows. The
-        parameter still takes a general chosen_rung (rather than hardcoding
-        the exclusion) so this stays correct if that invariant ever changes,
-        and so it can be tested directly, in isolation, at chosen_rung == 4.
+    decide() calls this function from two different places, at two different
+    values of chosen_rung, for two different purposes:
+
+        Step 13 (choosing the general action, e.g. send vs. wait vs. a
+        payment plan) calls it with the rung selection's own `chosen`, which
+        is ALWAYS below HANDOFF_RUNG at that point in decide() -- step 8
+        above already intercepts and returns a HANDOFF, unconditionally,
+        in every case where chosen reaches HANDOFF_RUNG, before step 13 ever
+        runs. So at that call site, human_handoff/legal_escalation are
+        permanently excluded: EV may choose a different KIND of action
+        among whatever is already reachable today, never make MORE
+        reachable than the existing escalation walk already allows.
+
+        Step 8 (once a handoff is already certain -- chosen has already
+        reached HANDOFF_RUNG) calls this SAME function with that same
+        chosen, specifically to let EV pick WHICH FLAVOR of handoff to
+        record. There, the chosen_rung gate is a pass-through (chosen_rung
+        is never below HANDOFF_RUNG at that call site), so only the
+        quadrant filter narrows anything -- a can_pay_but_wont or high_risk
+        buyer offers both flavors, cash_flow_problem offers only
+        human_handoff, and good_customer offers neither (falling through to
+        a plain, undifferentiated HANDOFF). This never changes WHETHER a
+        handoff fires, only which negotiation_action label rides along on
+        one that was already certain.
+
+    The parameter takes a general chosen_rung (rather than two separate
+    hardcoded booleans for these two call sites) so both readings stay
+    correct from one piece of logic, and so each can be tested directly, in
+    isolation, at any chosen_rung value.
 
     Rules decide what is possible; EV decides what is best among what is
     possible.
@@ -333,6 +352,11 @@ def decide(
     ceiling = int(legal_position["available_rung"])
     stop_rules = config["stop_rules"]
     ladder = config["ladder"]
+    # Read once, reused by both step 8 (which handoff flavor) and step 13
+    # (which action generally) -- see eligible_negotiation_actions()'s own
+    # docstring for what "quadrant present" does and does not unlock.
+    quadrant = score.get("quadrant")
+    ev_mode_on = quadrant and str(config.get("brain", {}).get("ev_mode", "off")) == "on"
 
     invoice_id = invoice.get("invoice_id")
     buyer_id = invoice.get("buyer_id")
@@ -455,16 +479,46 @@ def decide(
     # 8. Rung 4 is a stop, not a message. This MUST precede every send gate:
     #    rung 4 has max_messages of 0, so the exhaustion check below would
     #    otherwise swallow it into a wait and no draft would ever be produced.
+    #
+    #    WHETHER a handoff fires here is never affected by ev_mode -- chosen
+    #    reaching HANDOFF_RUNG is decided entirely by the rung selection
+    #    above, unconditionally, exactly as before this phase. What ev_mode
+    #    CAN do, once a handoff is already certain, is pick WHICH KIND of
+    #    handoff to record: human_handoff or legal_escalation, by EV, among
+    #    whichever of those two config/rules.yaml's negotiation.
+    #    eligible_actions[quadrant] actually offers (a can_pay_but_wont or
+    #    high_risk buyer offers both; cash_flow_problem offers only
+    #    human_handoff; good_customer offers neither). Reuses
+    #    eligible_negotiation_actions() rather than reading the config table
+    #    directly -- chosen is already >= HANDOFF_RUNG here, so that
+    #    function's own reachability gate is a pass-through, and only the
+    #    quadrant filter actually does anything. A quadrant offering neither
+    #    falls straight through to the plain, undifferentiated HANDOFF below,
+    #    exactly as it always has: rung 4 is a stop, not a message, whatever
+    #    the quadrant, and no fallback action is invented here.
     if chosen >= HANDOFF_RUNG:
         draft = samadhaan.build_draft(invoice, buyer, legal_position, today)
+        extra = {"samadhaan_draft": {
+            "ready": draft["ready"],
+            "blockers": draft["blockers"],
+            "warnings": draft["warnings"],
+        }}
+        if ev_mode_on:
+            handoff_candidates = tuple(
+                a for a in eligible_negotiation_actions(quadrant, chosen, config)
+                if a in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)
+            )
+            if handoff_candidates:
+                promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
+                winner = negotiation.rank_actions(
+                    quadrant, outstanding_paise(invoice), broken_promises=promise_count,
+                    candidates=handoff_candidates,
+                )[0]
+                extra["negotiation_action"] = winner["action"]
+                extra["ev"] = winner
         return act(HANDOFF, HANDOFF_RUNG,
                    f"escalated to the final rung, so contact stops and a human takes over ({why})",
-                   capped=capped,
-                   extra={"samadhaan_draft": {
-                       "ready": draft["ready"],
-                       "blockers": draft["blockers"],
-                       "warnings": draft["warnings"],
-                   }})
+                   capped=capped, extra=extra)
 
     rung_config = rungs.rung(chosen)
 
@@ -506,32 +560,36 @@ def decide(
                    extra={"llm_decision": decision, "llm_ignored": decision != "wait"})
 
     # 13. EV-informed action selection (Phase 3), replacing the unconditional
-    #     send below -- only when config/rules.yaml's brain.ev_mode is "on"
-    #     AND the caller supplied a two-axis score (one carrying "quadrant";
-    #     see engine.ability_willingness.two_axis_score()). A caller still
-    #     passing a plain engine.score.score_buyer() dict has no "quadrant"
-    #     key, so it always falls through to the unconditional send exactly
-    #     as before -- this is what keeps ev_mode: off byte-for-byte
-    #     identical to pre-Phase-3 output (tests/test_brain.py's snapshot
-    #     test), and what keeps this branch inert for every caller (main.py,
-    #     sim/scenario_tc141.py) that has not opted into a two-axis score.
+    #     send below -- only when ev_mode_on (config/rules.yaml's
+    #     brain.ev_mode is "on" AND the caller supplied a two-axis score, one
+    #     carrying "quadrant"; see engine.ability_willingness.
+    #     two_axis_score()). A caller still passing a plain
+    #     engine.score.score_buyer() dict has no "quadrant" key, so it always
+    #     falls through to the unconditional send exactly as before -- this
+    #     is what keeps ev_mode: off byte-for-byte identical to pre-Phase-3
+    #     output (tests/test_brain.py's snapshot test), and what keeps this
+    #     branch inert for every caller (main.py, sim/scenario_tc141.py)
+    #     that has not opted into a two-axis score.
     #
     #     Candidates are gated by `chosen`, NOT `ceiling`: eligible_negotiation_
     #     actions() only admits human_handoff/legal_escalation once chosen has
     #     ALREADY reached HANDOFF_RUNG -- the identical condition step 8 above
     #     uses. Since step 8 unconditionally intercepts and returns a HANDOFF
-    #     whenever that is true, execution only ever reaches this branch with
+    #     whenever that is true, execution only ever reaches THIS branch with
     #     chosen < HANDOFF_RUNG, so a handoff is never actually one of EV's
-    #     live choices here today. That is intentional, not dead code left by
-    #     accident: EV may choose a different KIND of action among whatever is
-    #     already reachable today (a send vs. a payment plan vs. a wait), but
-    #     must never become MORE willing to hand a case to a human than the
-    #     existing escalation walk already is -- see
-    #     eligible_negotiation_actions()'s own docstring for the full
-    #     reasoning, and tests/test_brain.py's ceiling/chosen-rung tests for
-    #     the proof.
-    quadrant = score.get("quadrant")
-    if quadrant and str(config.get("brain", {}).get("ev_mode", "off")) == "on":
+    #     live choices at this particular call site. That is intentional, not
+    #     dead code left by accident: EV may choose a different KIND of
+    #     action among whatever is already reachable today (a send vs. a
+    #     payment plan vs. a wait), but must never become MORE willing to
+    #     hand a case to a human than the existing escalation walk already
+    #     is -- see eligible_negotiation_actions()'s own docstring for the
+    #     full reasoning, and tests/test_brain.py's ceiling/chosen-rung tests
+    #     for the proof. (Step 8 above calls the SAME helper with a
+    #     DIFFERENT chosen -- one already >= HANDOFF_RUNG there by
+    #     construction -- to pick which flavor of an already-certain handoff
+    #     to record; that is a separate call site with its own precondition,
+    #     not a contradiction of this one.)
+    if ev_mode_on:
         promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
         candidates = eligible_negotiation_actions(quadrant, chosen, config)
         ranked = negotiation.rank_actions(
@@ -549,11 +607,11 @@ def decide(
                        review=today + timedelta(days=CEILING_REVIEW_DAYS), extra=ev_extra)
 
         if neg_action in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION):
-            # Unreachable via this call site as of Phase 3 -- see the comment
-            # above and eligible_negotiation_actions()'s docstring. Kept (not
-            # collapsed away) so the mapping stays correct if that invariant
-            # ever changes, and so engine.negotiation's own action space
-            # still maps onto a real Action.kind everywhere it is used.
+            # Unreachable via this call site -- see the comment above and
+            # eligible_negotiation_actions()'s docstring. Kept (not collapsed
+            # away) so the mapping stays correct if that invariant ever
+            # changes, and so engine.negotiation's own action space still
+            # maps onto a real Action.kind everywhere it is used.
             draft = samadhaan.build_draft(invoice, buyer, legal_position, today)
             return act(HANDOFF, HANDOFF_RUNG, ev_why, capped=capped,
                        extra={**ev_extra, "samadhaan_draft": {
