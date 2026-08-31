@@ -15,11 +15,13 @@ before it becomes spam. Every money-related action is written to an audit
 trail with the reason behind it.
 
 **Status:** the original 12-day MVP, four rounds of edge-case hardening
-(E1-E4), and four post-MVP additions (W1-W4: early warning, buyer panel,
-buyer-level message consolidation, experiment refresh) are all done -- 759
-tests passing, agent beats baseline on rupees recovered on 6/6 tested seeds.
-Demo video and final submission polish are what's left (see
-[Honest scope](#honest-scope-built-vs-future-work) below).
+(E1-E4), four post-MVP additions (W1-W4: early warning, buyer panel,
+buyer-level message consolidation, experiment refresh), and three
+negotiation-model phases (ability/willingness split, recovery-probability +
+EV ranking, and wiring that ranking into the Brain behind a config flag) are
+all done -- 844 tests passing, agent beats baseline on rupees recovered on
+6/6 tested seeds. Demo video and final submission polish are what's left
+(see [Honest scope](#honest-scope-built-vs-future-work) below).
 
 **At a glance:**
 - Recovers **₹22,98,757 more** than a fixed-reminder baseline bot on the
@@ -27,7 +29,7 @@ Demo video and final submission polish are what's left (see
   tested seeds.
 - Every money-related decision is **explainable and audit-logged** -- no
   silent actions, no invented legal numbers.
-- **829 tests passing**; of 143 documented edge cases, 62 have a dedicated
+- **844 tests passing**; of 143 documented edge cases, 62 have a dedicated
   test, the rest are HANDLED or explicitly OUT OF SCOPE -- never left vague.
 - Full numbers in [Results](#results); what's built vs. not in
   [Honest scope](#honest-scope-built-vs-future-work).
@@ -38,6 +40,7 @@ Demo video and final submission polish are what's left (see
 [Buyer / trader view (W2)](#buyer--trader-view-w2) --
 [Ability vs. willingness (Phase 1)](#ability-vs-willingness-the-two-axis-score-phase-1) --
 [Recovery probability + EV (Phase 2)](#recovery-probability--expected-value-phase-2) --
+[Wiring EV into the Brain (Phase 3)](#wiring-the-ev-ranking-into-the-brain-phase-3) --
 [Buyer-level message consolidation (W3)](#buyer-level-message-consolidation-w3)
 -- [Scope (deliberate)](#scope-deliberate) -- [Edge cases](#edge-cases) --
 [Honest scope: built vs. future work](#honest-scope-built-vs-future-work) --
@@ -254,13 +257,12 @@ arithmetic in plain English, the same way `explain()` already does:
 python engine/ability_willingness.py --explain BUY-07
 ```
 
-> **Computed, not yet acted on.** As of Phase 1 the Brain does not read any
-> of this: no message changes, no escalation changes, and the whole
-> baseline-vs-agent experiment produces byte-identical numbers to before.
-> Acting on the quadrant -- a payment-plan conversation for
-> `cash_flow_problem`, firmer escalation for `can_pay_but_wont` -- is Phase
-> 2. It ships inert first so the numbers can be argued with before they are
-> allowed to move money.
+> **Computed and explained as shipped in Phase 1.** As of Phase 1 the Brain
+> did not read any of this: no message changes, no escalation changes, and
+> the whole baseline-vs-agent experiment produced byte-identical numbers to
+> before. It shipped inert first so the numbers could be argued with before
+> they were allowed to move money. Phase 3 (below) is what wires a quadrant
+> into an actual decision, behind a config flag shipped off by default.
 
 **Honest about the data:** the inflow signals are *synthetic*, generated per
 buyer and correlated with the simulator's hidden persona (a cash-strapped
@@ -326,11 +328,93 @@ cost as a gentle one. Left as an honest, visible result rather than patched
 by hand-tuning one row -- a candidate for Phase 3, which is also where the
 Brain would need to weigh relationship cost at all.
 
-> **Computed, not yet acted on.** `engine/brain.py` does not read this
-> module and `Action.kind` is unchanged. Wiring a chosen action into the
-> Brain -- and fixing `engine/consolidate.py` / `engine/buyer_panel.py`'s
-> two `Action.kind` consumers for the day `payment_plan`/`counter_settle`
-> actually appear -- is Phase 3.
+> **Computed and ranked as shipped in Phase 2.** Phase 3, directly below,
+> is what wires a chosen action into the Brain and fixes
+> `engine/consolidate.py` / `engine/buyer_panel.py`'s two `Action.kind`
+> consumers for the day `payment_plan`/`counter_settle` actually appear.
+
+---
+
+## Wiring the EV ranking into the Brain (Phase 3)
+
+**The problem:** Phase 2's ranking sat inert -- `engine/brain.py` never
+imported it, and every decision still ended in one unconditional `SEND` at
+whatever rung the escalation walk picked.
+
+**What Phase 3 does:** once every hard stopping rule and rung gate has
+cleared -- opt-out, dispute, settlement, not-yet-due, max-contacts, an
+active promise, the legal ceiling, rung exhaustion, weekends, message
+spacing, all unchanged and all still running first -- `engine/brain.py`'s
+`decide()` can replace its unconditional send with an EV-informed choice,
+behind a new config flag:
+
+```yaml
+brain:
+  ev_mode: off   # shipped default: decide() is byte-for-byte unchanged
+```
+
+With it off, nothing about the agent's behaviour changes -- proven by a
+snapshot-diff regression test pinning the seed-42 headline numbers from
+immediately before this phase, not just "tests still pass." With it on, and
+only for a caller that supplies a two-axis score (a `quadrant` key --
+`main.py` and `sim/scenario_tc141.py` still pass a plain score and are
+unaffected either way), `decide()` ranks a candidate list built from two
+independent gates -- the same two-gate shape the ladder itself already
+uses:
+
+- **What is ever appropriate for this buyer's profile:** a new
+  `config/rules.yaml` `negotiation.eligible_actions` table, one list per
+  quadrant. This is the fix for the `good_customer` finding Phase 2's report
+  flagged: `good_customer`/`cash_flow_problem` never see `legal_facts`/
+  `legal_escalation`/`counter_settle` as candidates at all, and
+  `can_pay_but_wont`/`high_risk` never see `payment_plan`. `wait` is
+  eligible everywhere.
+- **What is reachable today:** `human_handoff`/`legal_escalation` are
+  dropped from the candidate list unless the escalation walk's own
+  `chosen` rung has ALREADY reached rung 4 -- the *identical* condition the
+  non-EV rung-4 step already uses, deliberately **not** "is the legal
+  ceiling open." Those two are not the same thing: the ceiling opening only
+  means the law would *permit* rung 4 today, not that this invoice's own
+  contact history has organically escalated there. A first-ever contact,
+  for instance, can have a wide-open ceiling while `chosen` sits at rung 1
+  or 2, because `decide()`'s backlog formula for a first contact never
+  desires more than `base + 1`. Gating on the ceiling alone (an earlier
+  version of this gate did exactly that, caught on review) would have let
+  EV send that case to a human handoff sooner than the ordinary escalation
+  walk ever would have. Gating on `chosen` instead means those two actions
+  are only candidates once the non-EV rung-4 step's own condition already
+  holds -- and since that step intercepts unconditionally, before the EV
+  branch ever runs, whenever it's true, `human_handoff`/`legal_escalation`
+  end up permanently excluded from what EV can select through `decide()`,
+  by construction: EV may choose a different *kind* of action among what is
+  already reachable today, never make *more* reachable than the existing
+  walk already allows. Proven with two dedicated tests: a `high_risk` buyer
+  whose unrestricted top action is `legal_escalation` falls back to the
+  next-eligible candidate both when the legal ceiling is closed, and --
+  the sharper case -- when the ceiling is wide open but a first-ever
+  contact means `chosen` hasn't gotten there yet either way.
+
+The winner maps onto `Action`: `wait` stays a `wait`; `soft_nudge`/`firm`/
+`legal_facts` stay a `send` at the already-chosen rung, unchanged;
+`human_handoff`/`legal_escalation` map to a `handoff` at rung 4, though as
+just described that mapping is not reachable via `decide()`'s own EV branch
+as of Phase 3 -- kept for correctness in case that invariant ever changes;
+`payment_plan`/`counter_settle` are two genuinely new `Action.kind` values,
+buyer-facing sends at the already-chosen rung. Every mapped action carries
+the EV reasoning in its audit detail. `engine/writer.py` is untouched, so
+`soft_nudge`/`firm`/`legal_facts` all still draft through the identical
+rung-based skeleton -- choosing one over another changes the stated
+reasoning in the audit trail, not what the buyer reads. That is also why the
+residual half of the `good_customer` finding (`firm` still edges out
+`soft_nudge` on raw probability) is left alone rather than patched: with no
+message-content difference between them yet, it has no effect on what is
+actually sent.
+
+> **PHASE 3 SCOPE.** No message-content differentiation by action. No new
+> persona reaction behaviour. No reactive "buyer proposed a settlement,
+> evaluate accepting it" path -- `rank_actions()` takes buyer-profile
+> inputs, not buyer-reply text. No CLI flag or third experiment arm for
+> `ev_mode` -- a config-file switch only, for now.
 
 ---
 
@@ -401,10 +485,13 @@ each honestly marked:
 - **W1-W4** -- early warning, buyer panel + promise reliability,
   buyer-level message consolidation, and a refreshed 6-seed experiment (all
   described above).
-- **Phase 1-2** -- the ability/willingness two-axis score + quadrant, and
-  recovery probability + expected value per candidate action (both
-  described above). Computed and explained/ranked only -- the Brain does
-  not act on either yet; see each section's own "not yet acted on" note.
+- **Phase 1-3** -- the ability/willingness two-axis score + quadrant,
+  recovery probability + expected value per candidate action, and wiring
+  that ranking into the Brain's `decide()` (all described above). The
+  wiring ships behind `config/rules.yaml`'s `brain.ev_mode`, off by
+  default, so the seeded demo result is unaffected unless it is switched
+  on; even on, no message content yet differs by the chosen action -- see
+  the Phase 3 section's own scope note.
 
 **FUTURE WORK:** see the list below, and `docs/winning_layer.md` for the
 larger roadmap (predictive risk, cash-flow intelligence, payment

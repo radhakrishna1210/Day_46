@@ -105,53 +105,71 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       payment_plan/counter_settle/human_handoff/legal_escalation) by
       EV = P(recover) x expected_recovery_paise - cost_paise, all
       config-driven, cost priced from real Gemini 3.7 Flash pricing.
-      Computed and ranked only -- the Brain does not read it yet (P3).
+      Computed and ranked only -- the Brain did not read it yet (that was P3).
+- [x] P3 - Wired the Brain to EV: engine/brain.py's decide() can now replace
+      its unconditional SEND fallthrough with negotiation.rank_actions()'s
+      top pick, behind config/rules.yaml's brain.ev_mode (shipped "off").
+      New config/rules.yaml negotiation.eligible_actions table gates
+      candidates per quadrant (the good_customer relationship-cost fix);
+      the legal ceiling gates human_handoff/legal_escalation separately.
+      New Action.kind values payment_plan/counter_settle; both landmines
+      fixed (consolidate.py _eligible(), buyer_panel.py _LADDER_KINDS).
+      sim/run_sim.py's day loop now feeds brain.decide() a two_axis_score()
+      instead of score_buyer() (byte-identical with ev_mode off, proven by
+      a pinned seed-42 snapshot test in tests/test_run_sim.py).
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 2 done. New engine/negotiation.py: recovery_probability(),
-  recovery_fraction(), expected_recovery_paise(), action_cost_paise(),
-  evaluate_action(), rank_actions(), evaluate_invoice(), explain_action(),
-  plus a CLI (`python engine/negotiation.py --explain INVOICE_ID`). New
-  config/rules.yaml `negotiation:` block: recovery_probability (flat grid,
-  quadrant x action), promise_adjustment, recovery_fraction, cost
-  (llm_call_paise cited from real Gemini 3.7 Flash pricing + a cited
-  USD->INR rate, human_minute_paise, human_handoff_minutes,
-  legal_escalation_minutes). Zero dependency on engine.brain, enforced by
-  tests/test_negotiation.py's AST-based no-cycle guard -- Phase 3 needs
-  brain.py -> negotiation.py to stay a one-way import.
-- DESIGN CALL, confirming this phase's own brief's lean: recovery_probability
-  is a flat (quadrant, action) grid, not a weighted formula like
-  ability()/willingness(). Those decompose into weighted terms because the
-  terms have real units (percent inflow decline -> score points); a
-  "probability weight" here would have none, since there is no measured
-  recovery-rate data behind any of these numbers -- a visible guess beats a
-  guess dressed up as arithmetic.
-- A RESULT SURFACED, NOT HIDDEN, for Phase 3 to actually decide about: with
-  the shipped grid, rank_actions() puts legal_facts above soft_nudge even for
-  a good_customer -- the model has no term for the relationship cost of
-  over-escalating a good payer, only P(recover), and assertive contact is
-  always modelled as at least as likely to work at near-zero extra cost.
-  Whoever wires the Brain to EV in Phase 3 needs to either add a
-  relationship-cost term or constrain candidate actions by current rung
-  rather than handing the Brain the raw top-EV action unconditionally.
-- 829 tests passing (803 + 26: 23 in the new tests/test_negotiation.py
-  (including the TC-143 zero-outstanding edge case), plus 3 the existing
-  structural guards -- test_no_legal_constants.py's per-file legal-prose/rate
-  scans and test_sim_isolation.py's persona-tag scan -- automatically picked
-  up now that engine/negotiation.py exists). Zero regressions.
-- NEXT: Phase 3 -- wire the Brain to actually choose based on EV. Both
-  Phase 1's and Phase 2's tripwires guard this boundary and BOTH get deleted
-  together, not before: tests/test_ability_willingness.py::test_the_brain_
-  does_not_consume_the_two_axis_score_in_this_phase and tests/test_negotiation
-  .py::test_the_brain_does_not_consume_negotiation_in_this_phase. Three more
-  things waiting: (a) engine/consolidate.py:46-57's _eligible() (kind ==
-  "send") and engine/buyer_panel.py:40,116-127's
-  _LADDER_KINDS = frozenset({"wait", "send"}) both silently drop a
-  payment_plan/counter_settle action the day brain.py starts emitting one --
-  fix both as part of this phase, since it is the one adding the new kinds;
-  (b) Action.kind's string-based non-enum design is still unfixed; (c) the
-  dead stop_rules.max_per_rung key is still unread by brain.py. Known
-  limitation to carry forward: willingness still inherits
-  average_delay_days, which is ability-contaminated -- stated in the config
-  comment, ARCHITECTURE.md and README rather than hidden.
+- Phase 3 done and committed (see git log for the hash(es)). decide()'s new
+  EV branch, config/rules.yaml's brain.ev_mode (off) + negotiation.
+  eligible_actions, new Action kinds payment_plan/counter_settle, both
+  landmines fixed (consolidate.py _eligible(), buyer_panel.py
+  _LADDER_KINDS), sim/run_sim.py's day loop feeding brain.decide() a
+  two_axis_score(). Both Phase 1/2 tripwires replaced with their inverse.
+- CORRECTION found on follow-up review, worth knowing if this area is
+  touched again: the handoff-reachability gate was FIRST written as
+  "available_rung == HANDOFF_RUNG" (the legal ceiling), which is strictly
+  MORE permissive than decide()'s own non-EV rung-4 step -- a first-ever
+  contact can have a wide-open ceiling while the escalation walk's own
+  `chosen` sits at rung 1-2 (the backlog formula never desires more than
+  base+1 on a first contact), so the ceiling-only gate could have sent EV
+  straight to a handoff sooner than the ordinary walk ever would. Fixed to
+  gate on `chosen` reaching HANDOFF_RUNG instead -- the IDENTICAL condition
+  decide()'s own step 8 uses. Net effect, stated plainly rather than buried:
+  since step 8 already intercepts and returns HANDOFF, unconditionally,
+  every time that condition is true (before the EV branch ever runs),
+  human_handoff/legal_escalation are as-shipped PERMANENTLY UNREACHABLE
+  through decide()'s EV branch -- EV can only choose a different kind of
+  action among what the escalation walk already made reachable, never jump
+  a case to a human sooner than it would have anyway. Kept as live,
+  independently-tested code in eligible_negotiation_actions() (not deleted)
+  in case that invariant ever changes.
+- SANITY CHECK RESULT (per this phase's own brief): the proposed
+  eligible_actions table held for cash_flow_problem/can_pay_but_wont/
+  high_risk exactly as Phase 2 reported. good_customer's top action shifted
+  from legal_facts to firm once legal pressure was excluded from its
+  candidate set -- harmless, since soft_nudge/firm/legal_facts all map to
+  the identical kind="send" at the identical rung (writer.py untouched), so
+  this only changes the audit-trail label, not what's sent.
+- DESIGN CALL not spelled out in the brief: score["signals"]["broken_promises"]
+  (the buyer's historical settled-invoice reliability, from
+  engine.score.signals(), unchanged by two_axis_score()) is what feeds
+  negotiation.rank_actions()'s broken_promises= argument -- NOT
+  engine.brain.broken_promises(promises, today, grace) (this invoice's own
+  active/unresolved promise count, already used elsewhere in decide() for
+  rung-jumping). Deliberate: EV is modelling the buyer's general
+  follow-through record, the same signal recovery_probability's own
+  promise_adjustment block is about, not this one invoice's ladder state.
+- 846 tests passing (829 + 17). Zero regressions -- proven two ways: the
+  full suite, and a snapshot-diff test pinning run_agent(seed=42, days=45)'s
+  headline numbers from immediately before this phase (captured via
+  `git stash` to the pre-Phase-3 tree and back). Known limitations carried
+  forward unchanged: willingness still inherits average_delay_days
+  (ability-contaminated, stated not hidden); Action.kind is still
+  string-based, not an enum; stop_rules.max_per_rung is still dead config.
+  New limitation this phase adds: with ev_mode on, soft_nudge/firm/
+  legal_facts/payment_plan/counter_settle all draft through the SAME
+  rung-based skeleton (engine/writer.py untouched) -- the chosen
+  negotiation action changes only the audit trail's stated reasoning,
+  not the message a buyer actually reads. Message-content differentiation by
+  action, and any reactive settlement-offer handling, remain future work.

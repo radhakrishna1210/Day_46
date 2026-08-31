@@ -257,19 +257,19 @@ what shipping the reasoning inert first is for: the number is visible and
 arguable before it is allowed to move money. A candidate for Phase 3, not
 patched here by hand-tuning one row to hide it.
 
-> **PHASE 2 SCOPE.** Computed and ranked only. `engine/brain.py` does not
-> import this module, `Action.kind` stays exactly the four strings it is
-> today, and the two silent-failure `Action.kind` consumers
-> (`engine/consolidate.py`'s `_eligible()`, `engine/buyer_panel.py`'s
-> `_LADDER_KINDS`) are untouched. Wiring a chosen action into the Brain,
-> adding `payment_plan`/`counter_settle` to `Action.kind`, and fixing those
-> two consumers is Phase 3.
+> **PHASE 2 SCOPE, as shipped then.** Computed and ranked only.
+> `engine/brain.py` did not import this module, `Action.kind` stayed exactly
+> the four strings it was, and the two silent-failure `Action.kind`
+> consumers (`engine/consolidate.py`'s `_eligible()`, `engine/buyer_panel.py`'s
+> `_LADDER_KINDS`) were untouched. Phase 3 (below) is what wired a chosen
+> action into the Brain, added `payment_plan`/`counter_settle` to
+> `Action.kind`, and fixed those two consumers.
 >
-> **Money-safety note:** every number this module produces is advisory
-> arithmetic over a hypothetical action, not a real transaction. `ev_paise`
-> never touches `amount_paid_paise` or any other ledger state -- it is
-> evaluated for comparison only, the same spirit as `section_16_running`'s
-> "cost of waiting" figure in `engine/law.py`.
+> **Money-safety note, still true.** Every number this module produces is
+> advisory arithmetic over a hypothetical action, not a real transaction.
+> `ev_paise` never touches `amount_paid_paise` or any other ledger state --
+> it is evaluated for comparison only, the same spirit as
+> `section_16_running`'s "cost of waiting" figure in `engine/law.py`.
 
 Every weight and cost figure lives in `config/rules.yaml`'s `negotiation`
 block, and every function carries its own breakdown, exactly like
@@ -278,6 +278,109 @@ block, and every function carries its own breakdown, exactly like
 ```
 python engine/negotiation.py --explain INVOICE_ID
 ```
+
+#### Block 2d — Wiring the EV Ranking into the Brain (Phase 3)
+
+Block 2c's ranking sat inert: `engine/brain.py` never imported
+`engine/negotiation.py`, and every decision still ended in one unconditional
+`SEND` at whatever rung the escalation walk picked. Phase 3 replaces exactly
+that unconditional fallthrough — nothing upstream of it — with an
+EV-informed choice, gated behind a config flag:
+
+```yaml
+brain:
+  ev_mode: off   # off (shipped default): decide() is byte-for-byte unchanged.
+                 # on: the EV branch below runs.
+```
+
+**Where it sits in `decide()`'s control flow.** Every existing step is
+unchanged and still runs first, in the same order: opt-out (1), dispute (2),
+settled (3), not-yet-due (4), max-contacts (5), active promise (6), rung
+selection (7), the rung-4 handoff stop (8), rung exhaustion (9), weekends
+(10), message spacing (11), and the ambiguous-partial-payment LLM check (12).
+Only after all twelve of those have run — meaning a `SEND` really is about
+to happen, at rung `chosen` — does the new step 13 fire:
+
+1. Read `score.get("quadrant")`. A caller still passing a plain
+   `engine.score.score_buyer()` dict (no `quadrant` key) — `main.py`,
+   `sim/scenario_tc141.py` — skips step 13 entirely, `ev_mode` or not.
+2. With a quadrant present and `ev_mode: on`, build the candidate list:
+   `config/rules.yaml`'s `negotiation.eligible_actions[quadrant]`, then drop
+   `human_handoff`/`legal_escalation` unless `chosen` has ALREADY reached
+   `HANDOFF_RUNG` (see `engine/brain.py`'s `eligible_negotiation_actions()`).
+   Two independent gates, the same two-gate shape the ladder itself already
+   uses: the eligible-actions table says what is EVER appropriate for this
+   buyer's profile; `chosen` says what is reachable TODAY.
+
+   **Deliberately `chosen`, not the legal ceiling.** An earlier version of
+   this gate checked `available_rung < 4` instead — the legal ceiling being
+   open, not whether the case had actually escalated there. That is a real
+   bug class this phase caught on review: a first-ever contact can have a
+   wide-open ceiling (the invoice is old enough, the tax-year deadline has
+   passed, etc.) while `chosen` itself sits at rung 1 or 2, because
+   `decide()`'s own backlog formula for a first contact never desires more
+   than `base + 1`. Gating on the ceiling alone would let EV send that case
+   straight to a human handoff — sooner than the ordinary escalation walk,
+   which requires real per-invoice history (a broken-promise jump, a rung
+   fully exhausted, enough elapsed time at the top rung already used — see
+   step 7/7b), ever would have. Gating on `chosen` instead means
+   `human_handoff`/`legal_escalation` are only candidates once step 8's own
+   condition (`chosen >= HANDOFF_RUNG`) is satisfied — and since step 8
+   unconditionally intercepts and returns a `HANDOFF` whenever that is true,
+   the EV branch in practice never actually gets to choose one: as of
+   Phase 3, `human_handoff`/`legal_escalation` are permanently excluded from
+   what EV can select through `decide()`, by construction. That is the
+   correct, conservative outcome, not an oversight: EV may choose a
+   different *kind* of action among what is already reachable today, never
+   make *more* reachable than the existing escalation walk already allows.
+   `tests/test_brain.py` proves both halves: `eligible_negotiation_actions()`
+   itself still behaves correctly in isolation at `chosen_rung ==
+   HANDOFF_RUNG`, and `decide()` never reaches that state through its own
+   EV branch.
+3. Rank the survivors with `negotiation.rank_actions()`, using
+   `score["signals"]["broken_promises"]` (the buyer's historical
+   reliability, not this invoice's own active-promise count) and
+   `ability_willingness.outstanding_paise(invoice)`.
+4. Map the winner to an `Action`:
+
+   | negotiation action | `Action.kind` | rung |
+   |---|---|---|
+   | `wait` | `wait` | `chosen`, reviewed in `CEILING_REVIEW_DAYS` |
+   | `soft_nudge`, `firm`, `legal_facts` | `send` | `chosen` (unchanged) |
+   | `payment_plan`, `counter_settle` | `payment_plan`, `counter_settle` (new) | `chosen` |
+   | `human_handoff`, `legal_escalation` | `handoff` | `4` (not reachable via this call site as of Phase 3 — see gate 2's note above; the mapping is kept for correctness if that invariant ever changes) |
+
+   Every mapped action carries `detail={"negotiation_action": ..., "ev": ...}`
+   so the EV reasoning lands in the audit trail even though `payment_plan`
+   and `counter_settle` reuse the exact same rung-based skeleton `send`
+   always did — `engine/writer.py` is untouched, so no message differs in
+   content by which action won; only the stated reasoning does.
+
+**The `good_customer` finding, addressed.** Block 2c's own report flagged
+that the raw EV grid ranks `legal_facts` above `soft_nudge` even for the
+best-paying quadrant, with no term for relationship cost. The
+`eligible_actions` table is the fix: `good_customer` and `cash_flow_problem`
+never see `legal_facts`/`legal_escalation`/`counter_settle` as candidates at
+all, and `can_pay_but_wont`/`high_risk` never see `payment_plan`. A residual
+remains — `firm` still edges out `soft_nudge` on raw probability for a
+`good_customer` — but since both map to the identical `send` at the
+identical rung, this only changes an audit-log label, not what is sent.
+
+**Two consumers that would otherwise have silently dropped the new kinds:**
+`engine/consolidate.py`'s `_eligible()` and `engine/buyer_panel.py`'s
+`_LADDER_KINDS` both now also recognise `payment_plan`/`counter_settle` as
+ordinary buyer-facing sends — see their own docstrings.
+
+> **PHASE 3 SCOPE.** No message-content differentiation by action —
+> `engine/writer.py` is untouched. No new persona reaction behaviour —
+> `sim/personas.py`'s `react()` never sees a `payment_plan`/`counter_settle`
+> message differently from any other message at that rung (`payment_plan`/
+> `counter_settle` always inherit an existing send-tier rung, 1–3, never
+> rung 4). No reactive "buyer proposed a settlement, evaluate accepting it"
+> path — `negotiation.rank_actions()`'s signature takes buyer-profile
+> inputs, not buyer-reply text. `sim/run_sim.py`'s CLI carries no `ev_mode`
+> flag and no third experiment arm; it is a config-file switch only in this
+> phase. All of the above are candidates for a later phase.
 
 ### Block 3 — Watchdog (`engine/watchdog.py`)
 **What:** Runs once per simulated day. Compares today's date with every unpaid invoice's due date. Anything overdue goes into the work queue.
@@ -313,6 +416,7 @@ ANY TIME: dispute detected → jump to human handoff immediately
 **How score changes the path:** score 80+ starts at Rung 1 and waits 7 days between rungs. Score below 50 starts at Rung 2 and waits 4 days. Broken promise = jump one rung.
 **Hard stopping rules (never violated):** max 3 messages per rung, max 5 total; no messages in quiet hours; opt-out respected instantly; NEVER threaten — only state facts with sources.
 **Mostly rules; AI is consulted only for genuinely ambiguous cases** (e.g., "buyer partially paid and sent a confusing reply — what now?") and its reasoning is saved to the audit trail.
+**Phase 3, behind `config/rules.yaml`'s `brain.ev_mode` (shipped off):** once every rule above has cleared and a rung is chosen, the Brain can pick *what to send at that rung* by expected value instead of always sending — see Block 2d for the full mechanics. Every hard-stopping rule above still runs first, unconditionally, whether or not this is on.
 
 ### Block 6 — Message Writer (`engine/writer.py`)
 **What:** The AI (Gemini, via `engine/llm.py`) writes the actual message for the chosen rung.
@@ -378,7 +482,8 @@ these only partially implement — see it for what's still future work.
   overdue, score/confidence/trend, promise reliability % + average days
   late, response rate, recovery state.
 - **W3 Buyer-Level Message Consolidation** (`engine/consolidate.py`) —
-  groups a day's already-decided SEND actions for one buyer into rung
+  groups a day's already-decided buyer-facing send actions (`send`, and as
+  of Phase 3 also `payment_plan`/`counter_settle`) for one buyer into rung
   tiers (courtesy: rung ≤ 1, escalated: rung ≥ 2), so a buyer gets at most
   two envelopes/day instead of one email per invoice. `engine/brain.py`'s
   per-invoice decisions and stopping rules are unchanged; this only changes
@@ -449,8 +554,10 @@ revenue-recovery-agent/
 │   ├── llm.py              ← the only caller of the Gemini API (mock/live modes)
 │   ├── money.py            ← integer-paise formatting, one source of truth
 │   ├── score.py  watchdog.py  law.py  rungs.py  brain.py
-│   ├── ability_willingness.py ← Phase 1: the two-axis score + quadrant (computed, not yet acted on)
-│   ├── negotiation.py      ← Phase 2: recovery probability + EV per action (computed, not yet acted on)
+│   ├── ability_willingness.py ← Phase 1: the two-axis score + quadrant
+│   ├── negotiation.py      ← Phase 2: recovery probability + EV per action, ranked
+│   │                          Phase 3 wires the top-ranked action into brain.py's
+│   │                          decide(), behind config/rules.yaml's brain.ev_mode (off by default)
 │   ├── validate.py         ← catches structurally malformed invoices before law/brain see them (E2)
 │   ├── samadhaan.py        ← the real ready-to-file Samadhaan complaint draft
 │   ├── buyer_panel.py      ← W2: per-buyer rollup (outstanding, score, promise reliability, recovery state)

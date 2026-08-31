@@ -65,6 +65,16 @@ remains unbuilt.
   first. A **first slice** of Next-Best Recovery Action (Enhancement 6) and
   Expected Recovery and Cost (Enhancement 7) -- reasoning only, see the
   honest scoping below.
+- **Phase 3 -- Wiring the EV Ranking into the Brain**: `engine/brain.py`'s
+  `decide()` can replace its unconditional "send at the chosen rung" with an
+  EV-informed choice among Phase 2's ranking, narrowed by a new
+  `config/rules.yaml` `negotiation.eligible_actions` table (what is ever
+  appropriate for this buyer's quadrant) and by whether the escalation
+  walk's own chosen rung has already reached rung 4 (what is reachable
+  today for a handoff specifically -- deliberately not just whether the
+  legal ceiling is open; see the honest scoping below for why that
+  distinction mattered). Behind a config flag, `brain.ev_mode`, shipped
+  **off** by default.
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
 the *reasoning* half and deliberately not the *data* half. What exists: a
@@ -82,25 +92,52 @@ not read it -- that is Phase 2), and there is still no probability model
 anywhere, so Payment Propensity Prediction (Enhancement 4) remains unbuilt.
 
 **PARTIALLY BUILT -- Next-Best Recovery Action (Enhancement 6) and Expected
-Recovery and Cost (Enhancement 7):** Phase 2 built the *ranking* half and
-deliberately not the *acting* half. What exists: a fixed action space wider
-than the existing rung ladder (`payment_plan`, `counter_settle`,
-`human_handoff`, `legal_escalation` alongside the ladder's own four rungs),
-a rule-based `P(recover)` per `(quadrant, action)`, an expected recovered
-amount, a real-pricing-cited cost, and `rank_actions()` producing the
-best-EV-first ordering with a full breakdown -- all rule-based, all
-config-driven, all tested. What does **not** exist: the Brain choosing
-anything based on this. `engine/brain.py` does not import
-`engine/negotiation.py`, `Action.kind` is unchanged, and nothing yet routes
-a `payment_plan`/`counter_settle` decision anywhere. There is also no
-probability *model* underneath `P(recover)` -- it is a flat, stated
-assumption grid, the same honesty as Enhancement 3's synthetic data caveat,
-not a measured recovery rate. See `engine/negotiation.py`'s own module
-docstring for a further caveat worth repeating here: with the shipped grid,
-`legal_facts` outranks `soft_nudge` even for a `good_customer`, because the
-model has no term for the relationship cost of over-escalating a good
-payer -- left visible rather than quietly tuned away, and a candidate for
-whatever wires this into the Brain next.
+Recovery and Cost (Enhancement 7):** Phase 2 built the *ranking* half; Phase 3
+built the *acting* half, but shipped it switched off. What exists as of
+Phase 3: everything Phase 2 built, plus `engine/brain.py`'s `decide()`
+choosing an action by EV -- among a `config/rules.yaml`
+`negotiation.eligible_actions` table that withholds legal pressure from
+`good_customer`/`cash_flow_problem` and a payment plan from
+`can_pay_but_wont`/`high_risk`, and further narrowed to whether a handoff is
+reachable TODAY -- behind `config/rules.yaml`'s `brain.ev_mode` flag, shipped
+`off`. With it off (the default the seeded demo runs with), `decide()` is
+byte-for-byte what it was before this phase.
+
+**A correction made during this phase's own review, worth stating rather
+than quietly fixing:** the handoff-reachability gate was first written as
+"the legal ceiling is at rung 4" (`available_rung == 4`). That is NOT the
+same condition `decide()`'s existing non-EV rung-4 step uses, and is
+strictly more permissive -- the ceiling opening means the law would *permit*
+rung 4 today, not that this invoice's own contact history has organically
+escalated there (a broken-promise jump, a rung fully exhausted, enough
+elapsed time at the top rung already used). A first-ever contact can have a
+wide-open ceiling while the escalation walk's own `chosen` rung sits at 1 or
+2, because the backlog formula for a first contact never desires more than
+`base + 1`. Left as originally written, EV mode could have sent such a case
+straight to a human handoff sooner than the ordinary escalation walk ever
+would have. The fix gates on `chosen` reaching `HANDOFF_RUNG` instead -- the
+identical condition the non-EV step already uses -- which, because that step
+intercepts and returns a handoff unconditionally whenever it's true, before
+the EV branch ever runs, means `human_handoff`/`legal_escalation` end up
+permanently unreachable through `decide()`'s EV branch as shipped. That is
+the correct, conservative behaviour: EV may choose a different *kind* of
+action among what the existing walk already makes reachable, never make
+*more* reachable than it already does.
+
+What does **not** exist even with the flag on: any
+message-content differentiation by the chosen action -- `soft_nudge`,
+`firm` and `legal_facts` all still draft through the identical rung-based
+skeleton (`engine/writer.py` untouched), so choosing one over another only
+changes the audit trail's stated reasoning, not what the buyer reads; that,
+and any reactive "buyer proposed a settlement, evaluate it" path, are UNBUILT.
+There is also still no probability *model* underneath `P(recover)` -- it
+remains a flat, stated assumption grid, the same honesty as Enhancement 3's
+synthetic data caveat, not a measured recovery rate. The `good_customer`
+relationship-cost finding Phase 2 surfaced is addressed by the
+`eligible_actions` gate above, not by a new EV term -- `firm` still edges out
+`soft_nudge` on raw probability for a `good_customer`, but since both map to
+the identical `send` at the identical already-chosen rung in this phase,
+that residual has no effect on what is actually sent.
 
 **FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 4,
 8-12 (Dynamic Trader Financial Profile as originally scoped, Payment
@@ -121,6 +158,7 @@ data this standalone project doesn't have, or are explicitly out of the
 | W4 Experiment refresh + edge-case transparency | Not one of this document's original Enhancements -- an experiment-honesty hardening pass, not a new product capability |
 | Phase 1 Ability/willingness split + quadrant | A first slice of Enhancement 3 (Cash-Flow Intelligence) on synthetic inflow data -- the reasoning, not the data feed. Not Enhancement 4: there is no probability model. |
 | Phase 2 Recovery probability + EV ranking | A first slice of Enhancement 6 (Next-Best Recovery Action) + Enhancement 7 (Expected Recovery and Cost) -- the ranking, not the acting. `P(recover)` is a stated assumption grid, not a measured or learned probability. |
+| Phase 3 Wiring EV into the Brain | The rest of that same slice of Enhancement 6/7 -- the acting, behind `brain.ev_mode`, shipped off. No message-content differentiation by action (that needs `engine/writer.py`), no reactive settlement-offer handling. |
 
 ---
 
