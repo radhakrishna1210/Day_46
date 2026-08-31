@@ -57,6 +57,14 @@ remains unbuilt.
   buyer in a four-way quadrant (`good_customer`, `cash_flow_problem`,
   `can_pay_but_wont`, `high_risk`). A **first slice** of Cash-Flow
   Intelligence (Enhancement 3) -- see the honest scoping below.
+- **Phase 2 -- Recovery Probability + Expected Value**:
+  `engine/negotiation.py` scores a fixed set of candidate recovery actions
+  (`wait`, `soft_nudge`, `firm`, `legal_facts`, plus the new `payment_plan`
+  and `counter_settle`, plus `human_handoff` and `legal_escalation`) by
+  `EV = P(recover) x expected_recovery_paise - cost_paise`, ranked best
+  first. A **first slice** of Next-Best Recovery Action (Enhancement 6) and
+  Expected Recovery and Cost (Enhancement 7) -- reasoning only, see the
+  honest scoping below.
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
 the *reasoning* half and deliberately not the *data* half. What exists: a
@@ -73,16 +81,35 @@ stating: as of Phase 1 nothing *acts* on the score (`engine/brain.py` does
 not read it -- that is Phase 2), and there is still no probability model
 anywhere, so Payment Propensity Prediction (Enhancement 4) remains unbuilt.
 
+**PARTIALLY BUILT -- Next-Best Recovery Action (Enhancement 6) and Expected
+Recovery and Cost (Enhancement 7):** Phase 2 built the *ranking* half and
+deliberately not the *acting* half. What exists: a fixed action space wider
+than the existing rung ladder (`payment_plan`, `counter_settle`,
+`human_handoff`, `legal_escalation` alongside the ladder's own four rungs),
+a rule-based `P(recover)` per `(quadrant, action)`, an expected recovered
+amount, a real-pricing-cited cost, and `rank_actions()` producing the
+best-EV-first ordering with a full breakdown -- all rule-based, all
+config-driven, all tested. What does **not** exist: the Brain choosing
+anything based on this. `engine/brain.py` does not import
+`engine/negotiation.py`, `Action.kind` is unchanged, and nothing yet routes
+a `payment_plan`/`counter_settle` decision anywhere. There is also no
+probability *model* underneath `P(recover)` -- it is a flat, stated
+assumption grid, the same honesty as Enhancement 3's synthetic data caveat,
+not a measured recovery rate. See `engine/negotiation.py`'s own module
+docstring for a further caveat worth repeating here: with the shipped grid,
+`legal_facts` outranks `soft_nudge` even for a `good_customer`, because the
+model has no term for the relationship cost of over-escalating a good
+payer -- left visible rather than quietly tuned away, and a candidate for
+whatever wires this into the Brain next.
+
 **FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 4,
-6-12 (Dynamic Trader Financial Profile as originally scoped, Payment
-Propensity Prediction, Next-Best Recovery Action beyond the existing rung
-ladder, Expected Recovery/Cost Intelligence, Recovery Explanation beyond the
-existing audit trail, Recovery Strategy Simulation, Closed-Loop Learning),
-and the UI Screens 1-5. None of these have any code behind them -- no
-payment-propensity score, no dashboard, no what-if simulator. They require
-either real transaction/payment data this standalone project doesn't have,
-or are explicitly out of the 12-day build's scope (dashboards, ML models --
-see CLAUDE.md's scope guard).
+8-12 (Dynamic Trader Financial Profile as originally scoped, Payment
+Propensity Prediction, Recovery Explanation beyond the existing audit trail,
+Recovery Strategy Simulation, Closed-Loop Learning), and the UI Screens 1-5.
+None of these have any code behind them -- no payment-propensity score, no
+dashboard, no what-if simulator. They require either real transaction/payment
+data this standalone project doesn't have, or are explicitly out of the
+12-day build's scope (dashboards, ML models -- see CLAUDE.md's scope guard).
 
 **Reconciliation -- actual W-label vs. this document's original plan:**
 
@@ -93,6 +120,7 @@ see CLAUDE.md's scope guard).
 | W3 Buyer-level message consolidation | Enhancement 14 / "Buyer-Level Communication Awareness" -- this document's own lowest-priority item (see Section 27, Priority Ranking, below) |
 | W4 Experiment refresh + edge-case transparency | Not one of this document's original Enhancements -- an experiment-honesty hardening pass, not a new product capability |
 | Phase 1 Ability/willingness split + quadrant | A first slice of Enhancement 3 (Cash-Flow Intelligence) on synthetic inflow data -- the reasoning, not the data feed. Not Enhancement 4: there is no probability model. |
+| Phase 2 Recovery probability + EV ranking | A first slice of Enhancement 6 (Next-Best Recovery Action) + Enhancement 7 (Expected Recovery and Cost) -- the ranking, not the acting. `P(recover)` is a stated assumption grid, not a measured or learned probability. |
 
 ---
 

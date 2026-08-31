@@ -99,56 +99,59 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       artifacts self-consistently (d8abef4, 97e27e4, 449dccb)
 - [x] P1 - Ability/Willingness score split: synthetic inflow signals on the
       buyer record, a two-axis score + 4-way quadrant, all config-driven.
-      Computed and explained only -- the Brain does not read it yet (P2).
+      Computed and explained only -- the Brain does not read it yet (P3).
+- [x] P2 - Recovery-probability + EV model: engine/negotiation.py scores a
+      fixed action space (wait/soft_nudge/firm/legal_facts, plus new
+      payment_plan/counter_settle/human_handoff/legal_escalation) by
+      EV = P(recover) x expected_recovery_paise - cost_paise, all
+      config-driven, cost priced from real Gemini 3.7 Flash pricing.
+      Computed and ranked only -- the Brain does not read it yet (P3).
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 1 done. New engine/ability_willingness.py: ability ("can they pay?",
-  from inflow trend/volatility/failed payments/invoice-vs-typical-month),
-  willingness ("will they pay?", a relabel of the legacy formula), quadrant()
-  (good_customer / cash_flow_problem / can_pay_but_wont / high_risk),
-  two_axis_score(), explain_ability(), explain_willingness(), plus a CLI
-  (`python engine/ability_willingness.py --explain BUY-07`). data/generate.py
-  now puts monthly_inflow_paise (6-12 months, most recent last) and
-  failed_payment_count on every buyer, correlated with the hidden persona via
-  three new Persona fields (inflow_drift, inflow_volatility,
-  failed_payment_chance). SCHEMA_VERSION 1 -> 2.
-- TWO DESIGN CHOICES I made where the plan left it open, both worth knowing
-  before Phase 2. (1) ability/willingness/quadrant are NOT extra keys on
-  score_buyer() -- they hang off a separate two_axis_score() that composes on
-  top of it. Forced: tests/test_score.py::test_score_record_is_self_describing
-  asserts set(result) == exactly 9 keys, so adding keys and "test_score.py
-  passes unmodified" were mutually exclusive. Better anyway, since ability
-  depends on a SPECIFIC invoice and score_buyer() is per-buyer. (2) The
-  quadrant has its OWN thresholds (score.quadrant.ability_high_from /
-  willingness_high_from, both 50), not score.bands -- bands defines two edges
-  for a three-way pacing split; a 2x2 needs one edge per axis, and borrowing
-  one would couple "is this buyer able" to "does the brain start at rung 2".
-- The additive promise was verified end to end, not asserted: invoices are
-  BYTE-IDENTICAL before/after on seeds 42/7/555 (only the intended
-  schema_version bump differs), and a fresh 6-seed --compare gives exactly the
-  same recovered_paise as pre-Phase-1 (baseline 1368047240, agent 1597922941,
-  6/6 and 6/6). The mechanism: _add_inflow_signals() runs on its OWN RNG
-  stream (random.Random(f"{seed}:inflow")) after the world is built -- drawing
-  from the shared rng would have shifted every later draw and rewritten every
-  invoice. tests/test_data.py::test_the_inflow_signals_are_drawn_from_their_
-  own_random_stream pins that permanently via rng.getstate().
-- 803 tests passing (760 + 43: 29 in the new tests/test_ability_willingness.py,
-  14 in test_data.py). Zero regressions; test_score.py ran unmodified. Also
-  moved score.py's last two hardcoded tunables into config as score.trend
-  .window_days/.noise_floor. New config keys for Phase 2 to reference:
-  score.trend.*, score.willingness.{base,min,max,weights.*},
-  score.ability.{base,min,max,weights.*,volatility_floor_pct,recent_months,
-  min_months_for_trend}, score.quadrant.*.
-- NEXT: Phase 2 -- make the Brain act on the quadrant (payment_plan /
-  counter_settlement action kinds). Three things waiting for it: (a)
-  tests/test_ability_willingness.py::test_the_brain_does_not_consume_the_two_
-  axis_score_in_this_phase is a deliberate tripwire that WILL fail the moment
-  brain.py imports this -- delete it as part of Phase 2, it marks the boundary
-  on purpose; (b) Action.kind's string-based non-enum design and its two
-  silent-failure consumers in consolidate.py/buyer_panel.py should be fixed
-  there, since that is the phase adding new kinds; (c) the dead
-  stop_rules.max_per_rung key is still unread by brain.py. Known limitation to
-  carry forward: willingness still inherits average_delay_days, which is
-  ability-contaminated (a broke buyer loses willingness points too) -- stated
-  in the config comment, ARCHITECTURE.md and README rather than hidden.
+- Phase 2 done. New engine/negotiation.py: recovery_probability(),
+  recovery_fraction(), expected_recovery_paise(), action_cost_paise(),
+  evaluate_action(), rank_actions(), evaluate_invoice(), explain_action(),
+  plus a CLI (`python engine/negotiation.py --explain INVOICE_ID`). New
+  config/rules.yaml `negotiation:` block: recovery_probability (flat grid,
+  quadrant x action), promise_adjustment, recovery_fraction, cost
+  (llm_call_paise cited from real Gemini 3.7 Flash pricing + a cited
+  USD->INR rate, human_minute_paise, human_handoff_minutes,
+  legal_escalation_minutes). Zero dependency on engine.brain, enforced by
+  tests/test_negotiation.py's AST-based no-cycle guard -- Phase 3 needs
+  brain.py -> negotiation.py to stay a one-way import.
+- DESIGN CALL, confirming this phase's own brief's lean: recovery_probability
+  is a flat (quadrant, action) grid, not a weighted formula like
+  ability()/willingness(). Those decompose into weighted terms because the
+  terms have real units (percent inflow decline -> score points); a
+  "probability weight" here would have none, since there is no measured
+  recovery-rate data behind any of these numbers -- a visible guess beats a
+  guess dressed up as arithmetic.
+- A RESULT SURFACED, NOT HIDDEN, for Phase 3 to actually decide about: with
+  the shipped grid, rank_actions() puts legal_facts above soft_nudge even for
+  a good_customer -- the model has no term for the relationship cost of
+  over-escalating a good payer, only P(recover), and assertive contact is
+  always modelled as at least as likely to work at near-zero extra cost.
+  Whoever wires the Brain to EV in Phase 3 needs to either add a
+  relationship-cost term or constrain candidate actions by current rung
+  rather than handing the Brain the raw top-EV action unconditionally.
+- 829 tests passing (803 + 26: 23 in the new tests/test_negotiation.py
+  (including the TC-143 zero-outstanding edge case), plus 3 the existing
+  structural guards -- test_no_legal_constants.py's per-file legal-prose/rate
+  scans and test_sim_isolation.py's persona-tag scan -- automatically picked
+  up now that engine/negotiation.py exists). Zero regressions.
+- NEXT: Phase 3 -- wire the Brain to actually choose based on EV. Both
+  Phase 1's and Phase 2's tripwires guard this boundary and BOTH get deleted
+  together, not before: tests/test_ability_willingness.py::test_the_brain_
+  does_not_consume_the_two_axis_score_in_this_phase and tests/test_negotiation
+  .py::test_the_brain_does_not_consume_negotiation_in_this_phase. Three more
+  things waiting: (a) engine/consolidate.py:46-57's _eligible() (kind ==
+  "send") and engine/buyer_panel.py:40,116-127's
+  _LADDER_KINDS = frozenset({"wait", "send"}) both silently drop a
+  payment_plan/counter_settle action the day brain.py starts emitting one --
+  fix both as part of this phase, since it is the one adding the new kinds;
+  (b) Action.kind's string-based non-enum design is still unfixed; (c) the
+  dead stop_rules.max_per_rung key is still unread by brain.py. Known
+  limitation to carry forward: willingness still inherits
+  average_delay_days, which is ability-contaminated -- stated in the config
+  comment, ARCHITECTURE.md and README rather than hidden.

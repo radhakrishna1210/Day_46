@@ -213,6 +213,72 @@ penalised on the willingness axis too. Separating that properly needs
 per-invoice attribution we do not have. The ability axis is what stops that
 conflation from reaching a decision on its own.
 
+#### Block 2c — Recovery Probability + EV (`engine/negotiation.py`)
+
+Ability and willingness (Block 2b) place a buyer in a quadrant. This block
+asks the next question: for a buyer in that quadrant, which of a fixed set
+of candidate recovery actions is actually worth taking?
+
+```
+P(recover)               per (quadrant, action), from config -- an assumption,
+                          not a measured outcome.
+expected_recovery_paise   outstanding_paise scaled by how much of it the
+                          action collects WHEN it succeeds (full value for a
+                          message or a payment plan; a partial settlement for
+                          counter_settle / human_handoff / legal_escalation).
+cost_paise                one LLM draft call, or minutes of the MSME owner's
+                          own time for a handoff.
+ev_paise = round(probability/100 * expected_recovery_paise) - cost_paise
+```
+
+The action space: `wait`, `soft_nudge`, `firm`, `legal_facts` (sharing names
+with the ladder's rungs 0-3 on purpose -- same real-world action), plus two
+genuinely new ones, `payment_plan` (a schedule for the full amount) and
+`counter_settle` (the buyer proposes a partial settlement), plus
+`human_handoff` and `legal_escalation` (both correspond to today's rung 4,
+scored separately because a phone call and the Samadhaan reference path have
+different costs and different odds).
+
+**Design call:** `recovery_probability` is a flat grid, one assumed
+percentage per `(quadrant, action)` pair, not a weighted formula like
+`ability()`/`willingness()`. Those two decompose into weighted per-signal
+terms because the terms have plausible units (percent inflow decline maps to
+score points); a probability weight here would have no such unit -- there is
+no measured recovery-rate data behind any of these numbers, so a flat,
+visibly-a-guess grid is more honest than dressing a guess up as arithmetic.
+
+**A result worth stating rather than quietly re-tuning away:** with the
+shipped grid, the model ranks `legal_facts` (or `legal_escalation`) above
+`soft_nudge` even for a `good_customer` -- the best-paying buyer. The model
+has no term for the relationship cost of over-escalating a good payer, only
+`P(recover)`, and more assertive contact is modelled as at least as likely to
+work, at essentially the same near-zero cost as a gentle one. This is exactly
+what shipping the reasoning inert first is for: the number is visible and
+arguable before it is allowed to move money. A candidate for Phase 3, not
+patched here by hand-tuning one row to hide it.
+
+> **PHASE 2 SCOPE.** Computed and ranked only. `engine/brain.py` does not
+> import this module, `Action.kind` stays exactly the four strings it is
+> today, and the two silent-failure `Action.kind` consumers
+> (`engine/consolidate.py`'s `_eligible()`, `engine/buyer_panel.py`'s
+> `_LADDER_KINDS`) are untouched. Wiring a chosen action into the Brain,
+> adding `payment_plan`/`counter_settle` to `Action.kind`, and fixing those
+> two consumers is Phase 3.
+>
+> **Money-safety note:** every number this module produces is advisory
+> arithmetic over a hypothetical action, not a real transaction. `ev_paise`
+> never touches `amount_paid_paise` or any other ledger state -- it is
+> evaluated for comparison only, the same spirit as `section_16_running`'s
+> "cost of waiting" figure in `engine/law.py`.
+
+Every weight and cost figure lives in `config/rules.yaml`'s `negotiation`
+block, and every function carries its own breakdown, exactly like
+`engine/ability_willingness.py`:
+
+```
+python engine/negotiation.py --explain INVOICE_ID
+```
+
 ### Block 3 — Watchdog (`engine/watchdog.py`)
 **What:** Runs once per simulated day. Compares today's date with every unpaid invoice's due date. Anything overdue goes into the work queue.
 **Pure rule.** Just date math.
@@ -384,6 +450,7 @@ revenue-recovery-agent/
 │   ├── money.py            ← integer-paise formatting, one source of truth
 │   ├── score.py  watchdog.py  law.py  rungs.py  brain.py
 │   ├── ability_willingness.py ← Phase 1: the two-axis score + quadrant (computed, not yet acted on)
+│   ├── negotiation.py      ← Phase 2: recovery probability + EV per action (computed, not yet acted on)
 │   ├── validate.py         ← catches structurally malformed invoices before law/brain see them (E2)
 │   ├── samadhaan.py        ← the real ready-to-file Samadhaan complaint draft
 │   ├── buyer_panel.py      ← W2: per-buyer rollup (outstanding, score, promise reliability, recovery state)
@@ -401,7 +468,7 @@ revenue-recovery-agent/
 │   ├── templates/         ← the Jinja2 template(s) build_report.py renders
 │   └── out/                ← generated, gitignored: results.json, report.html
 ├── audit/                 ← generated audit logs land here (append-only JSONL); audit/drafts/ holds Samadhaan drafts
-└── tests/                 ← 22 files, 759 tests. Beyond the obvious per-module tests, three are
+└── tests/                 ← 24 files, 829 tests. Beyond the obvious per-module tests, three are
                               structural guards worth naming: test_sim_isolation.py (AST-scans
                               engine/ + main.py to prove the agent never reads sim/hidden_personas.json),
                               test_no_legal_constants.py (AST-scans for hardcoded legal numbers/citations

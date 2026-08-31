@@ -27,7 +27,7 @@ Demo video and final submission polish are what's left (see
   tested seeds.
 - Every money-related decision is **explainable and audit-logged** -- no
   silent actions, no invented legal numbers.
-- **759 tests passing**; of 141 documented edge cases, 60 have a dedicated
+- **829 tests passing**; of 143 documented edge cases, 62 have a dedicated
   test, the rest are HANDLED or explicitly OUT OF SCOPE -- never left vague.
 - Full numbers in [Results](#results); what's built vs. not in
   [Honest scope](#honest-scope-built-vs-future-work).
@@ -37,6 +37,7 @@ Demo video and final submission polish are what's left (see
 [Architecture](#architecture) -- [Early warning (W1)](#early-warning-w1) --
 [Buyer / trader view (W2)](#buyer--trader-view-w2) --
 [Ability vs. willingness (Phase 1)](#ability-vs-willingness-the-two-axis-score-phase-1) --
+[Recovery probability + EV (Phase 2)](#recovery-probability--expected-value-phase-2) --
 [Buyer-level message consolidation (W3)](#buyer-level-message-consolidation-w3)
 -- [Scope (deliberate)](#scope-deliberate) -- [Edge cases](#edge-cases) --
 [Honest scope: built vs. future work](#honest-scope-built-vs-future-work) --
@@ -277,6 +278,62 @@ on its own.
 
 ---
 
+## Recovery probability + expected value (Phase 2)
+
+**The problem:** knowing a buyer's quadrant still leaves "so which action do
+I actually take?" unanswered. `engine/negotiation.py` scores a fixed set of
+candidate recovery actions -- `wait`, `soft_nudge`, `firm`, `legal_facts`
+(sharing names with the ladder's rungs on purpose), plus `payment_plan` and
+`counter_settle` (genuinely new: a schedule for the full amount, versus the
+buyer proposing "70% now, waive the rest"), plus `human_handoff` and
+`legal_escalation` (both correspond to today's final rung, scored separately
+because a phone call and the Samadhaan reference path have different costs
+and different odds) -- by expected value:
+
+```
+EV = P(recover) x expected_recovery_paise - cost_paise
+```
+
+`P(recover)` is a flat, assumed percentage per `(quadrant, action)` pair in
+`config/rules.yaml`, not a weighted formula: unlike ability/willingness's
+per-signal weights, there is no measured recovery-rate data behind any of
+these numbers, so a visibly-a-guess grid is more honest than dressing a guess
+up as arithmetic. `expected_recovery_paise` scales the outstanding amount by
+how much of it the action collects *when it succeeds* -- full value for a
+message or a payment plan, a partial settlement for `counter_settle` /
+`human_handoff` / `legal_escalation`. `cost_paise` is one LLM draft call, or
+minutes of the MSME owner's own time for a handoff, priced from real Gemini
+3.7 Flash pricing and a stated USD-INR assumption (see the config file's
+comments for both citations).
+
+```
+python engine/negotiation.py --explain INVOICE_ID
+```
+
+On the seeded data, the ranking behaves the way the quadrant split promises:
+a `cash_flow_problem` buyer's top action is `payment_plan`, ahead of every
+message action and of `legal_escalation`; a `can_pay_but_wont` buyer's top
+action is `legal_facts`, ahead of `payment_plan`; a `high_risk` buyer's top
+action is `legal_escalation` (stop early, escalate -- matching the
+simulator's own deadbeat persona reasoning).
+
+**A result worth stating rather than quietly re-tuning away:** for a
+`good_customer` -- the best-paying buyer -- the same grid ranks `legal_facts`
+above `soft_nudge`. The model has no term for the relationship cost of
+over-escalating a good payer, only `P(recover)`, and more assertive contact
+is modelled as at least as likely to work, at essentially the same near-zero
+cost as a gentle one. Left as an honest, visible result rather than patched
+by hand-tuning one row -- a candidate for Phase 3, which is also where the
+Brain would need to weigh relationship cost at all.
+
+> **Computed, not yet acted on.** `engine/brain.py` does not read this
+> module and `Action.kind` is unchanged. Wiring a chosen action into the
+> Brain -- and fixing `engine/consolidate.py` / `engine/buyer_panel.py`'s
+> two `Action.kind` consumers for the day `payment_plan`/`counter_settle`
+> actually appear -- is Phase 3.
+
+---
+
 ## Buyer-level message consolidation (W3)
 
 **The problem:** a buyer with five overdue invoices shouldn't necessarily
@@ -344,6 +401,10 @@ each honestly marked:
 - **W1-W4** -- early warning, buyer panel + promise reliability,
   buyer-level message consolidation, and a refreshed 6-seed experiment (all
   described above).
+- **Phase 1-2** -- the ability/willingness two-axis score + quadrant, and
+  recovery probability + expected value per candidate action (both
+  described above). Computed and explained/ranked only -- the Brain does
+  not act on either yet; see each section's own "not yet acted on" note.
 
 **FUTURE WORK:** see the list below, and `docs/winning_layer.md` for the
 larger roadmap (predictive risk, cash-flow intelligence, payment

@@ -17,7 +17,7 @@ This document does **not** define implementation rules, decision rules, threshol
 
 ## Status Summary
 
-Every one of the 142 cases below carries a `**Status:**` line, using exactly
+Every one of the 143 cases below carries a `**Status:**` line, using exactly
 three values:
 
 - **TESTED** -- has a passing test; the test file and function are named.
@@ -28,10 +28,10 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 61 |
+| TESTED | 62 |
 | HANDLED | 44 |
 | OUT OF SCOPE | 37 |
-| **Total** | **142** |
+| **Total** | **143** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
 seven previously-incidental behaviours (TC-027, TC-033, TC-041, TC-042,
@@ -58,6 +58,10 @@ runs its exact sequence end to end through the real pipeline, driven by
 Phase 1 (the ability/willingness split) added TC-142 -- the one genuinely new
 edge case that phase created: a buyer with no transaction history at all, now
 that a second score axis reads transaction data that may simply not be there.
+
+Phase 2 (recovery probability + EV) added TC-143: a zero-outstanding invoice
+asked for an EV ranking anyway. No special-casing was needed -- the paise
+arithmetic already degrades correctly on its own.
 
 Phase 10 corrected TC-070, which had gone stale: it still described
 buyer-level consolidation as unbuilt after W3 (`engine/consolidate.py`)
@@ -2391,3 +2395,40 @@ one: too few months to call a *trend* (`score.ability.min_months_for_trend`)
 still leaves enough to size an invoice against a typical month, so the trend
 factor abstains while the capacity ratio still contributes. Partial evidence
 is used partially instead of being thrown away.
+
+## TC-143 — Zero-Outstanding Invoice Asked For an EV Ranking
+
+**Status: TESTED** -- `tests/test_negotiation.py::test_a_zero_outstanding_invoice_ranks_wait_first_since_nothing_is_worth_spending_on`.
+
+### Initial State
+```text
+Invoice: outstanding_paise == 0 (fully paid, or a data error)
+Caller: engine.negotiation.rank_actions() or evaluate_invoice() asked to
+        rank recovery actions for it anyway
+```
+
+### The Risk
+`engine/negotiation.py` never checks whether an invoice is actually still
+owed before scoring it -- `engine/watchdog.py` and `engine/brain.py` are
+what keep a settled invoice out of the pipeline in the first place, and this
+module has no dependency on either. Asked to rank a zero-outstanding
+invoice regardless, the two obvious wrong answers were:
+
+1. **Divide by zero, or otherwise raise** -- `expected_recovery_paise` is
+   `outstanding_paise * recovery_fraction(action)`, so a naive
+   implementation dividing a ratio the other way could crash on this input.
+2. **Rank a message action first** -- if `ev_paise` were computed from
+   `probability` alone rather than from real paise arithmetic, a high
+   `P(recover)` action could look best even though there is nothing left to
+   recover.
+
+### Expected Behaviour
+No special-casing was needed, because the arithmetic already gets this
+right: every action's `expected_recovery_paise` is `0`, so its
+`ev_paise` is `0 - cost_paise` -- exactly `0` for `wait` (which costs
+nothing) and strictly negative for every action that costs an LLM call or a
+human's time. `rank_actions()` therefore puts `wait` first without needing
+to know why, the same way it would for any other invoice: the numbers speak
+for themselves rather than a guard clause asserting the answer. This is the
+same "the arithmetic degrades honestly, nothing has to notice" pattern as
+TC-142's neutral-base ability score.
