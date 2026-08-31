@@ -2,7 +2,7 @@
 
 *Compiled by reading the current repository directly — `engine/`, `sim/`, `report/`, `config/`, `data/`, `tests/`, `main.py`, and the live `audit/` trail — plus CLAUDE.md, ARCHITECTURE.md, README.md, `docs/edge_cases.md` and `docs/winning_layer.md` as they stand today. No files were modified to produce this document. Where the build diverged from the original plan, that is called out explicitly rather than assumed away.*
 
-**Headline numbers (seed 42):** ₹22,98,757 more recovered than the baseline · 6/6 seeds won on rupees recovered · 759 tests passing · 141 edge cases documented (60 tested / 44 handled / 37 out of scope) · 141 invoice-level contacts consolidated into 73 outbound envelopes.
+**Headline numbers (seed 42):** ₹22,98,757 more recovered than the baseline · 6/6 seeds won on rupees recovered · the expected-value negotiation layer (Phase 4) adds a further ₹9,81,368 on top, winning on 5/6 of those same seeds · 877 tests passing · 141 edge cases documented (60 tested / 44 handled / 37 out of scope) · 141 invoice-level contacts consolidated into 73 outbound envelopes.
 
 ---
 
@@ -109,6 +109,18 @@ Derived from what `sim/run_sim.py::run_agent()` actually calls, in order, every 
 - **Why it exists:** a number that decides how hard to chase someone for money has to be defensible line by line — every score ships with the exact arithmetic that produced it.
 - **Formula:** `score = 100 − avg_delay_days×1.2 − broken_promises×8 − disputes×5 + on_time_streak×2`, clamped 0–100. Confidence: <3 settled invoices → low, ≥10 → high.
 
+### `engine/ability_willingness.py` `[RULE]` (Phase 1)
+- **Input:** a buyer's `monthly_inflow_paise`/`failed_payment_count` (synthetic, correlated with the hidden persona), plus their settled invoices and, optionally, one specific invoice.
+- **Output:** `two_axis_score()` — everything `score_buyer()` returns, unchanged, plus `ability` (0-100, "can they pay?"), `willingness` (0-100, a relabel of the legacy score), and a `quadrant` (`good_customer` / `cash_flow_problem` / `can_pay_but_wont` / `high_risk`).
+- **Called by:** `sim/run_sim.py`'s day loop (feeds `engine/brain.py`'s `decide()`); `engine/negotiation.py`.
+- **Why it exists:** the legacy score can't tell a buyer who *can't* pay from one who *won't* — both look identical in payment history alone. Splitting the axis is what makes a payment-plan-vs-legal-pressure decision possible at all.
+
+### `engine/negotiation.py` `[RULE]` (Phase 2)
+- **Input:** a quadrant, outstanding paise, broken-promise count, a candidate action list.
+- **Output:** `rank_actions()` — every candidate in `{wait, soft_nudge, firm, legal_facts, payment_plan, counter_settle, human_handoff, legal_escalation}` scored by `EV = P(recover) x expected_recovery_paise - cost_paise`, best first, with a full arithmetic breakdown.
+- **Called by:** `engine/brain.py`'s `decide()`, behind `config/rules.yaml`'s `brain.ev_mode` (Phase 3).
+- **Why it exists:** "which action is actually worth taking" is a different question from "what quadrant is this buyer in." `P(recover)` is a stated assumption grid, not a measured probability — see the module's own docstring for why a flat grid is more honest than a weighted formula here.
+
 ### `engine/watchdog.py` `[RULE]`
 - **Input:** all invoices + today's date (never `date.today()` internally).
 - **Output:** `overdue_invoices()` — the day's work queue, sorted by money at risk; `early_warnings()` — a real low/watch/high band for invoices approaching their due date.
@@ -137,9 +149,9 @@ Derived from what `sim/run_sim.py::run_agent()` actually calls, in order, every 
 
 ### `engine/brain.py` `[RULE]` + one narrow AI call
 - **Input:** invoice, buyer, score, legal position, promises, contact history.
-- **Output:** exactly one `Action`: WAIT / SEND / HANDOFF / STOP, with rung and reason.
+- **Output:** exactly one `Action`: `wait` / `send` / `handoff` / `stop`, and, since Phase 3, two more buyer-facing send kinds, `payment_plan` / `counter_settle` — with rung and reason.
 - **Called by:** `main.py`, `sim/run_sim.py`, `sim/scenario_tc141.py`.
-- **Calls:** `engine/rungs.py`, `engine/samadhaan.py`, `engine/audit.py`, `engine/llm.py` (one ambiguous case only).
+- **Calls:** `engine/rungs.py`, `engine/samadhaan.py`, `engine/audit.py`, `engine/llm.py` (one ambiguous case only), and, behind `config/rules.yaml`'s `brain.ev_mode` (off by default), `engine/negotiation.py`.
 - **Why it exists:** the decision maker. Deep dive in §4.
 
 ### `engine/writer.py` `[AI]` + guardrail
@@ -190,13 +202,13 @@ Derived from what `sim/run_sim.py::run_agent()` actually calls, in order, every 
 - **Why it exists:** built in W3 (§12). `engine/brain.py` is completely untouched — it changes only how many envelopes carry a day's decisions.
 
 ### `sim/personas.py` — simulator only
-- **Input:** a hidden persona tag + the rung of the message just sent.
-- **Output:** pay-full / pay-partial / promise / dispute / silence, from a fixed probability table, seeded deterministically per (invoice, day).
+- **Input:** a hidden persona tag, the rung of the message just sent, and, since Phase 4, `action_kind` (`send` / `payment_plan` / `counter_settle`).
+- **Output:** pay-full / pay-partial / promise / dispute / silence, from a fixed probability table, seeded deterministically per (invoice, day). `payment_plan` boosts `cash_tight`'s promise rate; `counter_settle` skews `habitual_delayer`'s promises toward the existing reduced-terms fixture. Every other persona/`action_kind` pair is byte-identical to a plain send.
 - **Why it exists:** `engine/` must never see this — `tests/test_sim_isolation.py` AST-scans every file under `engine/` and `main.py` and fails if any of them ever reference `sim/hidden_personas.json`.
 
 ### `sim/run_sim.py` — orchestration
-- **Input:** seed, number of days, `--compare`.
-- **Output:** `run_agent()` and `run_baseline()` results, written to `report/out/results.json`.
+- **Input:** seed, number of days, `--compare`, and, since Phase 4, `run_agent(..., ev_mode=...)`.
+- **Output:** `run_agent()` and `run_baseline()` results, written to `report/out/results.json` -- `--compare` now runs and reports a third `agent_ev` arm (the same agent with `brain.ev_mode` forced on) alongside baseline/agent, on the same seed set.
 - **Calls:** the entire engine stack, in a day loop, with `LLM_MODE` force-pinned to `mock`.
 - **Why it exists:** the experiment. Deep dive in §14.
 
@@ -212,7 +224,7 @@ Runs the first nine pipeline stages once, on the real clock: data → watchdog �
 
 ## 4. The Brain, deeply
 
-`engine/brain.py::decide()` — twelve checks, evaluated in order, that produce exactly one `Action` per invoice per day. Every one is `[RULE]` except step 12's narrow ambiguous case. The order matters: rung 4 (a stop) is checked *before* the ordinary per-rung exhaustion check, because rung 4 has zero allowed messages and would otherwise be silently swallowed into a WAIT.
+`engine/brain.py::decide()` — thirteen checks, evaluated in order, that produce exactly one `Action` per invoice per day. Every one is `[RULE]` except step 12's narrow ambiguous case and, when `config/rules.yaml`'s `brain.ev_mode` is on, step 13's EV ranking (itself still rule-based arithmetic over `engine/negotiation.py` — no model call). The order matters: rung 4 (a stop) is checked *before* the ordinary per-rung exhaustion check, because rung 4 has zero allowed messages and would otherwise be silently swallowed into a WAIT.
 
 ### The order of checks, exactly as coded
 
@@ -223,11 +235,12 @@ Runs the first nine pipeline stages once, on the real clock: data → watchdog �
 5. **5 total contacts already made** (hard cap) → **HANDOFF**
 6. **An active promise** not yet past its grace period → **WAIT**
 7. **Rung selection** — score band picks a starting rung and pacing cadence; broken promises jump the rung; a first-ever contact on an already-old backlog opens one rung ahead; the legal ceiling always wins the final `min()`
-8. **Rung ≥ 4** → **HANDOFF** + a Samadhaan draft is generated, whatever its readiness
+8. **Rung ≥ 4** → **HANDOFF** + a Samadhaan draft is generated, whatever its readiness. (Phase 3 follow-up: with `ev_mode` on, this step ALSO picks which flavor — `human_handoff` or `legal_escalation` — the audit trail records, by EV, among whatever the buyer's quadrant offers. This never changes whether the handoff fires, only its stated reason in the audit detail.)
 9. **No room left at this rung, and the ceiling doesn't allow going higher** → **WAIT**, review in 7 days
 10. **Weekend** → **WAIT** until Monday
 11. **Too soon since the last contact at this rung** → **WAIT**
 12. **Send** — unless this is the one ambiguous case (partial payment + an unclear reply), where the LLM is asked and may only turn the send into a wait, never the reverse.
+13. **(Phase 3) EV-informed choice** — only fires with `ev_mode: on` AND a two-axis score (a `quadrant` present); otherwise step 12's plain send stands, byte-identical to before Phase 3. Ranks `engine/negotiation.py`'s action space, narrowed to the buyer's quadrant and (for `human_handoff`/`legal_escalation`) whether `chosen` has *already* reached rung 4 — which, since step 8 above already intercepts that exact case, means this step can never itself pick a handoff; it chooses among `wait` / `send` / `payment_plan` / `counter_settle` instead. `payment_plan`/`counter_settle` are two new `Action.kind` values, buyer-facing sends at the already-chosen rung — `engine/writer.py` is untouched, so they draft through the identical skeleton a plain send would.
 
 ### Rung selection, unpacked
 
@@ -261,6 +274,7 @@ Low *confidence* (fewer than 3 settled invoices) always paces as `medium`, which
 | Which rung is legally *available* | RULE | A ceiling, computed, never guessed |
 | Which rung is *chosen*, pacing, stopping rules, quiet hours, opt-out | RULE | Safety-critical → must be predictable and hard-coded |
 | Buyer-level message grouping | RULE | A pure grouping over decisions the brain already made |
+| Ability/willingness quadrant, recovery-probability + EV ranking (Phases 1-3) | RULE | `P(recover)` is a stated assumption grid, not a learned probability -- arithmetic, not inference |
 | Reading a buyer's free-text reply into structured intent | AI | Messy Hinglish/English → structure is an LLM's job; the calendar math after is still a rule |
 | Drafting the actual message | AI | Tone, order, phrasing — checked by a guardrail against numbers the LLM never chose |
 | One ambiguous judgment call (partial paid + unclear reply) | AI, logged | The one case the rules admit they can't settle — and even here the model may only make the outcome gentler |
@@ -457,6 +471,8 @@ A dispute short-circuits this entirely: the invoice is marked `disputed` and the
 
 **Why the engine can never see `hidden_personas.json`:** the agent's value proposition is inferring buyer behaviour from *payment history*, the way it would in the real world — if it could peek at a "this buyer is a deadbeat" flag, the experiment would prove nothing. `tests/test_sim_isolation.py` statically scans every source file under `engine/` and `main.py` for any reference and fails the build if one appears — verified to actually catch a real leak when one was deliberately introduced, then reverted.
 
+**Reacting to *what kind* of message (Phase 4):** `react()` takes an `action_kind` (`send` / `payment_plan` / `counter_settle`, default `send`). `cash_tight` — the persona behind the `cash_flow_problem` quadrant — promises 20-27 percentage points more often when offered a `payment_plan` than a plain send at the same rung. `habitual_delayer` — `can_pay_but_wont` — skews its promises toward the existing reduced-terms fixture under `counter_settle`, representing continued lowballing rather than full acceptance. Every other persona/`action_kind` combination is byte-identical to a plain send. **A finding worth carrying forward:** `counter_settle`'s own persona behaviour never actually fires in a real run — `can_pay_but_wont`'s EV ranking always prefers `legal_facts` over `counter_settle` under the shipped `config/rules.yaml` grid, so the differentiation is real and tested but currently inert end-to-end.
+
 **The daily loop:** mature/sweep promises → build the overdue queue → score every buyer → raise any new early warnings → run `brain.decide()` once per invoice (unchanged, exactly as production) → consolidate today's sends into bundles → draft and "send" each bundle → roll a persona reaction per invoice → apply it → repeat. Every dice roll is seeded from `(seed, invoice_id, day, purpose)`, never a shared mutable stream, so the same buyer facing the same message on the same simulated day gets the identical roll whether it's the baseline or agent run.
 
 **Mock LLM in the simulator:** `_forced_mock_mode()` pins `LLM_MODE=mock` for the whole day-loop *in code*, regardless of `.env` — a batch of up to 120 × ~100 decisions must never place a live API call by accident.
@@ -467,9 +483,11 @@ A dispute short-circuits this entirely: the invoice is marked `disputed` and the
 
 **Agent A — the baseline.** `run_baseline()`: three fixed reminders, ten days apart, the identical plain message for every buyer. No score, no law, no rung, no promise memory, no dispute detection. Modeled off Razorpay's own documented Payment Links reminders behaviour.
 
-**Agent B — this system.** `run_agent()`: the full pipeline described in §2, for up to 120 simulated days.
+**Agent B — this system.** `run_agent(seed, days, ev_mode=False)`: the full pipeline described in §2, for up to 120 simulated days.
 
-**How they're kept comparable:** both load the identical dataset for the same seed (`tests/test_experiment.py::test_both_agents_start_from_identical_invoice_sets`); both run through the same deterministic, seeded persona reaction rolls; both run with `LLM_MODE` force-pinned to mock; a buyer's promise still matures and can still be broken for the baseline too — a dumb bot just doesn't reference it.
+**Agent C — agent + EV (Phase 4).** `run_agent(seed, days, ev_mode=True)`: the identical Agent B, with `config/rules.yaml`'s `brain.ev_mode` forced on for every decision — the ablation of whether the negotiation layer (§4, step 13) adds recovery on top of Agent B, not just whether Agent B beats Agent A. `ev_mode=False` is byte-identical to pre-Phase-4 `run_agent()` output, proven by a pinned snapshot test.
+
+**How they're kept comparable:** all three load the identical dataset for the same seed (`tests/test_experiment.py::test_both_agents_start_from_identical_invoice_sets`); all run through the same deterministic, seeded persona reaction rolls; all run with `LLM_MODE` force-pinned to mock; a buyer's promise still matures and can still be broken for the baseline too — a dumb bot just doesn't reference it.
 
 **What's measured:**
 
@@ -482,7 +500,7 @@ A dispute short-circuits this entirely: the invoice is marked `disputed` and the
 | Handoffs, stops, disputes | Correctly non-zero for the agent; necessarily zero for the baseline |
 | Exceptions (not recovered) | Named, with a reason, per invoice — never a bare count |
 
-**Why multiple seeds:** a single seed proves nothing except "it worked once." `multi_seed_summary()` re-runs on 6 independently generated worlds (42, 7, 13, 99, 2024, 555) and reports a win-rate, plus how many worlds actually contain a malformed invoice or a superseded promise.
+**Why multiple seeds:** a single seed proves nothing except "it worked once." `multi_seed_summary()` re-runs on 6 independently generated worlds (42, 7, 13, 99, 2024, 555) and reports a win-rate, plus how many worlds actually contain a malformed invoice or a superseded promise. Agent B beats Agent A on rupees recovered in **6/6** of these worlds; Agent C beats Agent B, the honest ablation, in **5/6** (seed 2024 the one loss) — both numbers on the identical seed set, via `multi_seed_summary()`'s optional `primary_agent_ev` argument.
 
 **The one rule that's never broken:** the baseline is *never* tuned to make the agent look better — weakening it on purpose would be exactly the "cherry-picked match" the track's own judging language mocks.
 
@@ -565,9 +583,9 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 
 ## 18. Built vs roadmap
 
-**Built today:** the original MVP (data factory, score engine, watchdog, law engine, brain, message writer, channels, promise tracker, simulator, report); E1–E4 (promise sanity bounds, invoice validation, regression tests + status markup, TC-141); W1–W4 (early warning, buyer panel, message consolidation, refreshed 6-seed experiment).
+**Built today:** the original MVP (data factory, score engine, watchdog, law engine, brain, message writer, channels, promise tracker, simulator, report); E1–E4 (promise sanity bounds, invoice validation, regression tests + status markup, TC-141); W1–W4 (early warning, buyer panel, message consolidation, refreshed 6-seed experiment); **Phase 1–4** — the ability/willingness two-axis score + quadrant, recovery-probability + EV ranking (`engine/negotiation.py`), wiring that ranking into the Brain behind `config/rules.yaml`'s `brain.ev_mode`, and persona differentiation + a third `agent+EV` experiment arm with an honest 5/6-seed ablation win. See §4 step 13 and §14's "Agent C" for the mechanics, and `docs/winning_layer.md`'s "Implementation Status" for the full honest-scope reconciliation.
 
-**Future work — explicitly not built:** real WhatsApp Business API channel; voice calls with Hinglish TTS; a live RBI bank-rate feed; Tally/Zoho invoice import; TReDS invoice-discounting suggestions; a dispute-resolution assistant; a network-level buyer score across many vendors; and, from `docs/winning_layer.md`, dynamic cash-flow intelligence, payment-propensity prediction, a next-best-action engine beyond the current rung ladder, expected-recovery/cost optimization, a strategy simulator, and deeper closed-loop learning — **none** of this has any code behind it. Also not built: an ablation arm isolating timing vs. legal leverage, and a digest total in the consolidated message's subject line.
+**Future work — explicitly not built:** real WhatsApp Business API channel; voice calls with Hinglish TTS; a live RBI bank-rate feed; Tally/Zoho invoice import; TReDS invoice-discounting suggestions; a dispute-resolution assistant; a network-level buyer score across many vendors; a digest total in the consolidated message's subject line; and, from `docs/winning_layer.md`, payment-propensity *prediction* (a learned probability -- Phase 1-2's `P(recover)`/ability score are stated-assumption arithmetic, not a trained model), message-content differentiation by the chosen negotiation action (`engine/writer.py` is untouched even with `ev_mode` on), reactive settlement-offer handling (a buyer proposing terms mid-conversation), a full strategy simulator/what-if tool, and closed-loop learning from outcomes. Cash-flow intelligence and next-best-action *are* built, as a real first slice each — see the Phase 1–4 line above, not "none of this has any code behind it."
 
 ---
 
@@ -624,7 +642,7 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 | `python sim/run_sim.py --compare --seed 42 --days 120` | Baseline *and* agent, side by side, writing `report/out/results.json`. `--extra-seeds` controls the multi-seed table. |
 | `python sim/run_sim.py --scenario tc141` | Runs the scripted TC-141 story from §17, printed day by day. |
 | `python report/build_report.py` | Renders `results.json` into `report/out/report.html`. |
-| `pytest -q` | 759 tests, including three structural guards: `test_sim_isolation.py`, `test_no_legal_constants.py`, and `test_run_sim.py`'s conservation + audit-entry invariants. |
+| `pytest -q` | 877 tests, including three structural guards: `test_sim_isolation.py`, `test_no_legal_constants.py`, and `test_run_sim.py`'s conservation + audit-entry invariants. |
 | `python engine/llm.py --calibrate` | With `LLM_MODE=live` and a real key: drafts 3 real messages and parses 3 real replies against Gemini. |
 | `python engine/llm.py --list-models` | Confirms the model ids in `config/rules.yaml` are reachable with the configured key. |
 
@@ -646,6 +664,11 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 | W3 — message consolidation | ✅ complete | `engine/consolidate.py`; 141→73 envelopes, zero recovery change |
 | W4 — experiment refresh | ✅ complete | 6-seed table with edge-case-count columns |
 | Phase 10 — docs + hygiene | ✅ complete | README/ARCHITECTURE/edge_cases/winning_layer synced |
+| P0 — repo hygiene | ✅ complete | Multi-seed audit-trail clobbering bug fixed; Quickstart artifacts regenerated self-consistently |
+| Phase 1 — ability/willingness two-axis score | ✅ complete | `engine/ability_willingness.py`; quadrant computed and explained, not yet acted on until Phase 3 |
+| Phase 2 — recovery-probability + EV ranking | ✅ complete | `engine/negotiation.py`; ranked, not yet acted on until Phase 3 |
+| Phase 3 — wiring EV into the Brain | ✅ complete | `engine/brain.py`'s `decide()` step 13 + step 8's handoff-flavor choice, behind `brain.ev_mode` (off by default); two correctness follow-ups closed the handoff-reachability gate and added the flavor choice |
+| Phase 4 — persona differentiation + the EV ablation | ✅ complete | `sim/personas.py`'s `action_kind`, `run_agent(ev_mode=True)` as a real third experiment arm; 5/6-seed ablation win, reported honestly including the one loss |
 | Phase 11 — demo assets + video | ⬜ not started | Script exists in ARCHITECTURE.md §11, marked "not yet recorded" |
 | Phase 12 — final check + submit | ⬜ not started | Checklist in ARCHITECTURE.md §12, all boxes unchecked |
 
@@ -657,13 +680,13 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 
 **B) 1 minute, technical:** "Every safety-critical decision — who to score as risky, what the law actually allows us to say, which rung to escalate to, and when to stop — is deterministic code, sourced to one config file each, with a hard invariant that the chosen rung can never exceed what the law currently supports. The LLM only ever touches language: reading a buyer's Hinglish reply into structured intent, and drafting the actual message, which then has to pass a regex guardrail checking every number against the law engine's own output before it can be sent — if it fails twice, it falls back to a plain factual template that can't fail. That split is what lets us prove recovery uplift honestly instead of just showing nicer emails."
 
-**C) 2 minutes, how it works:** "Every simulated day, a watchdog compares each invoice against its statutory due date under the MSMED Act — not the date the contract claimed, since any agreed term over 45 days is legally void. Once overdue, we score the buyer from their real payment history, compute exactly how much compound interest they owe and what it's costing them in a deferred tax deduction, and a rules-only decision engine picks one action: wait, send a message at the right firmness, hand off to a human, or stop. A buyer's reply gets read by an LLM into structured intent — promise, dispute, refusal — with sanity bounds so an absurd 10-year promise or a prompt-injection attempt can't derail anything. A dispute goes straight to a human, always. We proved all of this by running a dumb fixed-reminder bot and our agent on the exact same seeded data across six different random worlds, and we won on rupees recovered in all six — and we publish the invoices we still failed to recover, and why."
+**C) 2 minutes, how it works:** "Every simulated day, a watchdog compares each invoice against its statutory due date under the MSMED Act — not the date the contract claimed, since any agreed term over 45 days is legally void. Once overdue, we score the buyer from their real payment history, compute exactly how much compound interest they owe and what it's costing them in a deferred tax deduction, and a rules-only decision engine picks one action: wait, send a message at the right firmness, hand off to a human, or stop. We also split that score into two axes — can this buyer pay, and will they — and rank a fixed set of recovery actions (a plain nudge, a payment plan, legal pressure, a human handoff) by expected value, so a buyer who's short on cash gets offered a schedule instead of just chased harder. A buyer's reply gets read by an LLM into structured intent — promise, dispute, refusal — with sanity bounds so an absurd 10-year promise or a prompt-injection attempt can't derail anything. A dispute goes straight to a human, always. We proved all of this two ways: running a dumb fixed-reminder bot against our agent on the exact same seeded data across six different random worlds, where we won on rupees recovered in all six; and separately, running our own agent with that expected-value layer on versus off, on the same six worlds, where it added recovery in five of six — we report the one it didn't, not just the five it did. We also publish the invoices we still failed to recover, and why."
 
 **D) Five most impressive technical points:**
 1. The statutory due date is computed independently of the contract — a 90-day agreed term is void beyond the 45-day ceiling.
 2. Compound interest with monthly rests, segmented across partial payments, reproducible by hand from the `basis` block every position ships with.
 3. A guardrail that structurally cannot let the LLM invent a legal number or a threat.
-4. An honest 6-seed experiment with a matched-set days-to-pay figure specifically designed to remove selection bias.
+4. An honest 6-seed experiment with a matched-set days-to-pay figure specifically designed to remove selection bias — and a second, honest ablation on top of it: the expected-value negotiation layer adds recovery in 5 of those 6 seeds, reported with the one loss included, not smoothed over.
 5. A real bug (TC-014) found, root-caused with instrumented data across every seed, and fixed with dedicated regression tests.
 
 **E/F) Likely questions and strong answers:**
@@ -680,7 +703,7 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 1. WhatsApp and SMS are stubbed — never actually delivered — due to Business API verification requirements outside a 12-day build.
 2. All three LLM purposes run on one Flash-tier Gemini model rather than a cheap/strong split, purely a free-tier cost tradeoff.
 3. The simulator's buyer reaction lands the same simulated day a message is sent — real buyers take longer, so "days to pay" figures are somewhat optimistic.
-4. No ablation arm isolating how much of the win is smarter timing versus legal leverage specifically.
+4. There IS a real ablation arm now (Phase 4: agent vs. agent+EV, same seeds, negotiation layer on vs. off — 5/6-seed win), but it isolates the negotiation/EV layer specifically, not "timing versus legal leverage" as two separately toggleable things; no ablation exists that isolates *those two* from each other.
 5. Legal figures are a manually maintained snapshot (as of Aug 2026) with no live feed — explicitly disclosed.
 
 ---
@@ -689,14 +712,14 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 
 CLAUDE.md, ARCHITECTURE.md, README.md, `docs/edge_cases.md` and `docs/winning_layer.md`, compared against the actual code. Nothing here was fixed — only found.
 
-The short version: this repo is unusually self-auditing already — the Phase 10 pass explicitly fixed stale references and deleted a dead stub, and both the edge-case doc and the winning-layer doc carry their own "here's where we deviated from the plan" sections. Two small, genuinely new findings surfaced on this pass:
+The short version: this repo is unusually self-auditing already — the Phase 10 pass explicitly fixed stale references and deleted a dead stub, and both the edge-case doc and the winning-layer doc carry their own "here's where we deviated from the plan" sections. Two small findings surfaced on this pass, both **resolved during Phase 5's close-out**:
 
-| File | Claim | Actual | Severity | Fix before Phase 11? |
+| File | Claim (at the time) | Actual | Severity | Resolution |
 |---|---|---|---|---|
-| CLAUDE.md | "max 3 messages per rung" | Per-rung caps in `config/rules.yaml`'s `ladder.rungs` are rung-specific: 2 for rung 1, 3 for rungs 2 and 3. Rung 1's real ceiling is stricter than the stated "3." | Low | No — the real behaviour is same-or-stricter than claimed. |
-| config/rules.yaml | `stop_rules.max_per_rung: 3` is defined and pinned by `tests/test_smoke.py` | `engine/brain.py` never reads `stop_rules["max_per_rung"]` at all — enforcement comes entirely from each rung's own `max_messages`. This key is dead configuration, tested only for its own existence. | Low | No — behaviour isn't affected, but worth a one-line cleanup whenever `rules.yaml` is next touched. |
+| CLAUDE.md | "max 3 messages per rung" | Per-rung caps in `config/rules.yaml`'s `ladder.rungs` are rung-specific: 2 for rung 1, 3 for rungs 2 and 3. Rung 1's real ceiling is stricter than the stated "3." | Low | Left as-is — the real behaviour is same-or-stricter than claimed, and CLAUDE.md's non-negotiables predate this project's own phases; not touched. |
+| config/rules.yaml | `stop_rules.max_per_rung: 3` was defined and pinned by `tests/test_smoke.py` | `engine/brain.py` never read `stop_rules["max_per_rung"]` at all — enforcement came entirely from each rung's own `max_messages`. Dead configuration, tested only for its own existence. | Low | **Removed** in Phase 5 (not wired up — introducing a new enforced limit this close to submission would have been a real behaviour change, not a cleanup). `tests/test_smoke.py` now instead pins each rung's own `max_messages` directly. |
 
-Everything else checked out: the README's headline seed-42 numbers match `report/out/results.json` exactly (verified directly — baseline recovered ₹1,36,80,472 is `1368047240` paise, byte for byte); the 141/60/44/37 edge-case counts match `docs/edge_cases.md`'s own summary table; the 22-test-file count in ARCHITECTURE.md matches the actual `tests/` directory; and ARCHITECTURE.md's own illustrative "score 48 → skip straight to rung 2" story from Day 1 is, in fact, exactly what the current `poor_below: 50` / `pacing.poor.start_rung: 2` config produces.
+Everything else checked out: the README's headline seed-42 numbers match `report/out/results.json` exactly (verified directly — baseline recovered ₹1,36,80,472 is `1368047240` paise, byte for byte); the 141/60/44/37 edge-case counts match `docs/edge_cases.md`'s own summary table; the test-file count in ARCHITECTURE.md matches the actual `tests/` directory (24, as of Phase 4); and ARCHITECTURE.md's own illustrative "score 48 → skip straight to rung 2" story from Day 1 is, in fact, exactly what the current `poor_below: 50` / `pacing.poor.start_rung: 2` config produces.
 
 ---
 
@@ -711,4 +734,4 @@ Everything else checked out: the README's headline seed-42 numbers match `report
 7. The baseline (3 fixed reminders) is never weakened to flatter the agent — and the agent still wins on rupees recovered in 6 of 6 tested seeds.
 8. W3's message consolidation changed *how many envelopes* carry a day's decisions (141 → 73 on seed 42) and changed *nothing* about which invoices were contacted, when, or what was recovered.
 9. 141 edge cases are documented and honestly triaged — 60 tested, 44 handled-but-untested, 37 explicitly out of scope with the specific gap named — never left vague.
-10. What's genuinely not built yet: real WhatsApp/SMS, any predictive risk score, cash-flow intelligence, a strategy simulator, and Phases 11–12 (the demo video and final submission). Everything else in the checklist is done.
+10. Cash-flow intelligence (can this buyer pay, will they) and a next-best-action EV ranking ARE built (Phases 1–3), and there IS a real ablation now (Phase 4): the same agent with that layer on beats itself with it off in 5 of the same 6 seeds, one honest loss included. What's genuinely still not built: message content that differs by the chosen negotiation action, reactive settlement-offer handling, any *learned* (not stated-assumption) probability model, a full strategy simulator, and Phases 11–12 (the demo video and final submission).

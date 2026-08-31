@@ -28,13 +28,17 @@ The recommended implementation priority is deliberately limited. The strongest v
 ## Implementation Status (added Phase 10)
 
 This document was written before any Winning Layer work started, and reads
-end to end as a forward-looking plan. Four slices of it have since actually
-been built, under the project's own W1-W4 labels (see CLAUDE.md's Current
-status). **Those labels do not map 1:1 onto this document's own
-Enhancement/Phase numbering above** -- they were renamed and reordered
-during real implementation, not built in the order or shape originally
-planned here. The rest of this document -- everything not listed below --
-remains unbuilt.
+end to end as a forward-looking plan. Eight slices of it have since actually
+been built: four under the project's own W1-W4 labels, and four more under
+this project's separate "Phase 1-4" negotiation-model track (ability/
+willingness scoring, recovery-probability + EV ranking, wiring that ranking
+into the Brain, and persona differentiation + an EV ablation) -- see
+CLAUDE.md's Current status for both. **Neither label set maps 1:1 onto this
+document's own Enhancement/Phase numbering above** -- they were renamed,
+reordered, and in most cases built as a deliberately partial first slice
+rather than the full capability originally planned here. The PARTIALLY BUILT
+paragraphs below say exactly how much of each Enhancement that first slice
+covers; anything not named in this section at all is genuinely untouched.
 
 **CURRENTLY BUILT:**
 
@@ -100,9 +104,12 @@ feed. The inflow series is *synthetic*, generated per buyer by
 a real payment/banking feed at `monthly_inflow_paise` and the scoring above
 works unchanged; until then this is a demonstration of the reasoning on
 plausible fake data, not a cash-flow product. Two further caveats worth
-stating: as of Phase 1 nothing *acts* on the score (`engine/brain.py` does
-not read it -- that is Phase 2), and there is still no probability model
-anywhere, so Payment Propensity Prediction (Enhancement 4) remains unbuilt.
+stating: as shipped in Phase 1, nothing *acted* on the score yet
+(`engine/brain.py` did not read it -- that took until Phase 3, and even then
+only behind `brain.ev_mode`, off by default), and there is still no
+probability *model* anywhere -- `P(recover)` (Phase 2) is a stated
+assumption grid, not a learned one -- so Payment Propensity Prediction
+(Enhancement 4) remains unbuilt.
 
 **PARTIALLY BUILT -- Next-Best Recovery Action (Enhancement 6) and Expected
 Recovery and Cost (Enhancement 7):** Phase 2 built the *ranking* half; Phase 3
@@ -187,14 +194,20 @@ seeds (seed 2024 is the one loss), and the gain traces almost entirely to
 `human_handoff` vs. `legal_escalation`) maps to an identical `Action.kind`/
 rung/skeleton either way, so it cannot itself move simulated behaviour.
 
-**FUTURE / UNBUILT** (everything else in this document): Enhancements 1, 4,
-8-12 (Dynamic Trader Financial Profile as originally scoped, Payment
-Propensity Prediction, Recovery Explanation beyond the existing audit trail,
-Recovery Strategy Simulation, Closed-Loop Learning), and the UI Screens 1-5.
-None of these have any code behind them -- no payment-propensity score, no
-dashboard, no what-if simulator. They require either real transaction/payment
-data this standalone project doesn't have, or are explicitly out of the
-12-day build's scope (dashboards, ML models -- see CLAUDE.md's scope guard).
+**FUTURE / UNBUILT** (everything else in this document): Enhancement 1
+*as originally scoped* -- a single unified "Dynamic Trader Financial
+Profile" object -- was never built as its own thing, but several of the
+dimensions it envisioned now exist in scattered form: cash-flow health
+(Phase 1's ability axis), promise reliability (W2's buyer panel), and a
+recovery-worthiness view (the quadrant + EV ranking). What's still genuinely
+absent is any of it unified into one profile object or endpoint. Enhancements
+4, 8-12 (Payment Propensity Prediction, Recovery Explanation beyond the
+existing audit trail, Recovery Strategy Simulation, Closed-Loop Learning),
+and the UI Screens 1-5 remain fully unbuilt with no code behind them -- no
+payment-propensity score, no dashboard, no what-if simulator. They require
+either real transaction/payment data this standalone project doesn't have,
+or are explicitly out of the 12-day build's scope (dashboards, ML models --
+see CLAUDE.md's scope guard).
 
 **Reconciliation -- actual W-label vs. this document's original plan:**
 
@@ -1591,29 +1604,59 @@ This demonstrates the entire intelligence loop in a few minutes.
 
 Do not consider the Winning Layer complete because the UI exists.
 
+**Updated Phase 5 (close-out):** this checklist was written before any of
+W1-W4 or Phase 1-4 existed and sat entirely unchecked ever since, even
+though most of it is now true -- see the "Implementation Status" section
+near the top of this document for the honest scope behind each checked
+item; a checkmark here means "a real, if partial, slice exists," not "built
+exactly as this document originally envisioned."
+
 It should satisfy:
 
 ```text
-[ ] Trader has a multi-dimensional profile
-[ ] Payment risk can be displayed before default
-[ ] Payment propensity can be demonstrated
-[ ] Cash-flow signals are visible
-[ ] Promise reliability updates from outcomes
-[ ] Brain uses the new signals
-[ ] Brain produces a next-best action
-[ ] Decision has an explanation
-[ ] Recovery outcomes update trader data
-[ ] Strategy comparison can be demonstrated
-[ ] Existing MVP still works
-[ ] Existing audit trail still works
-[ ] Existing baseline experiment still works
-[ ] No existing safety/stop rules are bypassed
-[ ] Demo can be completed reliably
+[ ] Trader has a multi-dimensional profile         (scattered across the buyer
+                                                      panel + ability/willingness
+                                                      axes, never unified into one
+                                                      profile object -- Enhancement 1
+                                                      as scoped remains unbuilt)
+[x] Payment risk can be displayed before default   (W1 early warning)
+[ ] Payment propensity can be demonstrated         (no probability MODEL exists --
+                                                      P(recover) is a stated
+                                                      assumption grid, Phase 2)
+[x] Cash-flow signals are visible                  (Phase 1 ability axis)
+[x] Promise reliability updates from outcomes      (W2 buyer panel)
+[x] Brain uses the new signals                     (Phase 3, behind brain.ev_mode,
+                                                      off by default)
+[x] Brain produces a next-best action              (Phase 3 EV ranking)
+[x] Decision has an explanation                    (negotiation_action/ev detail
+                                                      in the audit trail, Phase 3)
+[ ] Recovery outcomes update trader data           (no persisted cross-run
+                                                      learning -- Closed-Loop
+                                                      Learning, Enhancement 8,
+                                                      remains unbuilt)
+[x] Strategy comparison can be demonstrated        (sim/run_sim.py --compare's
+                                                      3-arm report, Phase 4)
+[x] Existing MVP still works                       (877 tests, byte-identical
+                                                      proofs at every phase)
+[x] Existing audit trail still works
+[x] Existing baseline experiment still works
+[x] No existing safety/stop rules are bypassed     (dedicated hard-stop-
+                                                      precedence tests, Phase 3)
+[ ] Demo can be completed reliably                 (Phases 11-12, not yet done)
 ```
 
 ---
 
 # 27. Priority Ranking
+
+**Updated Phase 5 (close-out):** this is the ORIGINAL plan, written before
+any implementation started. 8 of these 12 items now have a real, if partial,
+slice built -- items 1, 2, 3, 4, 5, 7, 9, and 12 (see "Implementation
+Status" near the top of this document for exactly how much of each). Items
+6 (Payment Propensity), 8 (Closed-Loop Profile Updates), 10 (Strategy
+Simulator), and 11 (What-If Simulation) remain genuinely unbuilt. Left as
+originally written below, for the historical record of what was planned and
+in what order.
 
 If time becomes limited, implement in this exact order:
 

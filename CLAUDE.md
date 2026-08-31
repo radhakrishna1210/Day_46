@@ -133,52 +133,46 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       recovered in 5/6 seeds (seed 2024 the one loss) -- see notes for the
       mechanism. Caught and fixed a real audit-trail-ordering bug along the
       way (see notes).
+- [x] P5 - Final close-out: coherence + staleness pass across README/
+      ARCHITECTURE/PROJECT_WALKTHROUGH/winning_layer before the demo video.
+      PROJECT_WALKTHROUGH.md was badly stale (pre-Phase-1 snapshot: wrong
+      test count, no P0-P4 rows in its status table, a flatly false "no
+      ablation arm exists" claim in two places) -- now synced. winning_layer.md
+      had a wrong phase attribution and a 15-item Definition of Done
+      checklist that had sat 100% unchecked despite ~10 items being true --
+      now corrected/checked with citations. Removed the dead
+      stop_rules.max_per_rung config key (never read by any code; wiring it
+      up now would have been a real behaviour change, not a cleanup) --
+      tests/test_smoke.py now pins each rung's own max_messages instead.
+      Ran sim/run_sim.py --compare end-to-end and read the actual rendered
+      report.html; no glitches found in the new 3-column layout.
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 4 done and committed (see git log for the hash(es)). Part A:
-  sim/personas.py's react() gained action_kind= ("send" default,
-  byte-identical to pre-P4, pinned by a snapshot test); cash_tight boosts
-  PROMISE probability for payment_plan (PAYMENT_PLAN_PROMISE_BOOST),
-  habitual_delayer skews toward the existing promise_partial_hinglish
-  fixture for counter_settle (COUNTER_SETTLE_PARTIAL_BIAS) -- both gated so
-  a persona with no configured entry behaves exactly like "send", with zero
-  extra rng draws (matters: an unconditional rng.random() call, even one
-  whose result is never used, still perturbs the NEXT draw). Part B:
-  run_agent(seed, days, ev_mode=False) is the real third arm; sim/run_sim.py
-  --compare now runs and reports all three (baseline/agent/agent+EV) by
-  default on the same 6-seed set. multi_seed_summary()'s primary_agent_ev
-  param and results.json's agent_ev section are both optional/additive.
-  report/build_report.py + report.html.j2 render a 3rd column when present.
-- ABLATION FINDING, the number Phase 2/3 deferred: agent+EV beats plain
-  agent on rupees recovered in 5/6 seeds (seed 2024: -Rs 51,765; every other
-  seed +Rs 45,978 to +Rs 9,81,368). MECHANISM, worth remembering before
-  touching this area again: almost the entire effect traces to payment_plan
-  specifically -- every OTHER thing EV changes (firm vs soft_nudge,
-  human_handoff vs legal_escalation) maps to the IDENTICAL Action.kind/rung/
-  skeleton either way (writer.py untouched, rung 4 sends nothing to a
-  buyer), so it only relabels the audit trail and cannot move simulated
-  behavior at all. payment_plan is the only action that changes Action.kind
-  in a way personas.react() actually treats differently.
-- A FINDING SURFACED, NOT FIXED: counter_settle's persona behaviour (Part A)
-  is implemented and directly unit-tested, but never actually fires in a
-  real run -- can_pay_but_wont's EV ranking always puts legal_facts (100%
-  recovery fraction, never penalised by broken promises) ahead of
-  counter_settle (70% fraction, IS penalised) at every outstanding amount
-  and broken-promise count under the shipped config/rules.yaml grid. Stated
-  plainly rather than re-tuning the grid to manufacture a win, same
-  treatment as Phase 2's own good_customer finding.
-- A REAL BUG CAUGHT ON REVIEW: run_agent() unconditionally clears+rewrites
-  the shared on-disk audit trail every call. Computing agent_ev right after
-  agent (the natural CLI order) silently left agent_ev's trail on disk where
-  report/build_report.py's excerpt/early-warnings/trip-wires and
-  multi_seed_summary()'s own "restore the primary trail" both expect
-  agent's. Fixed with the same snapshot/restore pattern multi_seed_summary()
-  already uses, right around the agent_ev call in main()'s --compare branch.
-- 877 tests passing (850 + 27). Zero regressions -- full suite plus a
-  git-stash-verified byte-identical proof for personas.react()'s default
-  action_kind and run_agent()'s default ev_mode. Known limitations carried
-  forward: no message-content differentiation by action (engine/writer.py
-  untouched), no reactive settlement-offer handling, counter_settle inert
-  in practice (above). willingness/average_delay_days, Action.kind's
-  string-based design, and stop_rules.max_per_rung remain as before.
+- Phase 5 (final close-out) done and committed -- see git log. Coherence/
+  staleness pass across README/ARCHITECTURE/PROJECT_WALKTHROUGH.md/
+  winning_layer.md; removed the dead stop_rules.max_per_rung config key
+  (see the P5 checklist entry above for specifics); ran --compare
+  end-to-end and read the rendered report.html directly (clean, no
+  glitches in the new 3-column layout). Nothing in engine/ or sim/ changed
+  behaviourally this session -- docs + one dead config key only.
+- THE TWO HEADLINE CLAIMS, both true, both now stated together everywhere
+  a judge would look (README top, PROJECT_WALKTHROUGH headline + pitch C):
+  the core agent beats the naive baseline on rupees recovered in 6/6 tested
+  seeds; the EV/negotiation layer (Phase 3-4) adds a further ₹9,81,368 on
+  seed 42 and wins on 5/6 of those same seeds (seed 2024 the one loss,
+  reported not hidden). Mechanism, if this needs re-deriving: the ablation
+  gain traces almost entirely to payment_plan -- every other EV relabeling
+  (firm vs soft_nudge, human_handoff vs legal_escalation) maps to an
+  identical Action.kind/rung/skeleton and cannot move simulated behavior.
+  counter_settle's own persona behaviour is real and tested but never
+  actually wins a live decide() ranking under the shipped EV grid --
+  stated, not hidden, same as Phase 2's good_customer finding.
+- 877 tests passing. Zero regressions. Known limitations, unchanged and
+  now the true remaining list: no message-content differentiation by
+  negotiation action (engine/writer.py untouched), no reactive settlement-
+  offer handling, counter_settle inert in practice, willingness still
+  inherits average_delay_days, Action.kind is string-based not an enum.
+  Only Phase 11 (demo video) and 12 (final submit) remain -- nothing in
+  the codebase should need touching unless one of those turns up a real
+  problem.

@@ -86,7 +86,10 @@ seeded data.
 4. **Next-best-action selection** -- the Brain picks exactly one action per
    invoice per day: send at a given rung, wait (a promise is active), hand
    off to a human (dispute or final rung), or stop (opt-out or exhausted
-   attempts).
+   attempts). Behind a config flag (`brain.ev_mode`, off by default), it can
+   instead choose by expected value among that same space plus two more --
+   offering a payment plan or a counter-settlement -- for whichever buyers
+   the ability/willingness quadrant says are worth it.
 
 ---
 
@@ -211,7 +214,7 @@ Rules where mistakes are expensive, AI where language is messy:
 
 | Job | Rules or AI |
 |---|---|
-| Detect overdue invoices, score buyers, law/interest/tax math, escalation ladder, stopping rules, buyer-level message grouping | Rules |
+| Detect overdue invoices, score buyers, law/interest/tax math, escalation ladder, stopping rules, buyer-level message grouping, ability/willingness quadrant + recovery-probability/EV ranking | Rules |
 | Reading buyer replies into structured intent, drafting messages, ambiguous judgment calls | AI -- Gemini (Flash-tier model), via `engine/llm.py`, logged to the audit trail |
 
 `engine/llm.py` is the *only* caller of the Gemini API. `draft_message` and

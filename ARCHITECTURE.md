@@ -701,7 +701,7 @@ revenue-recovery-agent/
 │   ├── templates/         ← the Jinja2 template(s) build_report.py renders
 │   └── out/                ← generated, gitignored: results.json, report.html
 ├── audit/                 ← generated audit logs land here (append-only JSONL); audit/drafts/ holds Samadhaan drafts
-└── tests/                 ← 24 files, 829 tests. Beyond the obvious per-module tests, three are
+└── tests/                 ← 24 files, 877 tests. Beyond the obvious per-module tests, three are
                               structural guards worth naming: test_sim_isolation.py (AST-scans
                               engine/ + main.py to prove the agent never reads sim/hidden_personas.json),
                               test_no_legal_constants.py (AST-scans for hardcoded legal numbers/citations
