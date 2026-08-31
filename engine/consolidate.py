@@ -19,12 +19,14 @@ that depends on reliably parsing LLM output -- see engine/writer.py's
 passes_guardrail_multi(). So a buyer may receive up to TWO envelopes on a
 given day (one per tier), never a hard guarantee of exactly one.
 
-Only a genuine buyer-facing SEND -- kind=="send" and a skeleton whose
+Only a genuine buyer-facing send -- kind in {"send", "payment_plan",
+"counter_settle"} (Phase 3 added the last two: both are buyer-facing sends at
+an already-chosen rung, exactly like "send") and a skeleton whose
 sends_to_buyer is true -- is eligible for a bundle. Everything else (wait,
 handoff, stop; or a send whose skeleton refuses to send, which should never
 happen but is checked anyway) is dropped here. This is what keeps a disputed
 invoice out of a bundle: engine.brain.decide()'s dispute rule fires before
-any SEND could be chosen, so a disputed invoice only ever reaches this module
+any send could be chosen, so a disputed invoice only ever reaches this module
 as a HANDOFF, which this filter already excludes -- see
 tests/test_consolidate.py for the explicit proof, not just the argument.
 """
@@ -43,15 +45,19 @@ def _tier(rung: int) -> str:
     return COURTESY if rung <= 1 else ESCALATED
 
 
-def _eligible(action: Any) -> bool:
-    """True only for a genuine buyer-facing send.
+#: Buyer-facing send kinds (engine.brain.SEND, PAYMENT_PLAN, COUNTER_SETTLE),
+#: named as plain strings rather than imported from engine.brain so this
+#: module keeps no dependency on the brain -- consolidate.py groups whatever
+#: Action-shaped objects it is given. Phase 3 adds the last two: both are
+#: buyer-facing sends at an already-chosen rung, exactly like "send", just
+#: carrying a different negotiation action in their audit detail.
+_SEND_KINDS = frozenset({"send", "payment_plan", "counter_settle"})
 
-    kind is checked against the string "send" (engine.brain.SEND) rather than
-    importing engine.brain, so this module has no dependency on the brain --
-    consolidate.py groups whatever Action-shaped objects it is given.
-    """
+
+def _eligible(action: Any) -> bool:
+    """True only for a genuine buyer-facing send."""
     return (
-        getattr(action, "kind", None) == "send"
+        getattr(action, "kind", None) in _SEND_KINDS
         and getattr(action, "skeleton", None) is not None
         and bool(action.skeleton.get("sends_to_buyer"))
     )

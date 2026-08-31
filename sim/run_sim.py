@@ -51,6 +51,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data import generate, store
+from engine import ability_willingness
 from engine import audit, brain, channels, consolidate, law, llm, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
@@ -572,6 +573,20 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             # engine.brain.decide() never knows a bundle exists; every stop
             # rule, promise grace and rung selection is computed exactly as
             # if consolidation did not exist (CLAUDE.md W3 plan, point b).
+            #
+            # Phase 3: the score handed to decide() is now the two-axis one
+            # (engine.ability_willingness.two_axis_score()), computed fresh
+            # per INVOICE rather than reused from the per-buyer `scores` dict
+            # above -- ability_for_invoice sizes ability to what is actually
+            # owed on THIS invoice, per its own docstring, and a buyer with
+            # several invoices of different sizes needs a different ability
+            # reading for each. It is a strict superset of what score_buyer()
+            # returns (same score/confidence/history_count, plus
+            # ability/willingness/quadrant), so this changes nothing about
+            # decide()'s output while config/rules.yaml's brain.ev_mode
+            # stays "off" -- see tests/test_brain.py's snapshot test. `scores`
+            # itself is untouched and keeps feeding early warnings and the
+            # buyer panel, both of which read the legacy score_buyer() shape.
             day_actions: list[brain.Action] = []
             for invoice in queue:
                 inv_id = invoice["invoice_id"]
@@ -581,7 +596,9 @@ def run_agent(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                 plist = promises_by_invoice.setdefault(inv_id, [])
                 hist = history.setdefault(inv_id, [])
 
-                action = brain.decide(invoice, buyer, scores[buyer["buyer_id"]], position,
+                two_axis = ability_willingness.two_axis_score(
+                    buyer, grouped.get(buyer["buyer_id"], []), today, invoice=invoice)
+                action = brain.decide(invoice, buyer, two_axis, position,
                                       promises=plist, history=hist, log=True)
                 last_action_by_invoice[inv_id] = {
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,

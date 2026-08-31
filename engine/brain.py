@@ -26,6 +26,22 @@ exhaustion check would swallow every rung-4 decision into a wait and the final
 rung would be unreachable. The rung-4 branch therefore sits ABOVE every
 send-gating check -- those checks govern contacting a buyer, and a handoff
 contacts nobody.
+
+PHASE 3: once every stopping rule and rung gate above has cleared and the
+escalation walk has picked a rung, decide() used to build one unconditional
+SEND at that rung. With config/rules.yaml's brain.ev_mode set to "on" -- and
+only for a caller that supplies a two-axis score (engine.ability_willingness.
+two_axis_score()'s output, carrying a "quadrant" key) -- that fallthrough is
+replaced by an EV-informed choice among engine.negotiation's action space,
+narrowed to whatever config/rules.yaml's negotiation.eligible_actions allows
+for this buyer's quadrant and to whatever the escalation walk has ALREADY
+made reachable today for a handoff specifically (chosen must already equal
+HANDOFF_RUNG, the identical condition the non-EV rung-4 step above uses --
+NOT merely the legal ceiling being open; see eligible_negotiation_actions()).
+Two new Action kinds exist for it: PAYMENT_PLAN and COUNTER_SETTLE, both
+buyer-facing sends at the already-chosen rung, same as SEND. With ev_mode
+off (the default) or no quadrant on the score, decide() is
+byte-for-byte what it always was -- see tests/test_brain.py's snapshot test.
 """
 
 from __future__ import annotations
@@ -36,13 +52,19 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from engine import audit, rungs, samadhaan
+from engine import audit, negotiation, rungs, samadhaan
+from engine.ability_willingness import outstanding_paise
 from engine.config import rules
 from engine.llm import LLMError, llm
 
 #: Kinds of action. `wait` is recoverable, `stop` is terminal, `handoff` gives
 #: the case to a human, `send` is the only one that produces a message.
+#: PAYMENT_PLAN and COUNTER_SETTLE are Phase 3 additions -- both are
+#: buyer-facing sends, exactly like SEND, at the already-chosen rung; only
+#: engine.negotiation's EV ranking (behind config/rules.yaml's
+#: brain.ev_mode) ever produces one.
 WAIT, SEND, HANDOFF, STOP = "wait", "send", "handoff", "stop"
+PAYMENT_PLAN, COUNTER_SETTLE = "payment_plan", "counter_settle"
 
 HANDOFF_RUNG = 4
 
@@ -149,6 +171,59 @@ def broken_promises(promises: list[dict[str, Any]], today: date, grace_days: int
         if promise.get("status") in {"open", "broken"}
         and _as_date(promise["promised_date"]) + timedelta(days=grace_days) < today
     )
+
+
+def eligible_negotiation_actions(
+    quadrant: str, chosen_rung: int, config: dict[str, Any],
+) -> tuple[str, ...]:
+    """Which of engine.negotiation.ACTIONS are worth ranking for this buyer today.
+
+    Two independent gates, both config-driven, applied before EV ever ranks
+    anything -- the same two-gate shape the ladder itself already uses (a
+    quadrant/pacing band decides what is EVER appropriate; the escalation
+    walk decides what is reachable TODAY):
+
+        config/rules.yaml's negotiation.eligible_actions says what is ever
+        appropriate for THIS buyer's profile -- a good_customer is never
+        offered legal pressure, a can_pay_but_wont is never offered a
+        payment plan.
+
+        `chosen_rung` gates human_handoff/legal_escalation on the SAME
+        condition decide()'s own non-EV rung-4 step uses -- chosen_rung must
+        already equal HANDOFF_RUNG. This is deliberately NOT "is the legal
+        ceiling open" (available_rung == HANDOFF_RUNG): the ceiling opening
+        only means the LAW would permit rung 4 today, not that this
+        invoice's own contact history has organically escalated there (a
+        broken-promise jump, a rung fully exhausted, or enough elapsed time
+        at the top rung already used -- see decide()'s step 7/7b). A
+        first-ever contact, for instance, can never reach chosen_rung 4 on
+        the backlog formula alone, however wide open the ceiling is. Gating
+        on the ceiling instead of chosen_rung would let EV send a case
+        straight to a human handoff sooner than the ordinary escalation walk
+        ever would have -- exactly the over-eager failure mode this
+        parameter name is written to rule out.
+
+        In practice, this makes human_handoff/legal_escalation permanently
+        excluded whenever this function is called from decide()'s own EV
+        branch: that branch only runs once chosen_rung is confirmed BELOW
+        HANDOFF_RUNG (decide()'s step 8 already intercepts and returns a
+        HANDOFF, unconditionally, in every case where chosen_rung reaches
+        HANDOFF_RUNG, before the EV branch ever runs). That is the correct,
+        conservative behaviour, not a bug: EV may choose a different KIND of
+        action among whatever is already reachable today, never make MORE
+        reachable than the existing escalation walk already allows. The
+        parameter still takes a general chosen_rung (rather than hardcoding
+        the exclusion) so this stays correct if that invariant ever changes,
+        and so it can be tested directly, in isolation, at chosen_rung == 4.
+
+    Rules decide what is possible; EV decides what is best among what is
+    possible.
+    """
+    allowed = list(config["negotiation"]["eligible_actions"][quadrant])
+    if chosen_rung < HANDOFF_RUNG:
+        allowed = [a for a in allowed
+                  if a not in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)]
+    return tuple(allowed)
 
 
 def _is_ambiguous(
@@ -429,6 +504,66 @@ def decide(
         return act(SEND, chosen, f"{why}. Model saw no reason to hold off: {reasoning}",
                    source="llm", capped=capped, skeleton=skeleton,
                    extra={"llm_decision": decision, "llm_ignored": decision != "wait"})
+
+    # 13. EV-informed action selection (Phase 3), replacing the unconditional
+    #     send below -- only when config/rules.yaml's brain.ev_mode is "on"
+    #     AND the caller supplied a two-axis score (one carrying "quadrant";
+    #     see engine.ability_willingness.two_axis_score()). A caller still
+    #     passing a plain engine.score.score_buyer() dict has no "quadrant"
+    #     key, so it always falls through to the unconditional send exactly
+    #     as before -- this is what keeps ev_mode: off byte-for-byte
+    #     identical to pre-Phase-3 output (tests/test_brain.py's snapshot
+    #     test), and what keeps this branch inert for every caller (main.py,
+    #     sim/scenario_tc141.py) that has not opted into a two-axis score.
+    #
+    #     Candidates are gated by `chosen`, NOT `ceiling`: eligible_negotiation_
+    #     actions() only admits human_handoff/legal_escalation once chosen has
+    #     ALREADY reached HANDOFF_RUNG -- the identical condition step 8 above
+    #     uses. Since step 8 unconditionally intercepts and returns a HANDOFF
+    #     whenever that is true, execution only ever reaches this branch with
+    #     chosen < HANDOFF_RUNG, so a handoff is never actually one of EV's
+    #     live choices here today. That is intentional, not dead code left by
+    #     accident: EV may choose a different KIND of action among whatever is
+    #     already reachable today (a send vs. a payment plan vs. a wait), but
+    #     must never become MORE willing to hand a case to a human than the
+    #     existing escalation walk already is -- see
+    #     eligible_negotiation_actions()'s own docstring for the full
+    #     reasoning, and tests/test_brain.py's ceiling/chosen-rung tests for
+    #     the proof.
+    quadrant = score.get("quadrant")
+    if quadrant and str(config.get("brain", {}).get("ev_mode", "off")) == "on":
+        promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
+        candidates = eligible_negotiation_actions(quadrant, chosen, config)
+        ranked = negotiation.rank_actions(
+            quadrant, outstanding_paise(invoice), broken_promises=promise_count,
+            candidates=candidates,
+        )
+        winner = ranked[0]
+        neg_action = winner["action"]
+        ev_extra = {"negotiation_action": neg_action, "ev": winner}
+        ev_why = (f"{why}; EV ranked {neg_action} highest for a {quadrant} buyer "
+                  f"({winner['probability']}% recover, EV {winner['ev_paise']} paise)")
+
+        if neg_action == negotiation.WAIT:
+            return act(WAIT, chosen, ev_why, capped=capped,
+                       review=today + timedelta(days=CEILING_REVIEW_DAYS), extra=ev_extra)
+
+        if neg_action in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION):
+            # Unreachable via this call site as of Phase 3 -- see the comment
+            # above and eligible_negotiation_actions()'s docstring. Kept (not
+            # collapsed away) so the mapping stays correct if that invariant
+            # ever changes, and so engine.negotiation's own action space
+            # still maps onto a real Action.kind everywhere it is used.
+            draft = samadhaan.build_draft(invoice, buyer, legal_position, today)
+            return act(HANDOFF, HANDOFF_RUNG, ev_why, capped=capped,
+                       extra={**ev_extra, "samadhaan_draft": {
+                           "ready": draft["ready"], "blockers": draft["blockers"],
+                           "warnings": draft["warnings"],
+                       }})
+
+        kind = {negotiation.PAYMENT_PLAN: PAYMENT_PLAN,
+                negotiation.COUNTER_SETTLE: COUNTER_SETTLE}.get(neg_action, SEND)
+        return act(kind, chosen, ev_why, capped=capped, skeleton=skeleton, extra=ev_extra)
 
     return act(SEND, chosen, why, capped=capped, skeleton=skeleton)
 

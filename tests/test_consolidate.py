@@ -16,12 +16,19 @@ from engine import brain, consolidate
 _UNSET = object()
 
 
+#: Kinds that default to a real skeleton below -- SEND and Phase 3's two new
+#: buyer-facing kinds, which reuse the same skeleton construction (see
+#: engine.brain.decide()'s EV branch).
+_SEND_LIKE_KINDS = (brain.SEND, "payment_plan", "counter_settle")
+
+
 def action(
     invoice_id: str, buyer_id: str, *, kind: str = brain.SEND, rung: int = 1,
     sends_to_buyer: bool = True, skeleton: dict | None | object = _UNSET,
 ) -> brain.Action:
     if skeleton is _UNSET:
-        skeleton = {"rung": rung, "sends_to_buyer": sends_to_buyer} if kind == brain.SEND else None
+        skeleton = ({"rung": rung, "sends_to_buyer": sends_to_buyer}
+                    if kind in _SEND_LIKE_KINDS else None)
     return brain.Action(
         kind=kind, rung=rung, reason="test", source="rule",
         invoice_id=invoice_id, buyer_id=buyer_id, available_rung=4,
@@ -66,6 +73,39 @@ def test_rung_two_and_rung_three_for_the_same_buyer_are_bundled_together() -> No
     bundles = consolidate.bundle_sends(actions)
     assert len(bundles) == 1
     assert bundles[0]["tier"] == consolidate.ESCALATED
+
+
+# --- Phase 3's new kinds: buyer-facing sends, exactly like SEND -----------
+
+def test_a_payment_plan_action_is_bundled_like_an_ordinary_send() -> None:
+    actions = [action("INV-1", "BUY-01", kind="payment_plan", rung=2)]
+    bundles = consolidate.bundle_sends(actions)
+    assert len(bundles) == 1
+    assert bundles[0]["tier"] == consolidate.ESCALATED
+    assert [a.invoice_id for a in bundles[0]["actions"]] == ["INV-1"]
+
+
+def test_a_counter_settle_action_is_bundled_like_an_ordinary_send() -> None:
+    actions = [action("INV-1", "BUY-01", kind="counter_settle", rung=2)]
+    bundles = consolidate.bundle_sends(actions)
+    assert len(bundles) == 1
+    assert bundles[0]["tier"] == consolidate.ESCALATED
+
+
+def test_a_payment_plan_and_a_send_for_the_same_buyer_and_tier_are_bundled_together() -> None:
+    actions = [action("INV-1", "BUY-01", kind=brain.SEND, rung=2),
+               action("INV-2", "BUY-01", kind="payment_plan", rung=3)]
+    bundles = consolidate.bundle_sends(actions)
+    assert len(bundles) == 1
+    assert [a.invoice_id for a in bundles[0]["actions"]] == ["INV-1", "INV-2"]
+
+
+def test_a_payment_plan_with_no_skeleton_never_enters_a_bundle() -> None:
+    """Defensive, mirroring the plain-send case: a payment_plan/counter_settle
+    action is only eligible with a real buyer-facing skeleton attached."""
+    actions = [action("INV-1", "BUY-01", kind="payment_plan", rung=2, skeleton=None)]
+    bundles = consolidate.bundle_sends(actions)
+    assert bundles == []
 
 
 # --- what must never enter a bundle -----------------------------------------

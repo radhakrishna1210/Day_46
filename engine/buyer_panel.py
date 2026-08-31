@@ -37,7 +37,11 @@ from engine.law import outstanding_paise as law_outstanding_paise
 #: not yet overdue -- has no recorded action at all.
 NOT_YET_DUE, IN_LADDER, HANDED_OFF, STOPPED = "not_yet_due", "in_ladder", "handed_off", "stopped"
 
-_LADDER_KINDS = frozenset({"wait", "send"})
+#: Phase 3 added engine.brain's payment_plan/counter_settle kinds -- both are
+#: buyer-facing sends at an already-chosen rung, exactly like "send", so they
+#: belong in the same "still being chased" bucket, not silently dropped into
+#: neither in_ladder nor handed_off nor stopped.
+_LADDER_KINDS = frozenset({"wait", "send", "payment_plan", "counter_settle"})
 
 
 def _promise_reliability(

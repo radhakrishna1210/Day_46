@@ -181,6 +181,25 @@ def test_recovery_state_buckets_by_last_action_kind() -> None:
     assert state == {"not_yet_due": 1, "in_ladder": 2, "handed_off": 1, "stopped": 1}
 
 
+def test_recovery_state_counts_phase_3s_new_kinds_as_in_ladder() -> None:
+    """engine.brain's payment_plan/counter_settle actions (Phase 3) are
+    buyer-facing sends at an already-chosen rung, exactly like "send" -- they
+    must land in in_ladder, not silently vanish from every bucket."""
+    invs = [
+        invoice(invoice_id="INV-PLAN", buyer_id="BUY-1"),
+        invoice(invoice_id="INV-COUNTER", buyer_id="BUY-1"),
+    ]
+    last_action = {
+        "INV-PLAN": {"kind": "payment_plan", "rung": 2, "reason": "x"},
+        "INV-COUNTER": {"kind": "counter_settle", "rung": 3, "reason": "x"},
+    }
+    rows = bp.buyer_panel(
+        _buyers("BUY-1"), _grouped(*invs), {}, {}, {"BUY-1": _score()}, last_action, TODAY,
+    )
+    state = rows[0]["recovery_state"]
+    assert state == {"not_yet_due": 0, "in_ladder": 2, "handed_off": 0, "stopped": 0}
+
+
 # --------------------------------------------------------------------------
 # which buyers appear, and in what order
 # --------------------------------------------------------------------------

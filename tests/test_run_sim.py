@@ -110,6 +110,49 @@ def test_run_baseline_completes_and_conserves_money(baseline_report) -> None:
     assert baseline_report["handoffs"] == 0
 
 
+#: A snapshot of run_agent(seed=42, days=DAYS)'s headline numbers, taken
+#: immediately before Phase 3 (config/rules.yaml brain.ev_mode + the switch
+#: to engine.ability_willingness.two_axis_score() in the day loop) touched
+#: anything -- via `git stash` back to the pre-Phase-3 tree, then restored.
+#: Phase 3's whole premise is that ev_mode: off (the shipped default) must
+#: reproduce this exactly: the two-axis score is a strict superset of what
+#: score_buyer() returns, and engine.brain.decide()'s EV branch never runs
+#: without a "quadrant" key AND ev_mode: on. This is the snapshot-diff proof
+#: the phase's own brief asked for, protecting the seeded demo win -- not
+#: just "tests still pass".
+PRE_PHASE_3_SNAPSHOT = {
+    "recovered_paise": 1_591_472_941,
+    "outstanding_paise": 1_467_967_059,
+    "disputed_paise": 438_680_000,
+    "disputed_count": 17,
+    "messages_sent": 71,
+    "invoice_contacts": 139,
+    "handoffs": 40,
+    "stops": 6,
+    "disputes": 16,
+    "avg_days_to_pay": 96.0,
+    "exceptions_count": 60,
+}
+
+
+def test_ev_mode_off_reproduces_the_pre_phase_3_snapshot_exactly(agent_report) -> None:
+    final = agent_report["final"]
+    actual = {
+        "recovered_paise": final["recovered_paise"],
+        "outstanding_paise": final["outstanding_paise"],
+        "disputed_paise": final["disputed_paise"],
+        "disputed_count": final["disputed_count"],
+        "messages_sent": agent_report["messages_sent"],
+        "invoice_contacts": agent_report["invoice_contacts"],
+        "handoffs": agent_report["handoffs"],
+        "stops": agent_report["stops"],
+        "disputes": agent_report["disputes"],
+        "avg_days_to_pay": agent_report["avg_days_to_pay"],
+        "exceptions_count": len(agent_report["exceptions"]),
+    }
+    assert actual == PRE_PHASE_3_SNAPSHOT
+
+
 def test_llm_mode_in_the_environment_is_unaffected_by_a_full_run(monkeypatch) -> None:
     monkeypatch.setenv("LLM_MODE", "live")
     run_sim.run_agent(seed=42, days=5, verbose=False)

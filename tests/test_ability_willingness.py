@@ -276,15 +276,17 @@ def test_the_breakdown_arithmetic_adds_up_to_the_ability_score() -> None:
 
 # --- the Brain must not have started reading any of this yet --------------
 
-def test_the_brain_does_not_consume_the_two_axis_score_in_this_phase() -> None:
-    """Phase 1 is compute-and-explain only; acting on it is Phase 2.
+def test_the_brain_now_reads_the_two_axis_score_as_of_phase_3() -> None:
+    """Phase 1 was compute-and-explain only; Phase 3 is exactly the phase
+    that wires the quadrant into engine/brain.py.
 
-    A structural check rather than a promise in a comment: if a later change
-    wires the quadrant into engine/brain.py, this test fails and whoever did
-    it has to come and update the phase boundary deliberately.
+    The inverse of the Phase 1-2 tripwire this replaces: that test asserted
+    engine/brain.py never mentioned "quadrant"; this one marks that the
+    wiring has actually landed, so a later regression that quietly drops the
+    EV branch (rather than deliberately removing it) gets caught here too.
     """
     from pathlib import Path
     source = Path(__file__).resolve().parents[1] / "engine" / "brain.py"
     text = source.read_text(encoding="utf-8")
-    for marker in ("ability_willingness", "quadrant", "two_axis_score"):
-        assert marker not in text, f"engine/brain.py now references {marker!r} -- that is Phase 2"
+    for marker in ("ability_willingness", "quadrant"):
+        assert marker in text, f"engine/brain.py no longer references {marker!r}"

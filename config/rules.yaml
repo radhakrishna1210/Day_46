@@ -385,16 +385,35 @@ consolidation:
   # llm.max_tokens.draft_message, which is sized for one invoice.
   max_invoices_per_message: 6
 
+# --- The Brain's use of the EV model (engine/brain.py) --------------------
+# Phase 3: engine/brain.py's decide() can replace its unconditional "send at
+# the chosen rung" fallthrough with an EV-informed choice among whatever
+# negotiation.eligible_actions (below) says is even a candidate for this
+# buyer's quadrant, further narrowed by which of those are reachable TODAY --
+# a handoff needs the SAME condition decide()'s own non-EV rung-4 step uses
+# (the escalation walk's own chosen rung must already equal HANDOFF_RUNG),
+# NOT merely the legal ceiling being open. See
+# engine.brain.eligible_negotiation_actions()'s docstring for why that
+# distinction matters: gating on the ceiling alone would let EV send a case
+# to a human handoff sooner than the ordinary escalation walk ever would
+# have, which this phase's own design explicitly rules out.
+#
+# off (default): decide() behaves byte-for-byte as it did before this phase
+#   -- protected by tests/test_brain.py's snapshot-diff test.
+# on: the EV branch runs, for any caller that supplies a two-axis score
+#   (i.e. a score dict carrying "quadrant" -- engine.ability_willingness.
+#   two_axis_score()'s output). A caller still passing a plain
+#   engine.score.score_buyer() dict has no "quadrant" key, so the EV branch
+#   never fires for it regardless of this flag -- it always gets the
+#   unconditional send.
+brain:
+  ev_mode: off
+
 # --- Recovery probability + expected value (engine/negotiation.py) --------
-# Phase 2: for a fixed set of candidate recovery actions, a rule-based
+# Phase 2 built the ranking; Phase 3 (brain.ev_mode above) is what acts on it
+# when enabled. For a fixed set of candidate recovery actions: a rule-based
 # P(recover), an expected recovered amount, a cost, and
 # EV = P(recover) x expected_recovery_paise - cost_paise.
-#
-# PHASE 2 SCOPE: computed and ranked only. engine/brain.py does not read any
-# of this yet -- tests/test_negotiation.py carries the tripwire, the direct
-# sibling of test_ability_willingness.py's Phase 1 one. Acting on the ranking
-# (choosing an action, wiring payment_plan/counter_settle into Action.kind)
-# is Phase 3.
 #
 # These are OUR policy assumptions about probability and cost, not statute --
 # the same reasoning already written down for law_gates above ("These are OUR
@@ -402,6 +421,38 @@ consolidation:
 # config/legal.yaml") applies here even more directly: there is no historical
 # recovery-rate data behind a single one of these numbers.
 negotiation:
+  # Which of negotiation.ACTIONS are even worth considering for a buyer in
+  # each quadrant -- a second, independent gate alongside handoff
+  # reachability (engine/brain.py removes human_handoff/legal_escalation
+  # from this list unless the escalation walk's own chosen rung has already
+  # reached HANDOFF_RUNG -- in practice this makes both permanently
+  # unreachable via decide()'s EV branch, since decide()'s own non-EV rung-4
+  # step already intercepts every case where that is true, before the EV
+  # branch ever runs; see engine/brain.py's eligible_negotiation_actions()).
+  # Rules decide what's POSSIBLE for this buyer's profile; EV decides what's
+  # BEST among what's possible.
+  #
+  # wait is eligible everywhere -- it is the safe default, and excluding it
+  # anywhere would mean EV could never choose patience for a quadrant where
+  # that is sometimes right. payment_plan is withheld from can_pay_but_wont
+  # (rewarding a buyer who can pay but won't with a payment plan undermines
+  # the point) and from high_risk (too little confidence they would honor
+  # one). legal_facts/legal_escalation/counter_settle are withheld from
+  # good_customer and cash_flow_problem (a good payer or a genuinely
+  # cash-strapped one does not warrant legal pressure) -- this is the fix for
+  # the good_customer finding this phase's own brief flagged: with the full
+  # action space, legal_facts (or legal_escalation) outranked soft_nudge even
+  # for the best-paying quadrant, because the EV grid has no term for the
+  # relationship cost of over-escalating a good payer. A tuning starting
+  # point, not a specification -- re-check against tests/test_brain.py's
+  # per-quadrant EV-mode cases if the underlying recovery_probability grid
+  # below ever moves.
+  eligible_actions:
+    good_customer:       [wait, soft_nudge, firm, payment_plan]
+    cash_flow_problem:   [wait, soft_nudge, firm, payment_plan, human_handoff]
+    can_pay_but_wont:    [wait, soft_nudge, firm, legal_facts, legal_escalation,
+                           human_handoff, counter_settle]
+    high_risk:           [wait, legal_facts, legal_escalation, human_handoff]
   # P(recover) if THIS action is the one taken from here, per quadrant, as a
   # percentage. ASSUMPTIONS, not measured outcomes -- the same honesty
   # already given to config/legal.yaml's buyer_tax_rate (30%, stated as an

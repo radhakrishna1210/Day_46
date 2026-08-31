@@ -239,17 +239,18 @@ def test_explain_action_mentions_every_factor_that_produced_it() -> None:
         assert item["factor"] in text
 
 
-# --- the Phase 2 tripwire: the Brain must not consume this yet -------------
+# --- the Phase 3 marker: the Brain now consumes this -----------------------
 
-def test_the_brain_does_not_consume_negotiation_in_this_phase() -> None:
-    """Phase 2 is compute-and-rank only; acting on it is Phase 3.
+def test_the_brain_now_consumes_negotiation_as_of_phase_3() -> None:
+    """Phase 2 was compute-and-rank only; Phase 3 is exactly the phase that
+    wires a chosen action into engine/brain.py.
 
-    The direct sibling of test_ability_willingness.py's Phase 1 tripwire --
-    delete this one in Phase 3, exactly like its Phase 1 twin.
+    The inverse of the Phase 2 tripwire this replaces, the direct sibling of
+    test_ability_willingness.py's own Phase 1/3 marker.
     """
     source = Path(__file__).resolve().parents[1] / "engine" / "brain.py"
     text = source.read_text(encoding="utf-8")
-    assert "negotiation" not in text, "engine/brain.py now references 'negotiation' -- that is Phase 3"
+    assert "negotiation" in text, "engine/brain.py no longer references 'negotiation'"
 
 
 # --- the no-cycle guard: negotiation.py must never import brain at module scope --

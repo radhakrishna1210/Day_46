@@ -12,7 +12,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from engine import audit, brain, law, rungs
+from engine import ability_willingness as aw
+from engine import audit, brain, law, negotiation, rungs
 
 TODAY = date(2026, 8, 24)          # a Monday
 
@@ -680,3 +681,238 @@ def test_ambiguity_is_decided_by_the_invoice_amount_not_a_history_flag() -> None
                contact("2026-08-10", 2, outcome="unclear_reply", reply="hmm")]
     action = brain.decide(record, buyer(), score(55), position, [], history)
     assert action.source == "rule", "a history flag revived the old fallback path"
+
+
+# --------------------------------------------------------------------------
+# Phase 3 -- EV-informed action selection (config/rules.yaml brain.ev_mode)
+# --------------------------------------------------------------------------
+
+def score_with_quadrant(quadrant: str, *, value: int = 70, broken: int = 0) -> dict:
+    """A two-axis-shaped score record: score()'s own fields, plus the
+    signals.broken_promises and quadrant keys only engine.ability_willingness.
+    two_axis_score() output carries and that decide()'s EV branch reads."""
+    return {
+        "buyer_id": "BUY-01", "name": "ABC Traders", "score": value,
+        "confidence": "high", "history_count": 12,
+        "signals": {"broken_promises": broken}, "quadrant": quadrant,
+    }
+
+
+def ev_config(**overrides) -> dict:
+    """config/rules.yaml with brain.ev_mode forced on, for tests that need it."""
+    from engine.config import rules
+    config = rules()
+    merged = {**config, "brain": {**config["brain"], "ev_mode": "on"}}
+    return {**merged, **overrides}
+
+
+#: Old enough that the legal ceiling is fully open (rung 4). NOT old enough,
+#: on its own, to make chosen_rung reach HANDOFF_RUNG -- with history=[]
+#: (first contact), decide()'s own backlog formula can never desire more
+#: than base + 1, so chosen stays well below 4 regardless of how wide open
+#: the ceiling is. This fixture exists specifically to exercise that gap:
+#: see test_ev_mode_never_jumps_to_handoff_just_because_the_ceiling_is_open.
+OLD_ENOUGH_FOR_CEILING_4 = "2026-06-01"
+
+
+def _chosen_rung_with_ev_off(record: dict, quadrant: str, **score_kwargs) -> int:
+    """The escalation walk's own chosen rung for this fixture, read off a
+    plain ev_mode: off decide() call rather than recomputed by hand -- the
+    single source of truth for "what would the non-EV path have done" that
+    every EV-mode test below compares against."""
+    position = law.legal_position(record, TODAY)
+    off = brain.decide(record, buyer(), score_with_quadrant(quadrant, **score_kwargs), position,
+                       [], [], log=False)
+    assert off.kind != brain.HANDOFF, (
+        "fixture assumption: this scenario must not already resolve to a handoff "
+        "via the non-EV path, or there is nothing left for the EV branch to choose"
+    )
+    return off.rung
+
+
+@pytest.mark.parametrize("quadrant", list(aw.QUADRANTS))
+def test_ev_mode_picks_the_top_ranked_eligible_action_per_quadrant(quadrant: str) -> None:
+    """The chosen action always matches negotiation.rank_actions() over
+    exactly the candidates config/rules.yaml's negotiation.eligible_actions
+    allows for this quadrant AND this invoice's actual chosen_rung, mapped to
+    the kind/rung this phase specifies."""
+    record = invoice(acceptance=OLD_ENOUGH_FOR_CEILING_4)
+    position = law.legal_position(record, TODAY)
+    chosen = _chosen_rung_with_ev_off(record, quadrant)
+
+    config = ev_config()
+    action = brain.decide(record, buyer(), score_with_quadrant(quadrant), position,
+                          [], [], config=config)
+
+    candidates = brain.eligible_negotiation_actions(quadrant, chosen, config)
+    expected = negotiation.rank_actions(
+        quadrant, aw.outstanding_paise(record), broken_promises=0, candidates=candidates,
+    )[0]
+    assert action.detail["negotiation_action"] == expected["action"]
+    assert action.detail["ev"] == expected
+
+    winner = expected["action"]
+    if winner == negotiation.WAIT:
+        assert action.kind == brain.WAIT
+    elif winner in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION):
+        assert (action.kind, action.rung) == (brain.HANDOFF, brain.HANDOFF_RUNG)
+    elif winner == negotiation.PAYMENT_PLAN:
+        assert action.kind == brain.PAYMENT_PLAN
+        assert action.skeleton is not None
+    elif winner == negotiation.COUNTER_SETTLE:
+        assert action.kind == brain.COUNTER_SETTLE
+        assert action.skeleton is not None
+    else:
+        assert action.kind == brain.SEND
+
+
+def test_ev_mode_never_offers_a_good_customer_legal_pressure() -> None:
+    """The good_customer finding this phase's own brief flagged: with the
+    full action space, legal_facts (or legal_escalation) outranked
+    soft_nudge even for the best-paying quadrant. eligible_actions withholds
+    legal_facts/legal_escalation/counter_settle from good_customer entirely,
+    so no candidate offering legal pressure is even ranked -- true at every
+    chosen_rung, since good_customer's own config list never contains them."""
+    config = ev_config()
+    for chosen_rung in (0, 1, 2, 3, brain.HANDOFF_RUNG):
+        candidates = brain.eligible_negotiation_actions(aw.GOOD_CUSTOMER, chosen_rung, config)
+        assert negotiation.LEGAL_FACTS not in candidates
+        assert negotiation.LEGAL_ESCALATION not in candidates
+        assert negotiation.COUNTER_SETTLE not in candidates
+
+
+# --- the handoff-reachability gate: never MORE permissive than the non-EV path ---
+
+def test_eligible_negotiation_actions_only_admits_a_handoff_at_the_handoff_rung() -> None:
+    """Direct, isolated proof of eligible_negotiation_actions()'s own gate,
+    independent of decide()'s control flow (which, as of Phase 3, never
+    actually calls it with chosen_rung == HANDOFF_RUNG -- see the next two
+    tests). human_handoff/legal_escalation are only ever candidates once
+    chosen_rung has ALREADY reached HANDOFF_RUNG, for every quadrant whose
+    config list offers them at all."""
+    config = ev_config()
+    for quadrant in (aw.CASH_FLOW_PROBLEM, aw.CAN_PAY_BUT_WONT, aw.HIGH_RISK):
+        below = brain.eligible_negotiation_actions(quadrant, brain.HANDOFF_RUNG - 1, config)
+        at = brain.eligible_negotiation_actions(quadrant, brain.HANDOFF_RUNG, config)
+        assert negotiation.HUMAN_HANDOFF not in below and negotiation.LEGAL_ESCALATION not in below
+        offered = set(config["negotiation"]["eligible_actions"][quadrant])
+        assert (negotiation.HUMAN_HANDOFF in at) == (negotiation.HUMAN_HANDOFF in offered)
+        assert (negotiation.LEGAL_ESCALATION in at) == (negotiation.LEGAL_ESCALATION in offered)
+
+
+def test_ev_mode_falls_back_when_the_legal_ceiling_alone_is_not_yet_open() -> None:
+    """The plainest case: high_risk's unrestricted top action is
+    legal_escalation, but with today's legal ceiling below HANDOFF_RUNG a
+    handoff is not yet reachable by any measure -- the Brain must fall back
+    to the next eligible candidate (legal_facts, a plain send)."""
+    record = invoice(acceptance="2026-08-05")     # a few days overdue, ceiling < 4
+    position = law.legal_position(record, TODAY)
+    assert position["available_rung"] < brain.HANDOFF_RUNG, "fixture assumption"
+
+    full_ranking = negotiation.rank_actions(
+        aw.HIGH_RISK, aw.outstanding_paise(record), broken_promises=0)
+    assert full_ranking[0]["action"] == negotiation.LEGAL_ESCALATION, "fixture assumption"
+
+    action = brain.decide(record, buyer(), score_with_quadrant(aw.HIGH_RISK), position,
+                          [], [], config=ev_config())
+    assert action.kind != brain.HANDOFF
+    assert action.detail["negotiation_action"] != negotiation.LEGAL_ESCALATION
+    assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
+    assert 1 <= action.rung <= position["available_rung"]
+
+
+def test_ev_mode_never_jumps_to_handoff_just_because_the_ceiling_is_open() -> None:
+    """The sharper case a plain ceiling check would miss: the legal ceiling
+    IS wide open (available_rung == 4), but this is a first-ever contact, so
+    the ordinary escalation walk's own chosen_rung cannot possibly have
+    reached HANDOFF_RUNG yet (see decide()'s backlog formula -- a first
+    contact desires at most base + 1). high_risk's unrestricted top action is
+    legal_escalation; EV must still fall back to legal_facts here, exactly as
+    it would with a low ceiling -- the ceiling being open is NOT, on its own,
+    sufficient to reach a human handoff any sooner than the non-EV path
+    would have."""
+    record = invoice(acceptance=OLD_ENOUGH_FOR_CEILING_4)
+    position = law.legal_position(record, TODAY)
+    assert position["available_rung"] == brain.HANDOFF_RUNG, "fixture assumption: ceiling wide open"
+    chosen = _chosen_rung_with_ev_off(record, aw.HIGH_RISK)
+    assert chosen < brain.HANDOFF_RUNG, "fixture assumption: a first contact never walks to rung 4"
+
+    action = brain.decide(record, buyer(), score_with_quadrant(aw.HIGH_RISK), position,
+                          [], [], config=ev_config())
+    assert action.kind != brain.HANDOFF
+    assert action.detail["negotiation_action"] not in (
+        negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)
+    assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
+
+
+@pytest.mark.parametrize("ev_mode", ["off", "on"])
+def test_hard_stops_short_circuit_before_any_ev_logic_runs(ev_mode: str) -> None:
+    """Every existing hard-stop path fires exactly the same way whether or
+    not EV mode is on -- opt-out, dispute, settlement, not-yet-due,
+    max-contacts, an active promise, the weekend and message spacing are all
+    upstream of the EV branch, unconditionally."""
+    config = ev_config() if ev_mode == "on" else None
+    two_axis = score_with_quadrant(aw.CAN_PAY_BUT_WONT)
+
+    def decide(record, *, who=None, promises=None, history=None, today=TODAY):
+        position = law.legal_position(record, today)
+        return brain.decide(record, who or buyer(), two_axis, position,
+                            promises or [], history or [], config=config)
+
+    opted_out = decide(invoice(acceptance="2025-06-01"), who=buyer(opted_out=True))
+    assert opted_out.kind == brain.STOP and "opted out" in opted_out.reason
+
+    disputed = decide(invoice(status="disputed"))
+    assert disputed.kind == brain.HANDOFF and "disputed" in disputed.reason
+
+    settled = decide(invoice(payments=[{"date": "2026-08-01", "amount_paise": 50_000_000}],
+                             status="paid"))
+    assert settled.kind == brain.STOP
+
+    not_due = decide(invoice(acceptance="2026-08-20"))
+    assert not_due.kind == brain.WAIT and not_due.rung == 0
+
+    max_contacts_history = [contact(f"2026-0{month}-01", 2) for month in (3, 4, 5, 6, 7)]
+    maxed = decide(invoice(), history=max_contacts_history)
+    assert maxed.kind == brain.HANDOFF and "reaching the limit" in maxed.reason
+
+    with_a_promise = decide(invoice(), promises=[{
+        "invoice_id": "INV-2026-0204", "promised_date": "2026-09-05", "status": "open",
+    }])
+    assert with_a_promise.kind == brain.WAIT and with_a_promise.rung == 0
+
+    weekend = decide(invoice(), today=date(2026, 8, 29))
+    assert weekend.kind == brain.WAIT and "weekend" in weekend.reason
+
+    spaced = decide(invoice(), history=[contact("2026-08-23", 2)])
+    assert spaced.kind == brain.WAIT and "days between messages" in spaced.reason
+
+
+def test_ev_mode_off_is_inert_regardless_of_what_the_score_carries() -> None:
+    """With ev_mode off (the default), decide() must produce the exact same
+    Action whether the caller passes a plain engine.score.score_buyer()-shaped
+    dict or a two-axis one carrying ability/willingness/quadrant on top of it
+    -- the extra keys must be inert. This is the invariant sim/run_sim.py's
+    Phase 3 switch to two_axis_score() depends on, and what keeps the seed-42
+    demo win reproducible with the shipped default (see
+    tests/test_run_sim.py's snapshot-diff test for the sim-level proof)."""
+    plain = score(70)
+    two_axis = {**plain, "ability": {"score": 80, "signals": {}, "breakdown": []},
+               "willingness": {"score": 80, "signals": {}, "breakdown": []},
+               "quadrant": aw.GOOD_CUSTOMER}
+
+    scenarios = [
+        {"record": invoice(), "history": []},
+        {"record": invoice(acceptance=OLD_ENOUGH_FOR_CEILING_4), "history": []},
+        {"record": invoice(), "history": [contact("2026-08-10", 2)]},
+        {"record": invoice(payments=[{"date": "2026-08-01", "amount_paise": 20_000_000}],
+                            status="partially_paid"),
+         "history": [contact("2026-08-10", 2, outcome="unclear_reply", reply="hmm")]},
+    ]
+    for scenario in scenarios:
+        position = law.legal_position(scenario["record"], TODAY)
+        before = brain.decide(scenario["record"], buyer(), plain, position,
+                              [], scenario["history"], log=False)
+        after = brain.decide(scenario["record"], buyer(), two_axis, position,
+                             [], scenario["history"], log=False)
+        assert before == after, f"ev_mode: off diverged for {scenario['record']['invoice_id']}"
