@@ -238,6 +238,11 @@ def test_the_record_carries_every_field_the_attribution_is_meant_to_explain() ->
         "action_kind": "payment_plan",
         "rung": 2,
         "outstanding_paise_at_action": 4_200_000,
+        # Present on every row, null/False unless an EV or exploration
+        # selection actually proposed something -- see record_action().
+        "proposed_action_kind": None,
+        "proposed_rung": None,
+        "gate_override": False,
         "paid_within_horizon": True,
         "paise_recovered_within_horizon": 4_200_000,
     }

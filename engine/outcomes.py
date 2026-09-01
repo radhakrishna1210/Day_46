@@ -139,9 +139,26 @@ class ActionEvent:
     buyer_id: str
     day: date
     quadrant: str | None
+    #: What was ACTUALLY EXECUTED -- engine.brain's own Action.kind and the
+    #: rung the message really went out at. Under exploration these can
+    #: differ from what was proposed (see proposed_action_kind below); when
+    #: they do, this pair is the one that tells the truth about what the
+    #: buyer received, and so the one an outcome may be credited to.
     action_kind: str
     rung: int
     outstanding_paise_at_action: int
+    #: What the selection policy PROPOSED, in engine.negotiation's action
+    #: space, before the escalation walk and the law ceiling had their say --
+    #: None for any run with no EV/exploration selection behind it (the
+    #: baseline, and the plain agent arm). proposed_rung is the ladder rung
+    #: that proposal named, or None for an action that names no rung of its
+    #: own (see engine.brain.negotiation_rung).
+    proposed_action_kind: str | None
+    proposed_rung: int | None
+    #: True when the proposal named a rung and a different one was executed --
+    #: i.e. the gates overrode the label. Directly countable across a file,
+    #: which is the whole reason the proposal is kept alongside the outcome.
+    gate_override: bool
     #: Strictly increasing over the whole ledger. Two actions on the same
     #: invoice on the same day are ordered by this, so "most recent" is always
     #: a total order rather than a tie the code resolves by luck.
@@ -204,11 +221,21 @@ class OutcomeLedger:
         rung: int,
         outstanding_paise_at_action: int,
         quadrant: str | None = None,
+        proposed_action_kind: str | None = None,
+        proposed_rung: int | None = None,
+        gate_override: bool = False,
     ) -> ActionEvent:
         """Note one executed action.
 
+        `action_kind`/`rung` are always what was ACTUALLY EXECUTED. That is
+        the invariant the attribution rests on: a payment is credited to what
+        the buyer actually received, never to a label that a gate overrode
+        before the message went out.
+
         `quadrant` is None when the run has no two-axis score (the baseline
-        bot has none) -- written out as null, never guessed at.
+        bot has none) -- written out as null, never guessed at. The three
+        proposal fields are likewise None/False for any run with no EV or
+        exploration selection behind it, rather than being invented.
         """
         event = ActionEvent(
             invoice_id=invoice_id,
@@ -218,6 +245,9 @@ class OutcomeLedger:
             action_kind=action_kind,
             rung=int(rung),
             outstanding_paise_at_action=int(outstanding_paise_at_action),
+            proposed_action_kind=proposed_action_kind,
+            proposed_rung=None if proposed_rung is None else int(proposed_rung),
+            gate_override=bool(gate_override),
             seq=self._next_seq(),
         )
         self.actions.append(event)
@@ -290,6 +320,9 @@ class OutcomeLedger:
             "action_kind": action.action_kind,
             "rung": action.rung,
             "outstanding_paise_at_action": action.outstanding_paise_at_action,
+            "proposed_action_kind": action.proposed_action_kind,
+            "proposed_rung": action.proposed_rung,
+            "gate_override": action.gate_override,
             "paid_within_horizon": credited_count[action.seq] > 0,
             "paise_recovered_within_horizon": credited_paise[action.seq],
         } for action in self.actions]
@@ -400,6 +433,50 @@ def runs(path: Path | None = None) -> dict[str, dict[str, Any]]:
                else "unattributed_rows")
         entry[key] += 1
     return found
+
+
+def gate_overrides(path: Path | None = None,
+                   mode: str | None = None) -> dict[str, Any]:
+    """How often the gates overrode the action the selection policy proposed.
+
+    The measurement sim/run_sim.py's exploration mode exists to produce, kept
+    here as a reader rather than folded into OutcomeLedger.attribute()'s
+    summary on purpose: that summary is returned to each arm's report and so
+    lands in results.json, which tests/test_run_sim.py requires to be
+    byte-reproducible across identical runs. Adding always-zero keys to every
+    baseline row's summary to serve one experimental arm would churn a
+    committed artifact for nothing.
+
+    Only rows that CARRY a proposal count -- the baseline and the plain agent
+    arm propose nothing, so counting their rows in the denominator would
+    understate the rate rather than merely dilute it.
+
+    Args:
+        path: outcomes file; defaults to OUTCOMES_PATH.
+        mode: restrict to one arm ("agent_ev_explore", say). None reads all.
+
+    Returns:
+        ``{"actions_with_proposal", "gate_overrides", "rate",
+        "by_proposed_action"}``. ``rate`` is None when nothing proposed
+        anything, rather than a 0 that would read as "never overridden".
+    """
+    rows = [r for r in records(path)
+            if r["record_type"] == ACTION_RECORD
+            and r.get("proposed_action_kind") is not None
+            and (mode is None or r["mode"] == mode)]
+    by_action: dict[str, dict[str, int]] = {}
+    for row in rows:
+        entry = by_action.setdefault(row["proposed_action_kind"], {"proposed": 0, "overridden": 0})
+        entry["proposed"] += 1
+        if row.get("gate_override"):
+            entry["overridden"] += 1
+    overridden = sum(entry["overridden"] for entry in by_action.values())
+    return {
+        "actions_with_proposal": len(rows),
+        "gate_overrides": overridden,
+        "rate": (overridden / len(rows)) if rows else None,
+        "by_proposed_action": dict(sorted(by_action.items())),
+    }
 
 
 def clear(path: Path | None = None) -> None:

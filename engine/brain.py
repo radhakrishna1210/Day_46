@@ -44,11 +44,20 @@ FLAVOR of an already-certain handoff to record -- human_handoff or
 legal_escalation -- never whether one happens.) With ev_mode off (the
 default) or no quadrant on the score, decide() is byte-for-byte what it
 always was -- see tests/test_brain.py's snapshot test.
+
+EXPLORATION (simulator only): decide()'s `explore_rng` argument swaps the EV
+branches' argmax for a uniform sample over the SAME already-gated candidate
+list. It is an object, not a config key, precisely so nothing but a caller
+holding one can turn it on -- see that argument's own docstring, and
+sim/run_sim.py's run_agent(explore=True). It never widens what is eligible and
+never bypasses a stop rule; tests/test_exploration_respects_gates.py is the
+standing proof.
 """
 
 from __future__ import annotations
 
 import json
+import random
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -245,6 +254,98 @@ def eligible_negotiation_actions(
     return tuple(allowed)
 
 
+def negotiation_rung(action: str) -> int | None:
+    """The ladder rung a negotiation action names a MESSAGE at, or None.
+
+    Looked up from the ladder's own names in config/rules.yaml rather than
+    hardcoded, because the correspondence is a fact about config, not about
+    this module: engine.negotiation's soft_nudge/firm/legal_facts share their
+    names with rungs 1-3 deliberately (see that module's docstring), so if a
+    rung is ever renumbered the mapping follows on its own.
+
+    None means "this action does not name a rung of its own", which is a
+    different thing from rung 0 and is why `wait` is not in here either:
+
+        wait            sends nothing, so the rung carried on a WAIT Action is
+                        vestigial -- it records where the ladder HAD got to,
+                        not something a wait was clamped away from.
+        payment_plan    both ride at whatever rung the escalation walk already
+        counter_settle  chose, so neither has a rung a gate could override.
+
+    human_handoff/legal_escalation both answer HANDOFF_RUNG: they are only
+    ever selectable once chosen has already reached it (see
+    eligible_negotiation_actions()), so they can never be clamped.
+    """
+    if action in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION):
+        return HANDOFF_RUNG
+    return next((int(entry["id"]) for entry in rungs.all_rungs()
+                 if entry["name"] == action and int(entry["id"]) in rungs.BUYER_FACING_RUNGS),
+                None)
+
+
+def _pick_negotiation_action(
+    candidates: tuple[str, ...],
+    *,
+    quadrant: str,
+    outstanding: int,
+    broken_promises: int,
+    explore_rng: random.Random | None,
+) -> tuple[dict[str, Any], str]:
+    """Choose one action out of `candidates`, and say how it was chosen.
+
+    Two selection policies over the SAME already-gated candidate list:
+
+        argmax   engine.negotiation.rank_actions()'s top pick -- the shipped
+                 behaviour, and what every caller without an explore_rng gets.
+        explore  a uniform sample from `candidates` (the simulator's
+                 exploration mode -- see sim/run_sim.py's run_agent(explore=)).
+
+    The critical property, and the reason the sampling lives HERE rather than
+    anywhere upstream: `candidates` has already been through
+    eligible_negotiation_actions(), and decide() only reaches either call site
+    after every stop rule, spacing rule and rung gate above has cleared. So
+    exploration can only ever pick differently among options the rules had
+    already declared acceptable today -- it can never widen the set, and there
+    is no code path by which it reaches an action the gates excluded.
+
+    Returns (evaluation, selection) where `evaluation` is the same
+    evaluate_action() record shape either policy produces, so the audit trail
+    still carries the EV arithmetic for whatever was actually chosen, and
+    `selection` is "argmax" or "explore".
+    """
+    if explore_rng is None:
+        return negotiation.rank_actions(
+            quadrant, outstanding, broken_promises=broken_promises, candidates=candidates,
+        )[0], "argmax"
+    sampled = explore_rng.choice(sorted(candidates))
+    return negotiation.evaluate_action(
+        sampled, quadrant=quadrant, outstanding_paise=outstanding,
+        broken_promises=broken_promises,
+    ), "explore"
+
+
+def _negotiation_extra(evaluation: dict[str, Any], selection: str,
+                       executed_rung: int) -> dict[str, Any]:
+    """The audit detail every EV/explore decision carries.
+
+    `negotiation_gate_override` is the number sim/run_sim.py's exploration
+    mode exists to measure: True when the chosen action named a rung of its
+    own and the rung actually executed is a different one, i.e. the escalation
+    walk and the law ceiling between them overruled the label. It is
+    deliberately not "proposed > executed" -- an action proposed BELOW the
+    rung the ladder had already reached is just as much a case of the label
+    not describing the message that went out.
+    """
+    proposed_rung = negotiation_rung(evaluation["action"])
+    return {
+        "negotiation_action": evaluation["action"],
+        "negotiation_selection": selection,
+        "negotiation_proposed_rung": proposed_rung,
+        "negotiation_gate_override": proposed_rung is not None and proposed_rung != executed_rung,
+        "ev": evaluation,
+    }
+
+
 def _is_ambiguous(
     invoice: dict[str, Any],
     legal_position: dict[str, Any],
@@ -330,6 +431,7 @@ def decide(
     history: list[dict[str, Any]],
     config: dict[str, Any] | None = None,
     log: bool = True,
+    explore_rng: random.Random | None = None,
 ) -> Action:
     """Choose exactly one action for one invoice today.
 
@@ -343,6 +445,25 @@ def decide(
         history: contacts already made on this invoice (not payments).
         config: rules; defaults to config/rules.yaml.
         log: write to the audit trail. False for dry runs.
+        explore_rng: SIMULATOR ONLY -- sim/run_sim.py's run_agent(explore=True).
+            When supplied (and only then), the EV branches below sample
+            uniformly from their already-gated candidate list instead of
+            taking the top-EV action, so a learning run can see what happens
+            after actions the current EV grid would never have picked. (The
+            attribution ledger that records those results is named nowhere in
+            this module, not even in prose: its own test suite greps this
+            directory for the name and treats any hit as a violation. That
+            tripwire is right to be that crude, and this module reads nothing
+            the ledger writes.) It is a
+            random.Random OBJECT rather than a config flag on purpose: there
+            is no key in config/rules.yaml that turns exploration on, so no
+            production entry point can reach it by editing config, and main.py
+            -- which never constructs one, and passes a plain
+            engine.score.score_buyer() dict with no "quadrant" so ev_mode_on
+            is False for it regardless -- cannot trigger it at all.
+            Exploration changes only WHICH action is chosen from the eligible
+            list; every stop rule, spacing rule, rung gate and law ceiling
+            above still runs first and unchanged.
 
     Returns:
         One Action, carrying the reason and everything needed to audit it.
@@ -510,12 +631,15 @@ def decide(
             )
             if handoff_candidates:
                 promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
-                winner = negotiation.rank_actions(
-                    quadrant, outstanding_paise(invoice), broken_promises=promise_count,
-                    candidates=handoff_candidates,
-                )[0]
-                extra["negotiation_action"] = winner["action"]
-                extra["ev"] = winner
+                # explore_rng samples the FLAVOR here, never whether a handoff
+                # fires: this branch has already committed to HANDOFF above,
+                # and handoff_candidates holds nothing but the two flavors.
+                winner, selection = _pick_negotiation_action(
+                    handoff_candidates, quadrant=quadrant,
+                    outstanding=outstanding_paise(invoice),
+                    broken_promises=promise_count, explore_rng=explore_rng,
+                )
+                extra.update(_negotiation_extra(winner, selection, HANDOFF_RUNG))
         return act(HANDOFF, HANDOFF_RUNG,
                    f"escalated to the final rung, so contact stops and a human takes over ({why})",
                    capped=capped, extra=extra)
@@ -592,14 +716,16 @@ def decide(
     if ev_mode_on:
         promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
         candidates = eligible_negotiation_actions(quadrant, chosen, config)
-        ranked = negotiation.rank_actions(
-            quadrant, outstanding_paise(invoice), broken_promises=promise_count,
-            candidates=candidates,
+        winner, selection = _pick_negotiation_action(
+            candidates, quadrant=quadrant, outstanding=outstanding_paise(invoice),
+            broken_promises=promise_count, explore_rng=explore_rng,
         )
-        winner = ranked[0]
         neg_action = winner["action"]
-        ev_extra = {"negotiation_action": neg_action, "ev": winner}
-        ev_why = (f"{why}; EV ranked {neg_action} highest for a {quadrant} buyer "
+        ev_extra = _negotiation_extra(winner, selection, chosen)
+        how = (f"EV ranked {neg_action} highest" if selection == "argmax"
+               else f"exploration sampled {neg_action} uniformly from "
+                    f"{len(candidates)} eligible action(s)")
+        ev_why = (f"{why}; {how} for a {quadrant} buyer "
                   f"({winner['probability']}% recover, EV {winner['ev_paise']} paise)")
 
         if neg_action == negotiation.WAIT:

@@ -168,21 +168,46 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       a tmp file so the suite cannot write the artifact at all. New
       outcomes.runs() reports what a file actually holds, and --compare now
       prints it ("18 run(s), 3799 rows, seeds [7, 13, 42, 99, 555, 2024]").
+- [x] P7 - Exploration mode, SIMULATOR ONLY: sim/run_sim.py's
+      run_agent(explore=True) makes brain.decide() sample UNIFORMLY from the
+      already-gated eligible_actions list instead of taking the top-EV pick,
+      so a learning run can see what happens after actions the EV grid would
+      never choose. The switch is an OBJECT (decide(explore_rng=...)), not a
+      config key -- no edit to config/rules.yaml and no CLI flag can turn it
+      on, and main.py neither constructs one nor passes a quadrant-carrying
+      score. Sampling happens INSIDE decide(), after every stop rule, spacing
+      rule, rung gate and law ceiling has already run, and over the same list
+      eligible_negotiation_actions() had already produced -- so it can only
+      pick differently among what the rules already allowed, never widen it.
+      outcomes.jsonl rows gained proposed_action_kind / proposed_rung /
+      gate_override; action_kind + rung stay the ACTUALLY EXECUTED action, so
+      payments are still credited to what the buyer really received. New
+      outcomes.gate_overrides() reads the rate back (kept out of the summary
+      so results.json does not churn). explore=True implies ev_mode on and
+      labels its ledger rows "agent_ev_explore".
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P6 + P6b (outcome attribution) added this session -- NOT COMMITTED YET.
-  engine/outcomes.py (new), tests/test_outcomes.py (new, 33 tests),
-  sim/run_sim.py, conftest.py, config/rules.yaml (new top-level learning:
-  block), .gitignore (comment only -- audit/* already covered outcomes.jsonl).
-  Observation only: nothing in engine/ reads it.
+- P7 (exploration mode) landed this session, on top of P6/P6b which were
+  already committed (eb7515a, 1d1099b -- an earlier note claiming they were
+  unpushed was wrong). P7 touched engine/brain.py, engine/outcomes.py,
+  sim/run_sim.py, tests/test_outcomes.py and added
+  tests/test_exploration_respects_gates.py (11 tests). Nothing in engine/
+  reads outcomes -- a test enforces it by grepping for the module NAME, so do
+  not even mention it in brain.py prose.
+- P7 MEASUREMENT, first run (seed 42, 60 days): the gates override the
+  sampled action 36% of the time (57/157), and the overrides are almost
+  entirely soft_nudge (32/33) and legal_facts (22/35) -- i.e. the negotiation
+  LABEL routinely disagrees with the rung the escalation walk had already
+  settled on, because payment_plan/counter_settle/handoff ride at the chosen
+  rung and so can never be overridden. Worth reading before anyone treats
+  proposed_action_kind as what the buyer received.
 - RECONCILIATION, settled: ledger sum + unattributed is SHORT of results.json
   recovered_paise by exactly 189,480,000 paise on seed 42, and by the SAME
   constant on all three arms. Not a leak -- 12 current invoices arrive at day0
   already part-paid, and recovered_paise is a cumulative stock while the
   ledger is an in-run flow. The ledger under-claims, which is the right
-  direction. A malformed-invoice seed would add a second, separate divergence
-  (_totals excludes invalid invoices, the ledger does not).
+  direction.
 - FINDING worth keeping: over a full --compare, hit rate within the 14-day
   horizon is payment_plan 85/131, send 643/1616, baseline reminder 247/1519,
   handoff 0/496. The handoff zero is NOT a bug -- the simulator has no model
@@ -190,17 +215,11 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   arrive behind a handoff. Anything that later learns from outcomes.jsonl
   must exclude handoff rows rather than read them as failures.
 - THE TWO HEADLINE CLAIMS, both true, both stated together everywhere a judge
-  would look (README top, PROJECT_WALKTHROUGH headline + pitch C): the core
-  agent beats the naive baseline on rupees recovered in 6/6 tested seeds; the
-  EV/negotiation layer adds a further Rs 9,81,368 on seed 42 and wins on 5/6
-  of those same seeds (seed 2024 the one loss, reported not hidden). The
-  ablation gain traces almost entirely to payment_plan -- every other EV
-  relabeling maps to an identical Action.kind/rung/skeleton and cannot move
-  simulated behavior. counter_settle never wins a live ranking under the
-  shipped grid -- stated, not hidden.
-- 913 tests passing. Zero regressions; --compare re-run end to end after P6b
-  and every headline number is byte-identical. Known limitations, unchanged:
-  no message-content differentiation by negotiation action, no reactive
-  settlement-offer handling, counter_settle inert in practice, willingness
-  still inherits average_delay_days, Action.kind is string-based not an enum.
-  Only Phase 11 (demo video) and 12 (final submit) remain.
+  would look: the core agent beats the naive baseline on rupees recovered in
+  6/6 tested seeds; the EV/negotiation layer adds a further Rs 9,81,368 on
+  seed 42 and wins on 5/6 of those same seeds (seed 2024 the one loss,
+  reported not hidden). 924 tests passing. All three shipped arms verified
+  byte-identical to the committed results.json after P7. One staleness note:
+  run_agent()'s report dict gained an "explore" key that the committed
+  results.json predates -- additive, read by nothing, picked up by the next
+  --compare. Only Phase 11 (demo video) and 12 (final submit) remain.

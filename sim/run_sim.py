@@ -525,6 +525,7 @@ def _raise_early_warnings(
 
 def run_agent(
     seed: int, days: int, verbose: bool = False, ev_mode: bool = False,
+    explore: bool = False,
 ) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
     channels -> persona reacts -> promises) over `days` simulated days.
@@ -547,7 +548,32 @@ def run_agent(
             new pattern. sim.personas.react() already differentiates
             payment_plan/counter_settle reactions (Phase 4 Part A); this is
             what actually lets a real run reach them.
+        explore: EXPLORATION MODE, simulator-only. Instead of taking the
+            top-EV action, brain.decide() samples uniformly from the eligible
+            action list for that buyer's quadrant, so a run can observe
+            outcomes for actions the current EV grid would never choose. Three
+            things this does NOT do, all of them load-bearing and all proved by
+            tests/test_exploration_respects_gates.py:
+
+              * it never widens what is eligible -- the sample is drawn from
+                the list config/rules.yaml's negotiation.eligible_actions
+                already allowed, after engine.brain.eligible_negotiation_
+                actions() has gated it;
+              * it never lifts engine.law.available_rung()'s ceiling, or any
+                stop rule, spacing rule or per-rung limit in brain.decide() --
+                every one of those runs first, unchanged, and a sampled action
+                is only ever chosen on a path that already cleared them;
+              * it never reaches production. Exploration is turned on by
+                HANDING decide() a random.Random object, not by a config key,
+                and main.py neither constructs one nor passes a score carrying
+                a quadrant -- so there is no edit to config/rules.yaml, and no
+                CLI flag on main.py, that can switch it on.
+
+            Implies the EV path (there is nothing to sample from otherwise),
+            so explore=True runs with brain.ev_mode "on" whatever `ev_mode`
+            says, and reports ev_mode True.
     """
+    ev_mode = ev_mode or explore
     decide_config = None
     if ev_mode:
         base_config = rules()
@@ -559,7 +585,8 @@ def run_agent(
     # it holds, which is what keeps adding it a pure observation rather than
     # a behaviour change. The mode label distinguishes the ablation's two
     # agent arms in the shared outcomes.jsonl.
-    ledger = outcomes.OutcomeLedger(mode="agent_ev" if ev_mode else "agent", seed=seed)
+    mode_label = "agent_ev_explore" if explore else ("agent_ev" if ev_mode else "agent")
+    ledger = outcomes.OutcomeLedger(mode=mode_label, seed=seed)
 
     buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
@@ -638,6 +665,10 @@ def run_agent(
             # from it (nothing this module can currently produce, but a
             # future caller might) records quadrant null rather than a guess.
             quadrant_of: dict[str, str | None] = {}
+            # Same lifetime and same purpose as quadrant_of: this day's
+            # proposal per invoice, read only by the two ledger.record_action()
+            # calls below. See the decide() call for what it holds.
+            proposal_of: dict[str, dict[str, Any]] = {}
             for invoice in queue:
                 inv_id = invoice["invoice_id"]
                 buyer = buyers_by_id[invoice["buyer_id"]]
@@ -648,10 +679,26 @@ def run_agent(
 
                 two_axis = ability_willingness.two_axis_score(
                     buyer, grouped.get(buyer["buyer_id"], []), today, invoice=invoice)
+                # A fresh per-(invoice, day) stream, exactly like the persona
+                # roll below: exploration stays reproducible for a seed, and
+                # independent of how many other invoices decide() visited
+                # first. None outside explore mode, which is what keeps every
+                # other arm byte-identical.
+                explore_rng = _rng(seed, inv_id, today, "explore") if explore else None
                 action = brain.decide(invoice, buyer, two_axis, position,
                                       promises=plist, history=hist, log=True,
-                                      config=decide_config)
+                                      config=decide_config, explore_rng=explore_rng)
                 quadrant_of[inv_id] = two_axis.get("quadrant")
+                # What the selection policy PROPOSED, kept beside the action
+                # actually executed so the ledger can record both. Absent
+                # outside the EV/exploration path, and absent even inside it
+                # for a decision that never reached an EV branch (a stop rule
+                # fired first) -- None, never a guess.
+                proposal_of[inv_id] = {
+                    "proposed_action_kind": action.detail.get("negotiation_action"),
+                    "proposed_rung": action.detail.get("negotiation_proposed_rung"),
+                    "gate_override": bool(action.detail.get("negotiation_gate_override", False)),
+                }
                 last_action_by_invoice[inv_id] = {
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,
                 }
@@ -686,6 +733,7 @@ def run_agent(
                             quadrant=quadrant_of.get(inv_id), action_kind=action.kind,
                             rung=action.rung,
                             outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                            **proposal_of.get(inv_id, {}),
                         )
                     else:
                         stops.add(inv_id)
@@ -731,11 +779,19 @@ def run_agent(
                     # message went out, and so a same-day payment triggered by
                     # this very message is credited to it (the ledger's own
                     # seq ordering, not a special case).
+                    #
+                    # action.kind/action.rung are what was ACTUALLY EXECUTED:
+                    # the message this buyer really received, after every gate.
+                    # Under exploration a proposal may have been overridden on
+                    # the way here; it rides alongside in its own fields, never
+                    # in place of these, so a payment is always credited to
+                    # what actually happened.
                     ledger.record_action(
                         invoice_id=inv_id, buyer_id=buyer_id, day=today,
                         quadrant=quadrant_of.get(inv_id), action_kind=action.kind,
                         rung=action.rung,
                         outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                        **proposal_of.get(inv_id, {}),
                     )
 
                     rng = _rng(seed, inv_id, today, "react")
@@ -803,6 +859,7 @@ def run_agent(
 
     return {
         "mode": "agent", "seed": seed, "days": days, "ev_mode": ev_mode,
+        "explore": explore,
         "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
         # Kept alongside messages_sent, not in place of it: messages_sent now
