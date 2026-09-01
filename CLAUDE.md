@@ -146,33 +146,61 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       tests/test_smoke.py now pins each rung's own max_messages instead.
       Ran sim/run_sim.py --compare end-to-end and read the actual rendered
       report.html; no glitches found in the new 3-column layout.
+- [x] P6 - Outcome attribution, SIMULATOR ONLY: new engine/outcomes.py
+      (OutcomeLedger) credits each payment to the MOST RECENT action on
+      that invoice within config/rules.yaml's new learning.
+      attribution_horizon_days (14); actions with no payment inside their
+      horizon are recorded as failures, payments with no action before
+      them are recorded UNATTRIBUTED and counted, never dropped. Writes
+      audit/outcomes.jsonl (already gitignored by audit/*). sim/run_sim.py
+      records outbound contacts + handoffs (never waits/stops) in both
+      run_agent arms and run_baseline; quadrant comes from
+      two_axis_score(), null for the baseline. engine/brain.py and
+      engine/law.py untouched -- a test asserts no engine module reads
+      outcomes. All headline numbers unchanged (6/6, 5/6, Rs 9,81,368).
+- [x] P6b - outcomes provenance + file lifecycle. Every row now carries
+      run_id (f"{seed}_{mode}_{timestamp}", wall clock, rows only -- kept OUT
+      of the summary so results.json stays byte-reproducible) alongside the
+      seed the simulator was actually run with. Truncation was implicit and
+      per-PROCESS, which silently stacked pytest's many run_agent() calls
+      into the production file; it is now ONE explicit outcomes.start_file()
+      in run_sim.main(), and conftest.py redirects the whole test session to
+      a tmp file so the suite cannot write the artifact at all. New
+      outcomes.runs() reports what a file actually holds, and --compare now
+      prints it ("18 run(s), 3799 rows, seeds [7, 13, 42, 99, 555, 2024]").
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- Phase 5 (final close-out) done and committed -- see git log. Coherence/
-  staleness pass across README/ARCHITECTURE/PROJECT_WALKTHROUGH.md/
-  winning_layer.md; removed the dead stop_rules.max_per_rung config key
-  (see the P5 checklist entry above for specifics); ran --compare
-  end-to-end and read the rendered report.html directly (clean, no
-  glitches in the new 3-column layout). Nothing in engine/ or sim/ changed
-  behaviourally this session -- docs + one dead config key only.
-- THE TWO HEADLINE CLAIMS, both true, both now stated together everywhere
-  a judge would look (README top, PROJECT_WALKTHROUGH headline + pitch C):
-  the core agent beats the naive baseline on rupees recovered in 6/6 tested
-  seeds; the EV/negotiation layer (Phase 3-4) adds a further ₹9,81,368 on
-  seed 42 and wins on 5/6 of those same seeds (seed 2024 the one loss,
-  reported not hidden). Mechanism, if this needs re-deriving: the ablation
-  gain traces almost entirely to payment_plan -- every other EV relabeling
-  (firm vs soft_nudge, human_handoff vs legal_escalation) maps to an
-  identical Action.kind/rung/skeleton and cannot move simulated behavior.
-  counter_settle's own persona behaviour is real and tested but never
-  actually wins a live decide() ranking under the shipped EV grid --
-  stated, not hidden, same as Phase 2's good_customer finding.
-- 877 tests passing. Zero regressions. Known limitations, unchanged and
-  now the true remaining list: no message-content differentiation by
-  negotiation action (engine/writer.py untouched), no reactive settlement-
-  offer handling, counter_settle inert in practice, willingness still
-  inherits average_delay_days, Action.kind is string-based not an enum.
-  Only Phase 11 (demo video) and 12 (final submit) remain -- nothing in
-  the codebase should need touching unless one of those turns up a real
-  problem.
+- P6 + P6b (outcome attribution) added this session -- NOT COMMITTED YET.
+  engine/outcomes.py (new), tests/test_outcomes.py (new, 33 tests),
+  sim/run_sim.py, conftest.py, config/rules.yaml (new top-level learning:
+  block), .gitignore (comment only -- audit/* already covered outcomes.jsonl).
+  Observation only: nothing in engine/ reads it.
+- RECONCILIATION, settled: ledger sum + unattributed is SHORT of results.json
+  recovered_paise by exactly 189,480,000 paise on seed 42, and by the SAME
+  constant on all three arms. Not a leak -- 12 current invoices arrive at day0
+  already part-paid, and recovered_paise is a cumulative stock while the
+  ledger is an in-run flow. The ledger under-claims, which is the right
+  direction. A malformed-invoice seed would add a second, separate divergence
+  (_totals excludes invalid invoices, the ledger does not).
+- FINDING worth keeping: over a full --compare, hit rate within the 14-day
+  horizon is payment_plan 85/131, send 643/1616, baseline reminder 247/1519,
+  handoff 0/496. The handoff zero is NOT a bug -- the simulator has no model
+  of what the owner does after taking a case over, so no money can ever
+  arrive behind a handoff. Anything that later learns from outcomes.jsonl
+  must exclude handoff rows rather than read them as failures.
+- THE TWO HEADLINE CLAIMS, both true, both stated together everywhere a judge
+  would look (README top, PROJECT_WALKTHROUGH headline + pitch C): the core
+  agent beats the naive baseline on rupees recovered in 6/6 tested seeds; the
+  EV/negotiation layer adds a further Rs 9,81,368 on seed 42 and wins on 5/6
+  of those same seeds (seed 2024 the one loss, reported not hidden). The
+  ablation gain traces almost entirely to payment_plan -- every other EV
+  relabeling maps to an identical Action.kind/rung/skeleton and cannot move
+  simulated behavior. counter_settle never wins a live ranking under the
+  shipped grid -- stated, not hidden.
+- 913 tests passing. Zero regressions; --compare re-run end to end after P6b
+  and every headline number is byte-identical. Known limitations, unchanged:
+  no message-content differentiation by negotiation action, no reactive
+  settlement-offer handling, counter_settle inert in practice, willingness
+  still inherits average_delay_days, Action.kind is string-based not an enum.
+  Only Phase 11 (demo video) and 12 (final submit) remain.

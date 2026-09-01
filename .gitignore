@@ -1,7 +1,9 @@
 # secrets
 .env
 
-# generated audit logs (keep the folder, ignore its contents)
+# generated audit logs -- audit/audit_log.jsonl (engine/audit.py) and
+# audit/outcomes.jsonl (engine/outcomes.py). The glob already covers both;
+# they are named here so a new log file is never assumed to be committable.
 audit/*
 !audit/.gitkeep
 

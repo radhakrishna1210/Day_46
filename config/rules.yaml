@@ -567,3 +567,13 @@ channels:
     sms: >-
       an SMS gateway needs a registered sender ID and DLT templates, which is
       out of scope for this build
+
+# --- Outcome attribution (engine/outcomes.py, simulator only) -------------
+# How long after an action a payment may still be credited to it. Our own
+# analysis policy, not statute and not a measured number: 14 days is roughly
+# one B2B payment-run cycle, long enough that a buyer who acted on a message
+# still lands inside it, short enough that a message and a payment five weeks
+# apart are not called cause and effect. Nothing in engine/brain.py reads it
+# -- attribution observes, it never steers.
+learning:
+  attribution_horizon_days: 14

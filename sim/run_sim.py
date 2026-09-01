@@ -52,7 +52,7 @@ if __package__ in (None, ""):
 
 from data import generate, store
 from engine import ability_willingness
-from engine import audit, brain, channels, consolidate, law, llm, promises, validate, watchdog, writer
+from engine import audit, brain, channels, consolidate, law, llm, outcomes, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
 from engine.config import rules
@@ -127,12 +127,24 @@ def _current(invoices: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [inv for inv in invoices if inv.get("cohort") == "current"]
 
 
-def _apply_payment(invoice: dict[str, Any], amount_paise: int, today: date) -> None:
-    """Ground truth: money actually landed. Never more than what is owed."""
+def _apply_payment(invoice: dict[str, Any], amount_paise: int, today: date,
+                  ledger: outcomes.OutcomeLedger | None = None) -> None:
+    """Ground truth: money actually landed. Never more than what is owed.
+
+    Args:
+        ledger: the run's engine.outcomes ledger, if it is collecting. Told
+            the CLAMPED amount, below, and only when money really moved --
+            this is the single choke point every payment in the simulation
+            goes through, which is exactly why the hook lives here rather
+            than at the four call sites that would each have to remember it.
+    """
     remaining = law.outstanding_paise(invoice, today)
     amount_paise = max(0, min(int(amount_paise), remaining))
     if amount_paise <= 0:
         return
+    if ledger is not None:
+        ledger.record_payment(invoice_id=invoice["invoice_id"], day=today,
+                              amount_paise=amount_paise)
     invoice.setdefault("partial_payments", []).append(
         {"date": today.isoformat(), "amount_paise": amount_paise})
     invoice["amount_paid_paise"] = int(invoice.get("amount_paid_paise", 0)) + amount_paise
@@ -150,6 +162,7 @@ def _advance_promises(
     today: date,
     seed: int,
     log: bool,
+    ledger: outcomes.OutcomeLedger | None = None,
 ) -> None:
     """Resolve every promise maturing today, then sweep the rest for breaks.
 
@@ -170,9 +183,9 @@ def _advance_promises(
                 continue  # left open; sweep() below marks it broken tomorrow
             remaining = law.outstanding_paise(invoice, today)
             if promise.get("amount") == "partial":
-                _apply_payment(invoice, int(remaining * rng.uniform(0.4, 0.7)), today)
+                _apply_payment(invoice, int(remaining * rng.uniform(0.4, 0.7)), today, ledger)
             else:
-                _apply_payment(invoice, remaining, today)
+                _apply_payment(invoice, remaining, today, ledger)
             promises.mark_kept(promise, today, log=log)
         promises.sweep(plist, today, log=log)
 
@@ -184,16 +197,17 @@ def _apply_reaction(
     today: date,
     seed: int,
     log: bool,
+    ledger: outcomes.OutcomeLedger | None = None,
 ) -> str:
     """Apply what the persona did and return the history outcome tag."""
     outcome = reaction["outcome"]
     if outcome == personas.PAY_FULL:
-        _apply_payment(invoice, law.outstanding_paise(invoice, today), today)
+        _apply_payment(invoice, law.outstanding_paise(invoice, today), today, ledger)
         return "paid_full"
     if outcome == personas.PAY_PARTIAL:
         rng = _rng(seed, invoice["invoice_id"], today, "partial_amount")
         remaining = law.outstanding_paise(invoice, today)
-        _apply_payment(invoice, int(remaining * rng.uniform(0.35, 0.6)), today)
+        _apply_payment(invoice, int(remaining * rng.uniform(0.35, 0.6)), today, ledger)
         # A part-payment with no explanation is exactly the ambiguous case
         # engine.brain._is_ambiguous looks for -- this is what exercises it.
         return "unclear_reply"
@@ -539,6 +553,14 @@ def run_agent(
         base_config = rules()
         decide_config = {**base_config, "brain": {**base_config.get("brain", {}), "ev_mode": "on"}}
 
+    # Outcome attribution (engine/outcomes.py). Collects during the run,
+    # judges once at the end, and is READ BY NOBODY inside the loop -- no
+    # brain.decide() call, no rung choice and no stop rule can see a record
+    # it holds, which is what keeps adding it a pure observation rather than
+    # a behaviour change. The mode label distinguishes the ablation's two
+    # agent arms in the shared outcomes.jsonl.
+    ledger = outcomes.OutcomeLedger(mode="agent_ev" if ev_mode else "agent", seed=seed)
+
     buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
     # Built once: invoice dicts are mutated in place by _apply_payment (never
@@ -581,7 +603,8 @@ def run_agent(
             today = day0 + timedelta(days=offset)
             last_day = today
 
-            _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=True)
+            _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=True,
+                              ledger=ledger)
 
             queue = watchdog.overdue_invoices(invoices, today)
             grouped = store.invoices_by_buyer(invoices)
@@ -609,6 +632,12 @@ def run_agent(
             # itself is untouched and keeps feeding early warnings and the
             # buyer panel, both of which read the legacy score_buyer() shape.
             day_actions: list[brain.Action] = []
+            # This day's quadrant per invoice, for the outcome ledger only --
+            # two_axis_score() is already computed below for brain.decide(),
+            # so this is a stash, not a second computation. An invoice absent
+            # from it (nothing this module can currently produce, but a
+            # future caller might) records quadrant null rather than a guess.
+            quadrant_of: dict[str, str | None] = {}
             for invoice in queue:
                 inv_id = invoice["invoice_id"]
                 buyer = buyers_by_id[invoice["buyer_id"]]
@@ -622,6 +651,7 @@ def run_agent(
                 action = brain.decide(invoice, buyer, two_axis, position,
                                       promises=plist, history=hist, log=True,
                                       config=decide_config)
+                quadrant_of[inv_id] = two_axis.get("quadrant")
                 last_action_by_invoice[inv_id] = {
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,
                 }
@@ -633,6 +663,30 @@ def run_agent(
                     if action.kind == brain.HANDOFF:
                         handoffs.add(inv_id)
                         handoff_reasons[bucket] = handoff_reasons.get(bucket, 0) + 1
+                        # Recorded here, once, on the day the human is
+                        # actually handed the case -- not on every later day
+                        # decide() keeps returning HANDOFF for an invoice
+                        # already announced. A STOP is deliberately NOT
+                        # recorded: it is the decision to CEASE acting, and
+                        # crediting a later payment to it would say the
+                        # agent recovered money by giving up.
+                        #
+                        # READ THIS BEFORE TRUSTING A HANDOFF'S SCORE: it
+                        # will be 0% recovered, always, in every run. Not a
+                        # bug in the attribution -- the simulator has no
+                        # model of what the MSME owner does after taking the
+                        # case over, so no money can ever arrive behind a
+                        # handoff here. Its outcome rows are the honest
+                        # record of an action this world cannot score, not
+                        # evidence that handoffs do not work, and anything
+                        # that later learns from this file has to exclude
+                        # them rather than read them as failures.
+                        ledger.record_action(
+                            invoice_id=inv_id, buyer_id=buyer["buyer_id"], day=today,
+                            quadrant=quadrant_of.get(inv_id), action_kind=action.kind,
+                            rung=action.rung,
+                            outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                        )
                     else:
                         stops.add(inv_id)
                         stop_reasons[bucket] = stop_reasons.get(bucket, 0) + 1
@@ -672,9 +726,22 @@ def run_agent(
                     hist = history.setdefault(inv_id, [])
                     invoice_contacts += 1
 
+                    # Recorded BEFORE the persona reacts, so
+                    # outstanding_paise_at_action is what was owed when the
+                    # message went out, and so a same-day payment triggered by
+                    # this very message is credited to it (the ledger's own
+                    # seq ordering, not a special case).
+                    ledger.record_action(
+                        invoice_id=inv_id, buyer_id=buyer_id, day=today,
+                        quadrant=quadrant_of.get(inv_id), action_kind=action.kind,
+                        rung=action.rung,
+                        outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                    )
+
                     rng = _rng(seed, inv_id, today, "react")
                     reaction = personas.react(persona, action.rung, rng, action_kind=action.kind)
-                    outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=True)
+                    outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=True,
+                                              ledger=ledger)
                     hist.append({"date": today.isoformat(), "rung": action.rung,
                                 "channel": target, "outcome": outcome,
                                 "bundle_invoice_ids": bundle_ids})
@@ -703,6 +770,14 @@ def run_agent(
     # of freezing a stale day0 verdict for the whole run.
     validation_reasons = validate.audit_invalid(invoices, last_day, log=True)
     invalid_ids = frozenset(validation_reasons)
+
+    # Judged and written once, after the last day: an action's verdict is not
+    # knowable until its whole attribution horizon has elapsed. Actions taken
+    # in the final learning.attribution_horizon_days of the window are
+    # therefore judged against a horizon the run ended inside -- they can only
+    # ever look worse than they were, never better, so the bias is the
+    # conservative direction and is stated here rather than corrected for.
+    attribution = ledger.write()
 
     counted_edge_cases = edge_case_counts(invoices, day0, promises_by_invoice)
 
@@ -745,6 +820,10 @@ def run_agent(
         "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of, last_rung_of,
                                   last_day, invalid_ids),
         "buyer_panel": panel,
+        # Report-only, like buyer_panel above: the totals from
+        # engine/outcomes.py, so the unattributed payments are COUNTED in the
+        # run's own output and not merely left sitting in a file nobody opens.
+        "outcomes": attribution["summary"],
         "narrative": narrative,
     }
 
@@ -787,6 +866,13 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     whether or not this bot is smart enough to reference it), which is what
     makes the comparison against the agent honest rather than stacked.
     """
+    # The baseline is instrumented exactly like the agent, on purpose: the
+    # ablation only means anything if both arms are measured the same way.
+    # quadrant is null on every record here -- this bot has no two-axis score
+    # and never will, and writing null is the honest version of that (see
+    # engine/outcomes.py's record_action docstring).
+    ledger = outcomes.OutcomeLedger(mode="baseline", seed=seed)
+
     buyers, invoices, persona_of, day0 = _load_world(seed)
     buyers_by_id = {b["buyer_id"]: b for b in buyers}
 
@@ -803,7 +889,8 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
             today = day0 + timedelta(days=offset)
             last_day = today
 
-            _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=False)
+            _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=False,
+                              ledger=ledger)
 
             for invoice in watchdog.overdue_invoices(invoices, today):
                 inv_id = invoice["invoice_id"]
@@ -825,10 +912,17 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                 sent_count[inv_id] = sent + 1
                 last_sent[inv_id] = today
 
+                ledger.record_action(
+                    invoice_id=inv_id, buyer_id=buyer["buyer_id"], day=today,
+                    quadrant=None, action_kind="reminder", rung=BASELINE_RUNG,
+                    outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                )
+
                 rng = _rng(seed, inv_id, today, "baseline_react")
                 reaction = personas.react(persona, BASELINE_RUNG, rng)
                 plist = promises_by_invoice.setdefault(inv_id, [])
-                outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=False)
+                outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=False,
+                                          ledger=ledger)
                 if outcome == "disputed":
                     disputes.add(inv_id)
                 if verbose:
@@ -844,6 +938,7 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     invalid_ids = frozenset(validation_reasons)
 
     verify_conservation(invoices, last_day, invalid_ids)
+    attribution = ledger.write()
     invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
     reason_of = {
         **validation_reasons,
@@ -859,6 +954,7 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
         "avg_days_to_pay": avg_days_to_pay(invoices),
         "paid_invoices": paid_days_map(invoices),
         "per_attempt": per_attempt_effectiveness(sent_count, invoices_by_id),
+        "outcomes": attribution["summary"],
         "exceptions": _exceptions(invoices, buyers_by_id, persona_of, reason_of,
                                   {inv_id: BASELINE_RUNG for inv_id in sent_count},
                                   last_day, invalid_ids),
@@ -1013,6 +1109,17 @@ def multi_seed_summary(
     return summary
 
 
+def _print_outcomes_file(path: Path) -> None:
+    """Say what landed in the outcomes file, so its provenance is visible in
+    the same output as the numbers it explains -- not discovered later by
+    someone summing a file that turned out to hold something else."""
+    found = outcomes.runs(path)
+    rows = sum(r["action_rows"] + r["unattributed_rows"] for r in found.values())
+    seeds = sorted({r["seed"] for r in found.values()})
+    print(f"outcome attribution written to {path}")
+    print(f"  {len(found)} run(s), {rows} rows, seeds {seeds}")
+
+
 def main() -> int:
     enable_unicode_output()
     parser = argparse.ArgumentParser(description="Run the recovery simulation.")
@@ -1045,6 +1152,14 @@ def main() -> int:
 
     print(f"simulator: seed={args.seed}, days={args.days}, "
           f"mode={'baseline vs agent vs agent+EV' if args.compare else 'agent only'}")
+
+    # The ONE place the outcomes file is truncated (engine/outcomes.py's FILE
+    # LIFECYCLE note). Deliberately here and not inside run_agent()/
+    # run_baseline(): a --compare below runs those eighteen times and every
+    # one of those runs belongs in this invocation's file. Deliberately after
+    # the --scenario branch above, too, which returns without ever writing a
+    # row and so has no business destroying the last real run's file.
+    outcomes_path = outcomes.start_file()
 
     if args.compare:
         baseline = run_baseline(args.seed, args.days, verbose=args.verbose)
@@ -1112,6 +1227,7 @@ def main() -> int:
         _write_results(args.results_out, args.seed, args.days, baseline, agent, matched, multi_seed,
                        agent_ev=agent_ev)
         print(f"results written to {args.results_out}")
+        _print_outcomes_file(outcomes_path)
     else:
         agent = run_agent(args.seed, args.days, verbose=args.verbose)
         if args.verbose:
@@ -1120,6 +1236,7 @@ def main() -> int:
                 print(f"  {line}")
         print()
         _print_summary("agent", agent)
+        _print_outcomes_file(outcomes_path)
 
     return 0
 
