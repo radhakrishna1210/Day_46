@@ -740,3 +740,263 @@ def test_write_results_includes_agent_ev_when_given(tmp_path) -> None:
     import json
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["agent_ev"]["final"]["recovered_paise"] == agent_ev["final"]["recovered_paise"]
+
+
+# ============================================================================
+# the fourth arm: agent+EV+learned
+# ============================================================================
+
+def test_forced_learned_mode_flips_and_restores_the_shared_config() -> None:
+    """engine.negotiation.recovery_probability()'s learning.enabled()/mode()
+    checks read config/rules.yaml's cached rules() dict directly, so the ONLY
+    way to switch them on for one run is to mutate that shared dict -- proven
+    here directly, not just inferred from run_agent(learned=True)'s output."""
+    from engine.config import rules
+
+    settings = rules()
+    prev_enabled = settings["learning"]["enabled"]
+    prev_mode = settings["learning"]["mode"]
+    prev_ev_mode = settings["brain"]["ev_mode"]
+    assert prev_enabled is False, "fixture assumption: learning ships off"
+
+    with run_sim._forced_learned_mode():
+        assert rules() is settings, "must be the SAME cached dict every module reads"
+        assert settings["learning"]["enabled"] is True
+        assert settings["learning"]["mode"] == "offline"
+        assert settings["brain"]["ev_mode"] == "on"
+
+    assert settings["learning"]["enabled"] == prev_enabled
+    assert settings["learning"]["mode"] == prev_mode
+    assert settings["brain"]["ev_mode"] == prev_ev_mode
+
+
+def test_run_agent_learned_false_is_byte_identical_to_the_default() -> None:
+    """learned is a new parameter -- omitting it and passing False explicitly
+    must be indistinguishable, the same discipline as ev_mode's own guarantee."""
+    default_run = run_sim.run_agent(seed=42, days=DAYS, verbose=False)
+    explicit_run = run_sim.run_agent(seed=42, days=DAYS, verbose=False, learned=False)
+    assert default_run == explicit_run
+
+
+def test_run_agent_learned_true_reports_itself_and_implies_ev_mode() -> None:
+    report = run_sim.run_agent(seed=42, days=DAYS, verbose=False, learned=True)
+    assert report["learned"] is True
+    assert report["ev_mode"] is True
+
+
+def test_run_agent_learned_true_actually_uses_the_learned_posteriors() -> None:
+    """Not just "the numbers differ" -- a direct check that engine/brain.py's
+    learned-decision provenance (config/rules.yaml learning.enabled path) was
+    actually exercised, and that at least one decision used a real fitted
+    posterior mean (config/learned_recovery.yaml's good_customer/firm cell,
+    n=748) rather than every cell falling back to the hand-typed grid."""
+    run_sim.run_agent(seed=42, days=DAYS, verbose=False, learned=True)
+    brain_entries = [e for e in audit.entries() if e.get("actor") == "brain"]
+    methods = {(e.get("detail") or {}).get("learning_method") for e in brain_entries}
+    methods.discard(None)
+    assert methods, "no learned-decision provenance recorded -- was learning.enabled actually true?"
+    assert methods <= {"posterior_mean", "hardcoded"}
+    assert "posterior_mean" in methods, (
+        "expected at least one decision to use a real fitted cell (e.g. "
+        "good_customer/firm) over a 45-day run"
+    )
+
+
+def test_run_agent_learned_true_restores_global_config_after_returning() -> None:
+    """The mutation _forced_learned_mode() makes to the shared rules() dict
+    must not leak past run_agent()'s own call -- proven by running a plain
+    arm immediately afterward and checking it reports ev_mode off, the same
+    order sim/run_sim.py's own --compare uses (agent+EV+learned is not the
+    last arm run there either)."""
+    from engine.config import rules
+
+    settings = rules()
+    run_sim.run_agent(seed=42, days=20, verbose=False, learned=True)
+    assert settings["learning"]["enabled"] is False
+    assert settings["brain"]["ev_mode"] is False
+
+    plain = run_sim.run_agent(seed=42, days=20, verbose=False)
+    assert plain["ev_mode"] is False
+    assert plain["learned"] is False
+
+
+def test_forced_learned_mode_restoration_is_airtight_across_six_seeds_and_four_arms() -> None:
+    """Not just one seed, one restoration (the tests above) -- the exact
+    sequence sim/run_sim.py's own --compare runs in one process: for EVERY
+    one of the six benchmark seeds, baseline / agent (ev off) / agent+EV /
+    agent+EV+learned, in that order. After every single agent+EV+learned
+    call, config/rules.yaml's learning.enabled() must already read False --
+    and, just as important, the NEXT seed's baseline/agent/agent+EV arms
+    must see the untouched config too (not just "restored before the test
+    ends", but restored before the very next call that depends on it).
+    Fast days=20 per arm to keep 24 total run_baseline/run_agent calls quick;
+    the mechanism being tested (a module-level rules() dict mutation) does
+    not depend on how many simulated days a run covers.
+    """
+    from data import generate
+    from engine import learning
+    from engine.config import ev_mode_on, rules
+
+    settings = rules()
+    baseline_state = (settings["learning"]["enabled"], settings["learning"]["mode"],
+                      settings["brain"]["ev_mode"])
+    assert baseline_state[0] is False, "fixture assumption: learning ships off"
+
+    try:
+        for seed in run_sim.BENCHMARK_SEEDS:
+            # The untouched config must already hold BEFORE this seed's own
+            # baseline/agent/agent+EV arms run -- i.e. the PREVIOUS seed's
+            # agent+EV+learned call (if any) left nothing behind.
+            current = (settings["learning"]["enabled"], settings["learning"]["mode"],
+                      settings["brain"]["ev_mode"])
+            assert current == baseline_state, (
+                f"config was left mutated before seed {seed}'s arms ran: {current}")
+            assert learning.enabled() is False
+            assert ev_mode_on() is False
+
+            run_sim.run_baseline(seed, 20, verbose=False)
+            assert learning.enabled() is False, f"seed {seed} baseline arm touched learning.enabled"
+
+            agent = run_sim.run_agent(seed, 20, verbose=False)
+            assert agent["ev_mode"] is False
+            assert learning.enabled() is False, f"seed {seed} plain agent arm touched learning.enabled"
+            assert not any("learning_method" in (e.get("detail") or {})
+                           for e in audit.entries() if e.get("actor") == "brain"), (
+                f"seed {seed}'s plain agent arm recorded learned-decision provenance "
+                f"with learning supposedly off"
+            )
+
+            agent_ev = run_sim.run_agent(seed, 20, verbose=False, ev_mode=True)
+            assert agent_ev["ev_mode"] is True and agent_ev["learned"] is False
+            assert learning.enabled() is False, f"seed {seed} agent+EV arm touched learning.enabled"
+            assert not any("learning_method" in (e.get("detail") or {})
+                           for e in audit.entries() if e.get("actor") == "brain"), (
+                f"seed {seed}'s agent+EV (ev on, learning off) arm recorded learned-decision "
+                f"provenance -- learning.enabled must have leaked in"
+            )
+
+            agent_learned = run_sim.run_agent(seed, 20, verbose=False, learned=True)
+            assert agent_learned["learned"] is True
+
+            # Immediately after THIS seed's learned arm returns, the config
+            # must already be back -- not "eventually", not "by the time the
+            # test ends".
+            restored = (settings["learning"]["enabled"], settings["learning"]["mode"],
+                       settings["brain"]["ev_mode"])
+            assert restored == baseline_state, (
+                f"seed {seed}'s agent+EV+learned arm left the config mutated: {restored}")
+            assert learning.enabled() is False
+            assert ev_mode_on() is False
+    finally:
+        generate.ensure_dataset(42)   # leave the on-disk dataset as we found it
+
+
+def test_multi_seed_summary_without_primary_agent_learned_has_no_agent_learned_keys() -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    summary = run_sim.multi_seed_summary(42, baseline, agent, extra_seeds=(), days=20)
+    assert "agent_learned_money_win_rate" not in summary
+    assert not any(key.startswith("agent_learned_") for key in summary["rows"][0])
+
+
+def test_multi_seed_summary_with_primary_agent_learned_adds_keys_additively() -> None:
+    """agent_learned_* keys are added on top of the existing baseline_*/
+    agent_*/agent_ev_* ones -- their own values must not change just because
+    the learned-posteriors ablation ran alongside them."""
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    agent_ev = run_sim.run_agent(42, 20, verbose=False, ev_mode=True)
+    agent_learned = run_sim.run_agent(42, 20, verbose=False, learned=True)
+
+    without = run_sim.multi_seed_summary(
+        42, baseline, agent, extra_seeds=(), days=20, primary_agent_ev=agent_ev)
+    with_learned = run_sim.multi_seed_summary(
+        42, baseline, agent, extra_seeds=(), days=20,
+        primary_agent_ev=agent_ev, primary_agent_learned=agent_learned)
+
+    row_without, row_with = without["rows"][0], with_learned["rows"][0]
+    for key in row_without:
+        assert row_with[key] == row_without[key], f"{key} changed just from running the ablation"
+    assert without["agent_ev_money_win_rate"] == with_learned["agent_ev_money_win_rate"]
+
+    assert row_with["agent_learned_recovered_paise"] == agent_learned["final"]["recovered_paise"]
+    assert row_with["agent_learned_money_win"] == (
+        agent_learned["final"]["recovered_paise"] >= agent_ev["final"]["recovered_paise"])
+    assert "agent_learned_money_win_rate" in with_learned
+
+    # The spread, not just the win rate -- one seed here, so mean == min == max
+    # == the single delta, but the shape must already be right.
+    spread = with_learned["agent_learned_delta_paise"]
+    delta = agent_learned["final"]["recovered_paise"] - agent_ev["final"]["recovered_paise"]
+    assert spread == {"mean": delta, "min": delta, "max": delta, "n_seeds": 1}
+
+
+def test_multi_seed_summary_agent_learned_requires_agent_ev() -> None:
+    """There is no agent+EV+learned comparison basis without an agent+EV to
+    compare it against -- a caller that passes one without the other is a
+    programming error, not a case to silently tolerate."""
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    agent_learned = run_sim.run_agent(42, 20, verbose=False, learned=True)
+    with pytest.raises(AssertionError):
+        run_sim.multi_seed_summary(
+            42, baseline, agent, extra_seeds=(), days=20, primary_agent_learned=agent_learned)
+
+
+def test_write_results_omits_agent_learned_when_not_given(tmp_path) -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    out = tmp_path / "results.json"
+    run_sim._write_results(out, 42, 20, baseline, agent, {"n": 0, "baseline": None, "agent": None}, None)
+    import json
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert "agent_learned" not in payload
+
+
+def test_write_results_includes_agent_learned_when_given(tmp_path) -> None:
+    baseline = run_sim.run_baseline(42, 20, verbose=False)
+    agent = run_sim.run_agent(42, 20, verbose=False)
+    agent_learned = run_sim.run_agent(42, 20, verbose=False, learned=True)
+    out = tmp_path / "results.json"
+    run_sim._write_results(out, 42, 20, baseline, agent, {"n": 0, "baseline": None, "agent": None},
+                           None, agent_learned=agent_learned)
+    import json
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["agent_learned"]["final"]["recovered_paise"] == agent_learned["final"]["recovered_paise"]
+
+
+def test_the_agent_learned_arm_does_not_clobber_the_agent_trail_on_disk() -> None:
+    """Same proof as test_the_agent_ev_arm_does_not_clobber_the_agent_trail_on_disk
+    for the fourth arm: run_agent() unconditionally clears and rewrites the
+    shared on-disk audit trail on every call, so computing agent+EV+learned
+    right after the plain agent arm would silently leave ITS trail on disk
+    instead, unless the caller snapshots and restores around it."""
+    run_sim.run_agent(42, 20, verbose=False)
+    agent_trail = audit.LOG_PATH.read_bytes()
+    assert agent_trail, "the agent run should have written a trail to compare against"
+
+    snapshot = audit.snapshot()
+    run_sim.run_agent(42, 20, verbose=False, learned=True)
+    assert audit.LOG_PATH.read_bytes() != agent_trail, (
+        "fixture assumption: the ablation run must actually produce a "
+        "different trail, or this test cannot tell restore() apart from a no-op"
+    )
+    audit.restore(snapshot)
+
+    assert audit.LOG_PATH.read_bytes() == agent_trail
+
+
+def test_assert_no_training_seed_overlap_raises_inside_the_training_range() -> None:
+    with pytest.raises(ValueError, match=r"1005"):
+        run_sim._assert_no_training_seed_overlap((42, 1005, 555))
+
+
+def test_assert_no_training_seed_overlap_passes_for_the_benchmark_seeds() -> None:
+    run_sim._assert_no_training_seed_overlap(run_sim.BENCHMARK_SEEDS)   # must not raise
+
+
+def test_benchmark_seeds_is_default_seed_plus_default_extra_seeds() -> None:
+    assert run_sim.BENCHMARK_SEEDS == (run_sim.DEFAULT_SEED,) + run_sim.DEFAULT_EXTRA_SEEDS
+    assert run_sim.BENCHMARK_SEEDS == (42, 7, 13, 99, 2024, 555)
+    for seed in run_sim.BENCHMARK_SEEDS:
+        assert not (run_sim.TRAINING_SEED_START <= seed <= run_sim.TRAINING_SEED_END)

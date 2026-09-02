@@ -41,7 +41,7 @@ import json
 import os
 import random
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -92,6 +92,48 @@ def _forced_mock_mode():
             os.environ.pop("LLM_MODE", None)
         else:
             os.environ["LLM_MODE"] = previous
+
+
+@contextmanager
+def _forced_learned_mode():
+    """SIMULATOR-ONLY: the fourth ablation arm, agent+EV+learned.
+
+    engine.negotiation.recovery_probability()'s learning.enabled() / .mode()
+    checks (engine/learning.py) read config/rules.yaml's cached rules() dict
+    directly -- unlike brain.decide()'s own ev_mode override, they take no
+    `config` parameter, so there is no way to select the fitted posteriors for
+    one run without touching that shared object. engine.config.rules() is
+    @lru_cache(maxsize=1): engine.config, engine.learning, engine.negotiation
+    and engine.brain all imported the SAME function and get back the SAME
+    dict, so flipping its learning/brain keys IN PLACE here is visible to all
+    four without a second config-loading mechanism -- and restoring them on
+    exit leaves every other arm, and every later seed's runs, byte-identical
+    to before this ran.
+
+    Always sets learning.mode to "offline" (the fitted posterior MEAN) --
+    never "online" (Thompson sampling + in-run updates), which is `online`'s
+    own, separately-toggled experiment arm with its own semantics.
+
+    Never reachable from main.py or any CLI flag: this context manager exists
+    only in sim/run_sim.py, the same guarantee run_agent(explore=True)'s own
+    docstring makes for exploration mode.
+    """
+    settings = rules()
+    learning_block = settings.setdefault("learning", {})
+    brain_block = settings.setdefault("brain", {})
+    previous_enabled = learning_block.get("enabled")
+    previous_mode = learning_block.get("mode")
+    previous_ev_mode = brain_block.get("ev_mode")
+    learning_block["enabled"] = True
+    learning_block["mode"] = "offline"
+    brain_block["ev_mode"] = "on"
+    try:
+        learning.check_config()
+        yield
+    finally:
+        learning_block["enabled"] = previous_enabled
+        learning_block["mode"] = previous_mode
+        brain_block["ev_mode"] = previous_ev_mode
 
 
 def _rng(seed: int, invoice_id: str, today: date, tag: str) -> random.Random:
@@ -579,7 +621,7 @@ def _resolve_online(learner, ledger, horizon: int, today: date, run_end: date,
 
 def run_agent(
     seed: int, days: int, verbose: bool = False, ev_mode: bool = False,
-    explore: bool = False, online: bool = False,
+    explore: bool = False, online: bool = False, learned: bool = False,
     online_posteriors_out: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
@@ -639,8 +681,20 @@ def run_agent(
             config opts in. At end of run the final posteriors are written to
             `online_posteriors_out` (default report/out/learned_posteriors_final.yaml);
             config/learned_recovery.yaml is never touched.
+        learned: SIMULATOR-ONLY fourth ablation arm, agent+EV+LEARNED. Implies
+            the EV path, like explore/online do. Unlike ev_mode (a `config`
+            dict threaded straight into brain.decide()), engine.negotiation.
+            recovery_probability()'s learning.enabled()/mode() checks read
+            config/rules.yaml's cached rules() dict directly and take no
+            `config` parameter -- so for the duration of this run only,
+            _forced_learned_mode() flips that shared dict's learning.enabled
+            to True and learning.mode to "offline" (the fitted posterior MEAN,
+            never Thompson sampling -- that is `online`'s own arm), restoring
+            both on exit. Never reachable from main.py or any CLI flag; only
+            sim/run_sim.py's own --compare ablation and multi_seed_summary()
+            construct one.
     """
-    ev_mode = ev_mode or explore or online
+    ev_mode = ev_mode or explore or online or learned
     decide_config = None
     if ev_mode:
         base_config = rules()
@@ -659,7 +713,7 @@ def run_agent(
     # a behaviour change. The mode label distinguishes the ablation's arms in
     # the shared outcomes.jsonl.
     mode_label = ("agent_online" if online else "agent_ev_explore" if explore
-                  else "agent_ev" if ev_mode else "agent")
+                  else "agent_ev_learned" if learned else "agent_ev" if ev_mode else "agent")
     ledger = outcomes.OutcomeLedger(mode=mode_label, seed=seed)
 
     buyers, invoices, persona_of, day0 = _load_world(seed)
@@ -705,7 +759,7 @@ def run_agent(
     audit.clear()
     audit.enable()
 
-    with _forced_mock_mode():
+    with _forced_mock_mode(), (_forced_learned_mode() if learned else nullcontext()):
         for offset in range(days):
             today = day0 + timedelta(days=offset)
             last_day = today
@@ -967,7 +1021,7 @@ def run_agent(
 
     return {
         "mode": "agent", "seed": seed, "days": days, "ev_mode": ev_mode,
-        "explore": explore, "online": online,
+        "explore": explore, "online": online, "learned": learned,
         # Online-only (None otherwise): the final in-memory posteriors and
         # where they were dumped. Additive -- read by nothing that predates it.
         "online_posteriors": online_posteriors,
@@ -1157,7 +1211,8 @@ def _print_summary(label: str, report: dict[str, Any]) -> None:
 def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
                    agent: dict[str, Any], matched_days: dict[str, Any],
                    multi_seed: dict[str, Any] | None,
-                   agent_ev: dict[str, Any] | None = None) -> None:
+                   agent_ev: dict[str, Any] | None = None,
+                   agent_learned: dict[str, Any] | None = None) -> None:
     payload = {
         "seed": seed, "days": days,
         "generated": datetime.now().isoformat(timespec="seconds"),
@@ -1176,6 +1231,11 @@ def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
     # two-column layout when it is absent -- see that module's own comment.
     if agent_ev is not None:
         payload["agent_ev"] = agent_ev
+    # The fourth arm, additive the same way: absent from an OLD results.json,
+    # and report/build_report.py's .get("agent_learned") degrades to the
+    # existing (up to) three-column layout when it is absent.
+    if agent_learned is not None:
+        payload["agent_learned"] = agent_learned
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -1185,11 +1245,44 @@ def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
 #: better, which is the whole point of publishing more than one seed.
 DEFAULT_EXTRA_SEEDS: tuple[int, ...] = (7, 13, 99, 2024, 555)
 
+#: --seed 42 (the default) plus DEFAULT_EXTRA_SEEDS above -- the exact six
+#: seeds every --compare run scores baseline/agent/agent+EV/agent+EV+learned
+#: on by default. Named here so _assert_no_training_seed_overlap() and the
+#: startup print in main() have one thing to point at, not a re-derivation.
+BENCHMARK_SEEDS: tuple[int, ...] = (DEFAULT_SEED,) + DEFAULT_EXTRA_SEEDS
+
+#: scripts/fit_recovery.py fit config/learned_recovery.yaml's posteriors on
+#: seeds 1000-1029 inclusive (docs/learning_data.md) -- deliberately disjoint
+#: from BENCHMARK_SEEDS, so the fitted numbers are never scored on the world
+#: they memorised. Checked, not just documented -- see the function below.
+TRAINING_SEED_START, TRAINING_SEED_END = 1000, 1029
+
+
+def _assert_no_training_seed_overlap(seeds: tuple[int, ...]) -> None:
+    """Fail loudly, before any run starts, if a benchmark seed collides with
+    scripts/fit_recovery.py's training range.
+
+    The whole point of a held-out seed is that fitting never saw it -- scoring
+    the agent+EV+learned ablation on a seed the posteriors were fit from would
+    make its numbers dishonest in exactly the way docs/learning_data.md's seed
+    split exists to prevent.
+    """
+    overlap = sorted(s for s in seeds if TRAINING_SEED_START <= s <= TRAINING_SEED_END)
+    if overlap:
+        raise ValueError(
+            f"seed(s) {overlap} fall inside scripts/fit_recovery.py's training "
+            f"range {TRAINING_SEED_START}-{TRAINING_SEED_END} (docs/learning_data.md) "
+            f"-- these were used to FIT config/learned_recovery.yaml, so scoring "
+            f"the learned-posteriors ablation on them would not be honest. Pick a "
+            f"different --seed / --extra-seeds value."
+        )
+
 
 def multi_seed_summary(
     primary_seed: int, primary_baseline: dict[str, Any], primary_agent: dict[str, Any],
     extra_seeds: tuple[int, ...], days: int,
     *, primary_agent_ev: dict[str, Any] | None = None,
+    primary_agent_learned: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Re-run the comparison on more seeds and report who won on each.
 
@@ -1210,9 +1303,19 @@ def multi_seed_summary(
             ev_mode=True arm for every extra seed too, so the ablation is
             judged on the identical seed set as the existing 6/6 comparison,
             not a separately chosen one.
+        primary_agent_learned: the fourth arm (run_agent(..., learned=True)
+            for the primary seed) -- the ablation ON TOP of primary_agent_ev:
+            does swapping engine/negotiation.py's hand-typed
+            recovery_probability grid for scripts/fit_recovery.py's fitted
+            posteriors (config/learned_recovery.yaml) change what agent+EV
+            alone recovers. None (the default) skips it entirely, the same
+            additive contract primary_agent_ev already has. Requires
+            primary_agent_ev to also be given -- there is no agent+EV+learned
+            comparison basis without an agent+EV to compare it against.
     """
     def row(seed: int, baseline: dict[str, Any], agent: dict[str, Any],
-            agent_ev: dict[str, Any] | None) -> dict[str, Any]:
+            agent_ev: dict[str, Any] | None,
+            agent_learned: dict[str, Any] | None) -> dict[str, Any]:
         matched = matched_avg_days_to_pay(baseline, agent)
         edge = agent["edge_case_counts"]
         result = {
@@ -1243,9 +1346,19 @@ def multi_seed_summary(
             result["agent_ev_money_win"] = (
                 agent_ev["final"]["recovered_paise"] >= agent["final"]["recovered_paise"]
             )
+        if agent_learned is not None:
+            # Same discipline one level further up the chain: agent+EV+learned
+            # is judged against agent+EV (the hand-typed grid), not against
+            # agent or baseline -- whether it still beats those is already
+            # implied by the rows above.
+            assert agent_ev is not None, "agent_learned has no comparison basis without agent_ev"
+            result["agent_learned_recovered_paise"] = agent_learned["final"]["recovered_paise"]
+            result["agent_learned_money_win"] = (
+                agent_learned["final"]["recovered_paise"] >= agent_ev["final"]["recovered_paise"]
+            )
         return result
 
-    rows = [row(primary_seed, primary_baseline, primary_agent, primary_agent_ev)]
+    rows = [row(primary_seed, primary_baseline, primary_agent, primary_agent_ev, primary_agent_learned)]
 
     # The primary seed's trail is on disk right now, because its run_agent()
     # has already finished. Every extra seed's run_agent() starts by clearing
@@ -1259,7 +1372,9 @@ def multi_seed_summary(
         baseline = run_baseline(seed, days, verbose=False)
         agent = run_agent(seed, days, verbose=False)
         agent_ev = run_agent(seed, days, verbose=False, ev_mode=True) if primary_agent_ev is not None else None
-        rows.append(row(seed, baseline, agent, agent_ev))
+        agent_learned = (run_agent(seed, days, verbose=False, learned=True)
+                        if primary_agent_learned is not None else None)
+        rows.append(row(seed, baseline, agent, agent_ev, agent_learned))
 
     generate.ensure_dataset(primary_seed)   # leave the dataset as we found it
     audit.restore(primary_trail)            # and the audit trail with it
@@ -1276,6 +1391,20 @@ def multi_seed_summary(
     if primary_agent_ev is not None:
         ev_wins = sum(1 for r in rows if r["agent_ev_money_win"])
         summary["agent_ev_money_win_rate"] = f"{ev_wins}/{len(rows)}"
+    if primary_agent_learned is not None:
+        learned_wins = sum(1 for r in rows if r["agent_learned_money_win"])
+        summary["agent_learned_money_win_rate"] = f"{learned_wins}/{len(rows)}"
+        # The spread, not just the win rate -- six seeds is a small sample,
+        # and a win-rate fraction alone can read as more confident than it
+        # is. Reported per-seed in `rows` already; this is the summary a
+        # reader who wants the magnitude, not just the count, looks at.
+        deltas = [r["agent_learned_recovered_paise"] - r["agent_ev_recovered_paise"] for r in rows]
+        summary["agent_learned_delta_paise"] = {
+            "mean": round(sum(deltas) / len(deltas)),
+            "min": min(deltas),
+            "max": max(deltas),
+            "n_seeds": len(deltas),
+        }
     return summary
 
 
@@ -1350,17 +1479,26 @@ def main() -> int:
         return 0
 
     print(f"simulator: seed={args.seed}, days={args.days}, "
-          f"mode={'baseline vs agent vs agent+EV' if args.compare else 'agent only'}")
+          f"mode={'baseline vs agent vs agent+EV vs agent+EV+learned' if args.compare else 'agent only'}")
 
     # The ONE place the outcomes file is truncated (engine/outcomes.py's FILE
     # LIFECYCLE note). Deliberately here and not inside run_agent()/
-    # run_baseline(): a --compare below runs those eighteen times and every
+    # run_baseline(): a --compare below runs those many times and every
     # one of those runs belongs in this invocation's file. Deliberately after
     # the --scenario branch above, too, which returns without ever writing a
     # row and so has no business destroying the last real run's file.
     outcomes_path = outcomes.start_file()
 
     if args.compare:
+        # Parsed up front, before any run starts, so the training-seed check
+        # below can fail fast rather than after several minutes of simulation.
+        extra_seeds = tuple(int(s) for s in args.extra_seeds.split(",") if s.strip())
+        all_seeds = (args.seed,) + extra_seeds
+        _assert_no_training_seed_overlap(all_seeds)
+        print(f"benchmark seeds: {list(all_seeds)} -- confirmed disjoint from "
+              f"scripts/fit_recovery.py's training seeds "
+              f"{TRAINING_SEED_START}-{TRAINING_SEED_END} (docs/learning_data.md)")
+
         baseline = run_baseline(args.seed, args.days, verbose=args.verbose)
         agent = run_agent(args.seed, args.days, verbose=args.verbose)
         # agent's own audit trail is what everything downstream of here reads
@@ -1368,8 +1506,9 @@ def main() -> int:
         # wires (report/build_report.py) and multi_seed_summary()'s own
         # "restore the primary seed's trail" both assume it. run_agent()
         # unconditionally clears and rewrites the shared trail on every call,
-        # so without snapshotting it here, the agent+EV run immediately
-        # below would silently become the trail everything else sees.
+        # so without snapshotting it here, the agent+EV (or agent+EV+learned)
+        # run immediately below would silently become the trail everything
+        # else sees.
         agent_trail = audit.snapshot()
         # Phase 4's third arm: the same agent, with config/rules.yaml's
         # brain.ev_mode forced on -- the long-deferred ablation of whether
@@ -1378,6 +1517,12 @@ def main() -> int:
         # already-built agent, not just whether the agent beats a naive
         # baseline (which agent vs. baseline above already answers).
         agent_ev = run_agent(args.seed, args.days, verbose=args.verbose, ev_mode=True)
+        # The fourth arm: the same agent+EV, with config/rules.yaml's
+        # learning.enabled forced on (offline mode -- the fitted posterior
+        # mean) -- does swapping the hand-typed recovery_probability grid for
+        # scripts/fit_recovery.py's learned numbers change what agent+EV
+        # alone recovers.
+        agent_learned = run_agent(args.seed, args.days, verbose=args.verbose, learned=True)
         audit.restore(agent_trail)
         if args.verbose:
             print()
@@ -1392,39 +1537,56 @@ def main() -> int:
             print("-- agent+EV narrative --")
             for line in agent_ev["narrative"]:
                 print(f"  {line}")
+            print()
+            print("-- agent+EV+learned narrative --")
+            for line in agent_learned["narrative"]:
+                print(f"  {line}")
         print()
         _print_summary("baseline", baseline)
         print()
         _print_summary("agent (ev off)", agent)
         print()
         _print_summary("agent+EV (ev on)", agent_ev)
+        print()
+        _print_summary("agent+EV+learned (ev on, learned posteriors)", agent_learned)
         gain = agent["final"]["recovered_paise"] - baseline["final"]["recovered_paise"]
         ev_gain = agent_ev["final"]["recovered_paise"] - agent["final"]["recovered_paise"]
+        learned_gain = agent_learned["final"]["recovered_paise"] - agent_ev["final"]["recovered_paise"]
         print()
         print(f"agent recovered {format_inr(gain, 'Rs ')} more than the baseline "
               f"with {agent['messages_sent'] - baseline['messages_sent']:+d} messages")
         print(f"agent+EV recovered {format_inr(abs(ev_gain), 'Rs ')} "
               f"{'more' if ev_gain >= 0 else 'less'} than agent (ev off) -- the ablation")
+        print(f"agent+EV+learned recovered {format_inr(abs(learned_gain), 'Rs ')} "
+              f"{'more' if learned_gain >= 0 else 'less'} than agent+EV -- "
+              f"the learned-posteriors ablation")
         matched = matched_avg_days_to_pay(baseline, agent)
         if matched["n"]:
             print(f"avg days to pay, {matched['n']} invoices BOTH recovered "
                   f"(the fair comparison): baseline {matched['baseline']}, agent {matched['agent']}")
 
-        extra_seeds = tuple(int(s) for s in args.extra_seeds.split(",") if s.strip())
         multi_seed = None
         if extra_seeds:
             print()
             print(f"running {len(extra_seeds)} more seeds for the multi-seed table "
-                  f"(baseline, agent, agent+EV): {extra_seeds}")
+                  f"(baseline, agent, agent+EV, agent+EV+learned): {extra_seeds}")
             multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days,
-                                            primary_agent_ev=agent_ev)
+                                            primary_agent_ev=agent_ev,
+                                            primary_agent_learned=agent_learned)
             print(f"agent won on rupees recovered in {multi_seed['money_win_rate']} seeds, "
                   f"on avg days-to-pay (fair comparison) in {multi_seed['days_win_rate']} seeds")
             print(f"agent+EV beat agent (ev off) on rupees recovered in "
                   f"{multi_seed['agent_ev_money_win_rate']} seeds -- the ablation")
+            spread = multi_seed["agent_learned_delta_paise"]
+            print(f"agent+EV+learned beat agent+EV on rupees recovered in "
+                  f"{multi_seed['agent_learned_money_win_rate']} seeds -- the learned-posteriors "
+                  f"ablation. {spread['n_seeds']} seeds is a small sample: mean delta "
+                  f"{format_inr(spread['mean'], 'Rs ')}, range {format_inr(spread['min'], 'Rs ')} to "
+                  f"{format_inr(spread['max'], 'Rs ')} -- read the range, not just the win rate or "
+                  f"the mean, before drawing a conclusion")
 
         _write_results(args.results_out, args.seed, args.days, baseline, agent, matched, multi_seed,
-                       agent_ev=agent_ev)
+                       agent_ev=agent_ev, agent_learned=agent_learned)
         print(f"results written to {args.results_out}")
         _print_outcomes_file(outcomes_path)
     else:

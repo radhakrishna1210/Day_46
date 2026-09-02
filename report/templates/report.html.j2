@@ -32,6 +32,7 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .headline td.agent, .headline th.agent { color: var(--accent); font-weight: 600; }
   .headline td.agent-ev, .headline th.agent-ev { color: #7a1fa2; font-weight: 600; }
+  .headline td.agent-learned, .headline th.agent-learned { color: #b45309; font-weight: 600; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
   .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
   .badge.disputed { background: #fde8e8; color: var(--bad); }
@@ -76,6 +77,7 @@
       <tr>
         <th>Metric</th><th class="num">Baseline</th><th class="num agent">Agent</th>
         {% if has_agent_ev %}<th class="num agent-ev">Agent + EV</th>{% endif %}
+        {% if has_agent_learned %}<th class="num agent-learned">Agent + EV + Learned</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -85,6 +87,7 @@
         <td class="num">{{ row.baseline }}</td>
         <td class="num agent">{{ row.agent }}</td>
         {% if has_agent_ev %}<td class="num agent-ev">{{ row.agent_ev }}</td>{% endif %}
+        {% if has_agent_learned %}<td class="num agent-learned">{{ row.agent_learned }}</td>{% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -94,6 +97,9 @@
   {% endif %}
   {% if ev_ablation_note %}
   <p class="reasons">{{ ev_ablation_note }}</p>
+  {% endif %}
+  {% if learned_ablation_note %}
+  <p class="reasons">{{ learned_ablation_note }}</p>
   {% endif %}
 
   <h2>Buyer panel -- who needs attention right now</h2>
@@ -154,6 +160,9 @@
         {% if multi_seed.agent_ev_money_win_rate %}
         <th class="num">₹ agent+EV</th><th>₹ win vs agent</th>
         {% endif %}
+        {% if multi_seed.agent_learned_money_win_rate %}
+        <th class="num">₹ agent+EV+learned</th><th>₹ win vs agent+EV</th>
+        {% endif %}
         <th class="num">Days baseline</th><th class="num">Days agent</th><th>Days win</th>
         <th class="num">Malformed invoices</th><th class="num">Superseded promises</th>
       </tr>
@@ -168,6 +177,10 @@
         {% if multi_seed.agent_ev_money_win_rate %}
         <td class="num">{{ row.agent_ev_recovered }}</td>
         <td class="{{ 'win' if row.agent_ev_money_win else 'lose' }}">{{ "✓" if row.agent_ev_money_win else "✗" }}</td>
+        {% endif %}
+        {% if multi_seed.agent_learned_money_win_rate %}
+        <td class="num">{{ row.agent_learned_recovered }}</td>
+        <td class="{{ 'win' if row.agent_learned_money_win else 'lose' }}">{{ "✓" if row.agent_learned_money_win else "✗" }}</td>
         {% endif %}
         {% if row.matched_n %}
         <td class="num">{{ row.matched_baseline_days }}</td>
@@ -194,6 +207,19 @@
     The Phase 4 ablation: agent+EV (ev_mode on) beat the SAME agent with ev_mode
     off on ₹ recovered in <strong>{{ multi_seed.agent_ev_money_win_rate }}</strong> seeds --
     reported as it came out, not tuned toward a clean win.
+  </p>
+  {% endif %}
+  {% if multi_seed.agent_learned_money_win_rate %}
+  <p class="win-rate">
+    The learned-posteriors ablation: agent+EV+learned (config/learned_recovery.yaml's
+    fitted posteriors in place of the hand-typed EV grid) beat agent+EV on ₹
+    recovered in <strong>{{ multi_seed.agent_learned_money_win_rate }}</strong> seeds --
+    reported as it came out, losses included, no asterisks. {{ multi_seed.agent_learned_spread.n_seeds }}
+    seeds is a small sample, so the win rate alone is not the whole picture: across
+    those seeds the mean change was <strong>{{ multi_seed.agent_learned_spread.mean }}</strong>,
+    ranging from <strong>{{ multi_seed.agent_learned_spread.min }}</strong> to
+    <strong>{{ multi_seed.agent_learned_spread.max }}</strong> -- read that range, not just
+    the average or the win count, before drawing a conclusion.
   </p>
   {% endif %}
   {% if edge_case_note %}

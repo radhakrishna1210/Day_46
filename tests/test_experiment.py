@@ -504,6 +504,118 @@ def test_build_report_renders_the_agent_ev_multi_seed_columns(tmp_path) -> None:
     assert "₹ win vs agent" in html
 
 
+# --------------------------------------------------------------------------
+# the fourth (agent+EV+learned) column, additive to results.json on top of
+# agent_ev -- same discipline as Phase 4 Part B above
+# --------------------------------------------------------------------------
+
+def test_headline_and_report_have_no_agent_learned_column_without_it(results_payload, tmp_path) -> None:
+    """results_payload carries no "agent_learned" key -- the pre-fourth-arm
+    shape. Every headline row must carry no "agent_learned" key either, and
+    the rendered HTML must not mention the fourth column."""
+    for row in build_report._headline_rows(results_payload):
+        assert "agent_learned" not in row
+    assert build_report._view(results_payload)["has_agent_learned"] is False
+    assert build_report._view(results_payload)["learned_ablation_note"] is None
+
+    out = tmp_path / "report.html"
+    build_report.build(results_payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Agent + EV + Learned" not in html
+    assert '"num agent-learned"' not in html
+
+
+def test_headline_and_report_show_a_fourth_column_with_agent_learned(results_payload, tmp_path) -> None:
+    """A real learned=True run for the same seed, added the way sim/run_sim.py's
+    own --compare CLI does, actually produces a fourth rendered column with
+    real figures in it, alongside the third (agent_ev) column."""
+    agent_ev = run_sim.run_agent(42, DAYS, verbose=False, ev_mode=True)
+    agent_learned = run_sim.run_agent(42, DAYS, verbose=False, learned=True)
+    payload = {**results_payload, "agent_ev": agent_ev, "agent_learned": agent_learned}
+
+    rows = build_report._headline_rows(payload)
+    assert rows[0]["agent_learned"] == build_report._money(agent_learned["final"]["recovered_paise"])
+    view = build_report._view(payload)
+    assert view["has_agent_learned"] is True
+    assert view["learned_ablation_note"] is not None
+
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Agent + EV + Learned" in html
+    assert build_report._money(agent_learned["final"]["recovered_paise"]) in html
+
+
+def _agent_learned_multi_seed_payload() -> dict:
+    """A minimal results.json shape with the learned-posteriors ablation's own
+    agent_learned_* keys on every row, ON TOP of agent_ev_* -- the same
+    minimal-fixture style _agent_ev_multi_seed_payload() above uses. One seed
+    is a win, one a loss -- proving the loss renders with no special-casing is
+    the whole point of this fixture."""
+    rows = [
+        {"seed": seed, "baseline_recovered_paise": 100, "agent_recovered_paise": 150,
+         "money_win": True, "matched_n": 0, "matched_baseline_days": None,
+         "matched_agent_days": None, "days_win": False,
+         "malformed_invoices": 0, "superseded_promise_invoices": 0,
+         "agent_ev_recovered_paise": ev_recovered, "agent_ev_money_win": ev_win,
+         "agent_learned_recovered_paise": learned_recovered, "agent_learned_money_win": learned_win}
+        for seed, ev_recovered, ev_win, learned_recovered, learned_win in (
+            (42, 180, True, 200, True), (7, 140, False, 120, False))
+    ]
+    return {
+        "multi_seed": {"rows": rows, "money_win_rate": "2/2", "days_win_rate": "n/a",
+                       "days_excluded": 2, "agent_ev_money_win_rate": "1/2",
+                       "agent_learned_money_win_rate": "1/2",
+                       "agent_learned_delta_paise": {"mean": 0, "min": -20, "max": 20, "n_seeds": 2}},
+    }
+
+
+def test_multi_seed_rows_carries_agent_learned_columns_additively() -> None:
+    payload = _agent_learned_multi_seed_payload()
+    view = build_report._multi_seed_rows(payload)
+    assert view["agent_learned_money_win_rate"] == "1/2"
+    assert view["rows"][0]["agent_learned_recovered"] == build_report._money(200)
+    assert view["rows"][0]["agent_learned_money_win"] is True
+    assert view["rows"][1]["agent_learned_money_win"] is False   # the loss, rendered like any other row
+    # the existing agent_ev columns are still exactly what they always were
+    assert view["rows"][0]["agent_ev_recovered"] == build_report._money(180)
+    spread = view["agent_learned_spread"]
+    assert spread["mean"] == build_report._money(0)
+    assert spread["min"] == build_report._money(-20)
+    assert spread["max"] == build_report._money(20)
+    assert spread["n_seeds"] == 2
+
+
+def test_multi_seed_rows_without_agent_learned_has_no_agent_learned_keys() -> None:
+    payload = _multi_seed_payload({42: {}})
+    view = build_report._multi_seed_rows(payload)
+    assert "agent_learned_money_win_rate" not in view
+    assert not any(key.startswith("agent_learned_") for key in view["rows"][0])
+
+
+def test_build_report_renders_the_agent_learned_multi_seed_columns_and_the_loss(tmp_path) -> None:
+    payload = {**_agent_learned_multi_seed_payload(), "seed": 42, "days": DAYS,
+              "generated": "2026-08-24T00:00:00",
+              "baseline": {"final": {"recovered_paise": 100, "outstanding_paise": 0,
+                                     "disputed_paise": 0, "disputed_count": 0},
+                          "avg_days_to_pay": None, "messages_sent": 0, "handoffs": 0,
+                          "exceptions": [], "per_attempt": {}},
+              "agent": {"final": {"recovered_paise": 150, "outstanding_paise": 0,
+                                  "disputed_paise": 0, "disputed_count": 0},
+                       "avg_days_to_pay": None, "messages_sent": 0, "handoffs": 0,
+                       "exceptions": [], "per_rung": {}},
+              "matched_avg_days_to_pay": {"n": 0, "baseline": None, "agent": None}}
+    out = tmp_path / "report.html"
+    build_report.build(payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "agent+EV+learned" in html
+    assert "₹ win vs agent+EV" in html
+    # the loss (seed 7) renders in the SAME table with the SAME "lose" class
+    # as a win would -- no asterisk, no separate footnote, no hiding it.
+    assert html.count('class="lose"') >= 1
+    assert "small sample" in html
+
+
 def test_build_report_works_after_a_real_json_round_trip(results_payload, tmp_path) -> None:
     """The real CLI path: results.json has STRING keys for per_rung/per_attempt
 

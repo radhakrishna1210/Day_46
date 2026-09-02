@@ -156,40 +156,48 @@ def exceptions_list(results: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _headline_rows(results: dict[str, Any]) -> list[dict[str, str]]:
     """Baseline vs. agent, plus a third agent+EV column when Phase 4's
-    ablation arm (results["agent_ev"]) is present -- absent from an OLDER
-    results.json (pre-Phase-4, or a --compare run of it), in which case
-    every row simply carries no "agent_ev" key and the template falls back
-    to its existing two-column layout, per that key's own additive contract
-    (see sim/run_sim.py's _write_results()).
+    ablation arm (results["agent_ev"]) is present, and a fourth agent+EV+
+    learned column when the learned-posteriors arm (results["agent_learned"])
+    is present too -- either or both absent from an OLDER results.json, in
+    which case every row simply carries no such key and the template falls
+    back to its existing narrower layout, per that key's own additive
+    contract (see sim/run_sim.py's _write_results()).
     """
     baseline, agent = results["baseline"], results["agent"]
     agent_ev = results.get("agent_ev")
+    agent_learned = results.get("agent_learned")
     matched = results.get("matched_avg_days_to_pay") or {"n": 0, "baseline": None, "agent": None}
 
-    def row(label: str, baseline_value: str, agent_value: str, ev_value: str | None = "n/a") -> dict[str, str]:
+    def row(label: str, baseline_value: str, agent_value: str,
+            ev_value: str | None = "n/a", learned_value: str | None = "n/a") -> dict[str, str]:
         result = {"label": label, "baseline": baseline_value, "agent": agent_value}
         if agent_ev is not None:
             result["agent_ev"] = ev_value
+        if agent_learned is not None:
+            result["agent_learned"] = learned_value
         return result
 
     return [
         row("₹ recovered",
             _money(baseline["final"]["recovered_paise"]), _money(agent["final"]["recovered_paise"]),
-            _money(agent_ev["final"]["recovered_paise"]) if agent_ev else None),
+            _money(agent_ev["final"]["recovered_paise"]) if agent_ev else None,
+            _money(agent_learned["final"]["recovered_paise"]) if agent_learned else None),
         row("Avg days to pay (each run's own recovered invoices)",
             _days(baseline["avg_days_to_pay"]), _days(agent["avg_days_to_pay"]),
-            _days(agent_ev["avg_days_to_pay"]) if agent_ev else None),
-        # No third-way "matched, all three runs recovered" set is computed
+            _days(agent_ev["avg_days_to_pay"]) if agent_ev else None,
+            _days(agent_learned["avg_days_to_pay"]) if agent_learned else None),
+        # No further-way "matched, all runs recovered" set is computed
         # (matched_avg_days_to_pay() is a pairwise comparison) -- this row
-        # stays baseline-vs-agent only, "n/a" in the agent+EV column, rather
-        # than inventing a three-way intersection this phase never asked for.
+        # stays baseline-vs-agent only, "n/a" in the extra columns, rather
+        # than inventing a multi-way intersection this phase never asked for.
         row(f"Avg days to pay ({matched['n']} invoices BOTH recovered -- the fair comparison)",
             _days(matched["baseline"]), _days(matched["agent"])),
         row("Messages sent (envelopes -- W3 consolidates several "
             "invoices for one buyer into one message where the rung "
             "tier allows it)",
             str(baseline["messages_sent"]), str(agent["messages_sent"]),
-            str(agent_ev["messages_sent"]) if agent_ev else None),
+            str(agent_ev["messages_sent"]) if agent_ev else None,
+            str(agent_learned["messages_sent"]) if agent_learned else None),
         row("Invoice-contacts (each invoice touched, before bundling "
             "-- proves chasing itself did not shrink, only the "
             "envelope count did)",
@@ -198,13 +206,16 @@ def _headline_rows(results: dict[str, Any]) -> list[dict[str, str]]:
             # since run_baseline() deliberately carries no such field (W3 left
             # it untouched; see CLAUDE.md's W3 notes).
             str(baseline["messages_sent"]), str(agent.get("invoice_contacts", agent["messages_sent"])),
-            str(agent_ev.get("invoice_contacts", agent_ev["messages_sent"])) if agent_ev else None),
+            str(agent_ev.get("invoice_contacts", agent_ev["messages_sent"])) if agent_ev else None,
+            str(agent_learned.get("invoice_contacts", agent_learned["messages_sent"])) if agent_learned else None),
         row("Escalated to a human",
             str(baseline["handoffs"]), str(agent["handoffs"]),
-            str(agent_ev["handoffs"]) if agent_ev else None),
+            str(agent_ev["handoffs"]) if agent_ev else None,
+            str(agent_learned["handoffs"]) if agent_learned else None),
         row("Not recovered",
             str(len(baseline["exceptions"])), str(len(agent["exceptions"])),
-            str(len(agent_ev["exceptions"])) if agent_ev else None),
+            str(len(agent_ev["exceptions"])) if agent_ev else None,
+            str(len(agent_learned["exceptions"])) if agent_learned else None),
     ]
 
 
@@ -410,6 +421,7 @@ def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
     if not multi:
         return None
     has_ev = "agent_ev_recovered_paise" in multi["rows"][0]
+    has_learned = "agent_learned_recovered_paise" in multi["rows"][0]
     rows = []
     for row in multi["rows"]:
         entry = {
@@ -429,6 +441,9 @@ def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
         if has_ev:
             entry["agent_ev_recovered"] = _money(row["agent_ev_recovered_paise"])
             entry["agent_ev_money_win"] = row["agent_ev_money_win"]
+        if has_learned:
+            entry["agent_learned_recovered"] = _money(row["agent_learned_recovered_paise"])
+            entry["agent_learned_money_win"] = row["agent_learned_money_win"]
         rows.append(entry)
     result = {
         "rows": rows,
@@ -438,6 +453,18 @@ def _multi_seed_rows(results: dict[str, Any]) -> dict[str, Any] | None:
     }
     if has_ev:
         result["agent_ev_money_win_rate"] = multi["agent_ev_money_win_rate"]
+    if has_learned:
+        result["agent_learned_money_win_rate"] = multi["agent_learned_money_win_rate"]
+        # The spread, not just the win rate -- six seeds is a small sample
+        # (sim/run_sim.py's own comment on multi_seed_summary()'s
+        # agent_learned_delta_paise). Formatted here, computed there.
+        spread = multi["agent_learned_delta_paise"]
+        result["agent_learned_spread"] = {
+            "mean": _money(spread["mean"]),
+            "min": _money(spread["min"]),
+            "max": _money(spread["max"]),
+            "n_seeds": spread["n_seeds"],
+        }
     return result
 
 
@@ -489,6 +516,28 @@ def _ev_ablation_note(results: dict[str, Any]) -> str | None:
     )
 
 
+def _learned_ablation_note(results: dict[str, Any]) -> str | None:
+    """One sentence on the learned-posteriors ablation, on top of _ev_ablation_
+    note() above: does swapping engine/negotiation.py's hand-typed
+    recovery_probability grid for scripts/fit_recovery.py's fitted Beta-
+    posterior means (config/learned_recovery.yaml) change what agent+EV alone
+    already recovers -- reported whatever the number actually is, a win or
+    not, same discipline as the EV note.
+    """
+    agent_ev, agent_learned = results.get("agent_ev"), results.get("agent_learned")
+    if not agent_ev or not agent_learned:
+        return None
+    delta = agent_learned["final"]["recovered_paise"] - agent_ev["final"]["recovered_paise"]
+    verdict = "more" if delta > 0 else ("less" if delta < 0 else "the same as")
+    return (
+        f"Swapping in the learned posteriors (config/learned_recovery.yaml) for "
+        f"the hand-typed EV grid recovered {_money(abs(delta))} {verdict} than "
+        f"agent+EV alone on this seed -- see \"Is this just one lucky seed?\" "
+        f"below for the same comparison across all six benchmark seeds, and the "
+        f"spread across them, not just the mean or the win count."
+    )
+
+
 def _view(results: dict[str, Any]) -> dict[str, Any]:
     handoff_reasons = results["agent"].get("handoff_reasons") or {}
     stop_reasons = results["agent"].get("stop_reasons") or {}
@@ -498,7 +547,9 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "days": results["days"],
         "generated": results.get("generated"),
         "has_agent_ev": results.get("agent_ev") is not None,
+        "has_agent_learned": results.get("agent_learned") is not None,
         "ev_ablation_note": _ev_ablation_note(results),
+        "learned_ablation_note": _learned_ablation_note(results),
         "headline": _headline_rows(results),
         "per_rung": _per_rung_rows(results),
         "per_attempt": _per_attempt_rows(results),
