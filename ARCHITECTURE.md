@@ -499,6 +499,116 @@ to differently is `payment_plan`, and that is where this result comes from.
 > is implemented and tested but currently unreachable via a real `decide()`
 > ranking, per the finding above. No reactive settlement-offer handling.
 
+#### Block 2f — Learning the Recovery-Probability Grid (`engine/learning.py`)
+
+Block 2c's `recovery_probability` grid is a flat, hand-typed guess — Phase 2
+says so plainly. This block replaces that guess, cell by cell, with a number
+measured from the agent's own simulated behaviour, without changing anything
+about the EV formula itself.
+
+**What kind of model this is, stated plainly:** a **contextual bandit**, not
+reinforcement learning. Each `(quadrant, action)` pair is one bandit arm; the
+"context" is the buyer's quadrant (`engine/ability_willingness.py`'s
+`good_customer` / `cash_flow_problem` / `can_pay_but_wont` / `high_risk`);
+pulling an arm means taking that action; the reward is one binary outcome —
+did a payment land within `config/rules.yaml`'s `learning.attribution_horizon_days`
+(14) of the action. There is no state that carries forward from one decision
+to the next, no multi-step credit assignment, no value function bootstrapped
+across a sequence of actions, and no policy network — every decision is
+scored independently, exactly the shape Block 2c's EV formula already had.
+Fitting a better number per cell (this block) is a different exercise from
+teaching the EV formula itself a new shape (unchanged), and from anything
+that would need a reward signal spanning more than one action (not built,
+and not needed for this problem).
+
+**Trained entirely in simulation, never on real buyer data — none exists.**
+`scripts/fit_recovery.py` runs `sim/run_sim.py`'s **exploration mode**
+(`run_agent(explore=True)`, Phase 7 above the fold) across 30 fixed TRAINING
+seeds (1000–1029), sampling uniformly from whatever `negotiation.eligible_actions`
+already allows for that quadrant — so every reachable cell gets observed
+regardless of what today's EV ranking would have picked. Exploration seeds
+are asserted disjoint from the six BENCHMARK seeds (7, 13, 42, 99, 555, 2024)
+every headline number in `results.json` is measured on, checked before a
+single run starts — fitting on a benchmark seed would let the posteriors
+memorise the exact world they are later scored against.
+
+**The fit.** For each `(quadrant, action)` cell: `alpha = 1 + successes`,
+`beta = 1 + failures` — a weak, uniform Beta(1, 1) prior, so an unobserved
+cell would read as an honestly uncertain 50% with a near-maximal interval
+rather than a confident zero. `mean = alpha / (alpha + beta)`; `ci95_width`
+is the width of the 95% credible interval — wide means thin, and the number
+is shown, never hidden or refused. A SEND is grouped by the rung the
+escalation walk actually **delivered** it at (soft_nudge/firm/legal_facts),
+not by the label EV nominally picked — the two disagree on more than half of
+all SENDs (`docs/learning_findings.md`'s label/execution-gap finding), so
+fitting on the delivered rung is the number that actually describes what the
+buyer received. A handoff row is excluded outright, not fitted as a zero
+cell: the simulator has no model of what happens after a human takes a case
+over, so its recovery is unobservable, not zero. Output: `config/learned_recovery.yaml`
+(the posteriors, machine-generated, do-not-hand-edit) and `docs/learning_data.md`
+(the provenance — exact seeds, row counts, thin-cell flags).
+
+**Reading the posteriors back, behind a switch that ships off.**
+`engine/learning.py`'s `recovery_probability(quadrant, action)` is the only
+thing inside `engine/` that reads `config/learned_recovery.yaml`, and only
+when `config/rules.yaml`'s `learning.enabled` is `true` — the shipped value
+is `false`, and `check_config()` (run at startup by `main.py` and
+`sim/run_sim.py`) refuses to start if `learning.enabled: true` is set
+without `brain.ev_mode: on` too, since a learned number that never reaches
+the EV formula would do nothing while looking configured. Two modes once
+enabled: **offline** feeds `engine/negotiation.py` each cell's fitted
+posterior *mean* — a fixed number, the same every time, whatever the cell's
+own confidence; **online** (`engine/learning.py`'s `OnlineLearner`) instead
+Thompson-**samples** from each cell's live Beta posterior and updates it
+in-run as the simulation's own payment attribution resolves each action —
+the classic bandit exploration/exploitation trade rather than a fixed
+lookup. A cell absent from the fitted file (never observed in training)
+falls back to the hand-typed grid value under either mode, logged once, never
+silently guessed at.
+
+**The rules always run first, and the audit trail proves it.** Learning
+only ever supplies the `P(recover)` number Block 2c's EV formula multiplies
+against `expected_recovery_paise` — every gate that already existed (the
+`engine/law.py` rung ceiling, `config/rules.yaml`'s per-quadrant
+`eligible_actions` menu, every hard stop rule) runs exactly as before and can
+still override whatever the bandit would have preferred. When learning is
+on, `engine/brain.py`'s `decide()` writes six extra audit keys per EV
+decision — `learning_method`, `estimated_probability`, `observations`,
+`bandit_top_choice` (what raw EV wants with every gate removed),
+`executed_action`, and `gate_reason` (`null` when the bandit's pick actually
+ran, otherwise which rule overruled it) — so a reader can see, per decision,
+whether the rules or the learner had the final say, without re-deriving it.
+
+**The honest result, not reframed as a partial win.** A fourth experiment
+arm, `agent+EV+learned` (offline mode, `sim/run_sim.py --compare`), was
+measured the same way the Phase 4 ablation was: against `agent+EV` (the
+hand-typed grid), on the same six benchmark seeds. It **lost on all 6 of 6**
+— mean −₹22,53,175, every seed a loss. Traced to a single mechanism, not six
+separate ones (confirmed by instrumented replay on every seed): the fitted
+`good_customer`/`firm` cell (n=748, the best-supported cell in the file) is
+61.47%, correcting the hand-typed grid's overoptimistic 88% — but that
+corrected number sits only 1.5 points above `wait`'s own hand-typed 60%
+(which has no learned cell at all, `wait` being unobservable by construction
+— it produces no action row for anything to credit or fail), and an
+existing, unrelated rule (`negotiation.promise_adjustment`, −4 points per
+broken promise, applied to `firm` and not to `wait`) is enough to flip the
+ranking to `wait` the moment a buyer has even one broken promise on file.
+Re-verified under a persona world perturbed ±10% (no re-fit) — still 6/6,
+same mechanism, confirming the result is a property of the config numbers'
+relationship, not of the exact synthetic persona table. Full mechanism,
+the two "next most-wrong" cells, and the thin-cell explore-vs-commit audit
+are in `docs/learning_findings.md`; `scripts/compare_grids.py` is the
+re-runnable tool behind those numbers.
+
+> **LEARNING-LAYER SCOPE.** Ships off (`learning.enabled: false`,
+> `ev_mode: off`) — a fresh clone reproduces the pre-learning agent exactly
+> (`tests/test_run_sim.py`'s pinned pre-Phase-3 snapshot). Fit once, offline,
+> from simulated data only; nothing here re-fits automatically, and nothing
+> here is trained against or reads real buyer data (none exists in this
+> project). No policy gradient, no multi-step credit assignment, no reward
+> shaping across a sequence of actions — one bandit arm per `(quadrant,
+> action)` cell, one binary reward per decision, exactly as described above.
+
 ### Block 3 — Watchdog (`engine/watchdog.py`)
 **What:** Runs once per simulated day. Compares today's date with every unpaid invoice's due date. Anything overdue goes into the work queue.
 **Pure rule.** Just date math.
@@ -534,6 +644,7 @@ ANY TIME: dispute detected → jump to human handoff immediately
 **Hard stopping rules (never violated):** max 3 messages per rung, max 5 total; no messages in quiet hours; opt-out respected instantly; NEVER threaten — only state facts with sources.
 **Mostly rules; AI is consulted only for genuinely ambiguous cases** (e.g., "buyer partially paid and sent a confusing reply — what now?") and its reasoning is saved to the audit trail.
 **Phase 3, behind `config/rules.yaml`'s `brain.ev_mode` (shipped off):** once every rule above has cleared and a rung is chosen, the Brain can pick *what to send at that rung* by expected value instead of always sending — see Block 2d for the full mechanics. Every hard-stopping rule above still runs first, unconditionally, whether or not this is on.
+**Behind `learning.enabled` too (shipped off, Block 2f):** the EV formula's `P(recover)` can come from a fitted contextual-bandit posterior instead of the hand-typed grid. Nothing about the ladder, the stop rules, or the rung ceiling above changes either way — learning only ever supplies one number the same formula already used.
 
 ### Block 6 — Message Writer (`engine/writer.py`)
 **What:** The AI (Gemini, via `engine/llm.py`) writes the actual message for the chosen rung.
@@ -577,6 +688,7 @@ and which personas it applies to.
 - **Baseline:** 3 fixed reminders, same message for everyone (≈ what Razorpay Payment Links reminders do today)
 - **Our agent:** everything above
 - **Our agent + EV** (Phase 4): the same agent with `config/rules.yaml`'s `brain.ev_mode` on — the ablation of whether the negotiation layer adds recovery on top of the agent, not just whether the agent beats the baseline
+- **Our agent + EV + learned** (Block 2f): the same agent+EV, with `learning.enabled` also on — the ablation of whether the fitted bandit posteriors add recovery on top of the hand-typed EV grid. Reported honestly even though the answer is no on this seed set (6/6 loss) — see Block 2f
 **Report (also the star slide of the video):**
 ```
                      Baseline      Our Agent    Agent + EV
@@ -665,10 +777,13 @@ revenue-recovery-agent/
 ├── main.py                ← runs the live single-pass agent pipeline (not the comparison/report — see below)
 ├── config/
 │   ├── rules.yaml         ← ladder timings, stop rules, score weights, consolidation cap, LLM model names
+│   │                          + negotiation (EV) and learning (bandit) blocks, both off by default
 │   ├── legal.yaml         ← 15/45 days, bank rate, tax rate (marked "as of Aug 2026")
 │   ├── messages.yaml      ← message/subject-line templates per rung and per consolidated bundle
 │   ├── replies.yaml       ← mock-mode canned reply fixtures
-│   └── supplier.yaml      ← the one supplier identity used across all invoices
+│   ├── supplier.yaml      ← the one supplier identity used across all invoices
+│   └── learned_recovery.yaml ← GENERATED by scripts/fit_recovery.py; fitted Beta posteriors per
+│                                (quadrant, action) bandit cell, read only by engine/learning.py
 ├── data/
 │   ├── generate.py        ← --seed, --out-dir, --persona-out
 │   ├── store.py           ← loads the generated seed data back off disk
@@ -682,6 +797,9 @@ revenue-recovery-agent/
 │   ├── negotiation.py      ← Phase 2: recovery probability + EV per action, ranked
 │   │                          Phase 3 wires the top-ranked action into brain.py's
 │   │                          decide(), behind config/rules.yaml's brain.ev_mode (off by default)
+│   ├── learning.py         ← reads config/learned_recovery.yaml's fitted posteriors into
+│   │                          negotiation.py's P(recover), behind learning.enabled (off by default) --
+│   │                          a contextual bandit, offline (posterior mean) or online (Thompson sampling)
 │   ├── validate.py         ← catches structurally malformed invoices before law/brain see them (E2)
 │   ├── samadhaan.py        ← the real ready-to-file Samadhaan complaint draft
 │   ├── buyer_panel.py      ← W2: per-buyer rollup (outstanding, score, promise reliability, recovery state)
@@ -693,21 +811,32 @@ revenue-recovery-agent/
 │   │                                     Phase 4: run_agent(ev_mode=...) is the third experiment arm
 │   ├── scenario_tc141.py              ← the E4 end-to-end scripted scenario fixture
 │   └── hidden_personas.json           ← generated by data/generate.py --persona-out; gitignored; engine/ must never read it
+├── scripts/
+│   ├── fit_recovery.py    ← TRAINING ONLY: runs exploration mode on 30 training seeds (1000-1029,
+│   │                          disjoint from the 6 benchmark seeds), fits config/learned_recovery.yaml
+│   └── compare_grids.py   ← READ ONLY: hand-typed vs. fitted grid, ranked by how wrong + how confident
 ├── docs/
-│   ├── edge_cases.md      ← 141 documented edge cases, each TESTED / HANDLED / OUT OF SCOPE
-│   └── winning_layer.md   ← the Winning Layer roadmap: what's built (W1-W4) vs still future
+│   ├── edge_cases.md          ← 147 documented edge cases, each TESTED / HANDLED / OUT OF SCOPE
+│   ├── winning_layer.md       ← the Winning Layer roadmap: what's built (W1-W4) vs still future
+│   ├── learning_data.md       ← GENERATED alongside learned_recovery.yaml: exact training seeds,
+│   │                              row counts, thin-cell flags -- "what did you train on?"
+│   └── learning_findings.md   ← hand-authored analysis: the good_customer/firm finding behind the
+│                                  agent+EV+learned ablation's 6/6 loss, thin-cell/explore-vs-commit
+│                                  audit, persona-perturbation robustness check
 ├── report/
 │   ├── build_report.py    ← baseline-vs-agent HTML report + exceptions list + buyer panel + multi-seed table
 │   ├── templates/         ← the Jinja2 template(s) build_report.py renders
 │   └── out/                ← generated, gitignored: results.json, report.html
 ├── audit/                 ← generated audit logs land here (append-only JSONL); audit/drafts/ holds Samadhaan drafts
-└── tests/                 ← 24 files, 877 tests. Beyond the obvious per-module tests, three are
+└── tests/                 ← 30 files, 1032 tests. Beyond the obvious per-module tests, three are
                               structural guards worth naming: test_sim_isolation.py (AST-scans
                               engine/ + main.py to prove the agent never reads sim/hidden_personas.json),
                               test_no_legal_constants.py (AST-scans for hardcoded legal numbers/citations
                               outside config/legal.yaml), and test_run_sim.py (money-conservation
                               invariant + a permanent guard that every SEND decision has exactly one
-                              matching writer audit entry, forever).
+                              matching writer audit entry, forever) -- plus a pinned pre-Phase-3
+                              snapshot test proving ev_mode/learning off reproduces the agent's
+                              original behaviour exactly, byte for byte.
 ```
 
 `main.py --seed 42` runs the real per-invoice pipeline (watchdog → score →

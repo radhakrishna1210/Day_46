@@ -39,6 +39,19 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
   in audit/. No database, no servers.
 - Randomness in data generation and simulation must accept a --seed flag
   so experiments are reproducible.
+- The learning layer (engine/learning.py, config/learned_recovery.yaml,
+  scripts/fit_recovery.py) is a CONTEXTUAL BANDIT, not reinforcement
+  learning -- say so plainly whenever describing it. One bandit arm per
+  (quadrant, action) pair, one binary reward per decision (paid within
+  the attribution horizon or not), no state carried across decisions, no
+  multi-step credit assignment, no policy network. It is trained ENTIRELY
+  IN SIMULATION -- scripts/fit_recovery.py's 30 training seeds (1000-1029)
+  from sim/run_sim.py's own exploration mode, disjoint from the 6
+  benchmark seeds results.json is measured on -- never on real buyer
+  data, because none exists. Ships off by default (config/rules.yaml's
+  learning.enabled: false, brain.ev_mode: off); a fresh clone reproduces
+  the pre-learning agent exactly (tests/test_run_sim.py's pinned
+  pre-Phase-3 snapshot). Full mechanics: ARCHITECTURE.md Block 2f.
 
 ## Code conventions
 - Python 3.11+, type hints on public functions, small modules per
@@ -299,53 +312,87 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       run stays reproducible. learning.enabled: false -> not one new key is
       written, byte-identical to before. New tests: test_learning.py +9,
       test_online_learning.py +3, test_experiment.py +6. 1005 tests pass.
+- [x] P13 - Fourth ablation arm, agent+EV+learned, wired into sim/run_sim.py
+      --compare (run_agent(learned=True)). engine.negotiation.
+      recovery_probability()'s learning.enabled()/mode() checks read the
+      shared cached rules() dict directly and take no config param the way
+      brain.decide()'s own ev_mode does, so _forced_learned_mode() flips that
+      shared dict for the duration of one run and restores it -- proven
+      airtight across all 6 seeds x 4 arms in one process
+      (tests/test_run_sim.py). Scored on the SAME six benchmark seeds as the
+      existing EV ablation (42/7/13/99/2024/555), confirmed disjoint from the
+      30 training seeds at startup (_assert_no_training_seed_overlap).
+      results.json/report.html gain a fourth column; multi_seed_summary()
+      reports a delta spread (mean/min/max), not just a win rate -- six seeds
+      is a small sample and the report says so explicitly. New
+      scripts/compare_grids.py + tests/test_compare_grids.py (7); 24 new
+      tests in tests/test_run_sim.py + tests/test_experiment.py.
+- [x] P14 - THE FINDING: agent+EV+learned LOSES on 6/6 benchmark seeds (mean
+      -Rs 22,53,175). Root-caused, not just observed: instrumented replay
+      (engine.negotiation.rank_actions() spied, then replayed against the
+      IDENTICAL decision context under the hand-typed grid) shows every
+      single flip on every seed is the SAME transition -- good_customer's
+      fitted `firm` mean (61.47%, n=748, the best-fitted cell in the whole
+      file) sits only 1.5pts above `wait`'s untouched hand-typed 60% (`wait`
+      has no learned cell -- it produces no attributable action row, ever),
+      and the PRE-EXISTING promise_adjustment penalty (-4pts/broken promise,
+      applies to firm, not wait) is enough to flip the ranking to `wait` the
+      moment a buyer has any broken promise on file. scripts/compare_grids.py
+      ranks the other 2 most-wrong cells (good_customer/payment_plan,
+      can_pay_but_wont/firm) by |delta| x (n/ci95_width), excluding the
+      already-flagged thin soft_nudge cells. Full writeup:
+      docs/learning_findings.md. Analysis only -- no engine/ code changed.
+- [x] P15 - Two robustness checks on the P14 finding, both reported honestly
+      either way (docs/learning_findings.md). (1) Persona perturbation: every
+      sim/personas.py probability value scaled +/-10% (one fixed seed,
+      documented draw order, rows renormalized, NO re-fit), re-evaluated on
+      all 6 benchmark seeds -- STILL 6/6 loss, same mechanism, ~same
+      magnitude (mean -Rs 21,85,092) -- the mechanism is a property of the
+      config numbers' relationship, not of the exact synthetic persona table.
+      (2) Thin-cell audit: every learned cell with n<20 (only
+      high_risk/soft_nudge, n=9) checked against config/rules.yaml's
+      eligible_actions -- 6 of 7 sub-20-observation cells (the thin one
+      included) are excluded from every REAL decision by the RULES before
+      learning gets a say. "Wide posterior -> explores" is true, analytically
+      (Beta std 11.13pts vs 1.78pts) and empirically (sampled range 0-46% vs
+      48-64% over a real run), but ONLY under learning.mode: online -- never
+      under the offline mode agent+EV+learned actually uses, which commits to
+      the mean regardless of how thin the cell is. No repo logic changed.
+- [x] P16 - FREEZE DAY / demo build. Full suite green: 1032 tests, 0 skipped
+      (scipy was missing from requirements.txt -- installed + added; a real
+      fresh-clone gap, silently skipping tests/test_fit_recovery.py and 5 of
+      tests/test_online_learning.py, not a new feature). All four (ev_mode,
+      learning.enabled) combinations live-verified end to end, including the
+      error case (enabled + ev_mode off -> LearningConfigError at startup;
+      decide() itself also independently stays inert as defense in depth).
+      Confirmed: shipped config is ev_mode off + learning.enabled false, and
+      tests/test_run_sim.py's pinned pre-Phase-3 snapshot test still passes
+      byte-for-byte -- a fresh clone reproduces the original pre-learning
+      agent exactly. docs/edge_cases.md +4 (TC-144..TC-147: missing cell,
+      thin cell, censored outcome, unattributed payment -- all TESTED, 147
+      total, up from 143). ARCHITECTURE.md gained Block 2f: the learning
+      layer, stated plainly as a CONTEXTUAL BANDIT (not reinforcement
+      learning), trained entirely in simulation, never on real data. Fixed
+      engine/llm.py's stale docstring (said "Anthropic SDK"/"ANTHROPIC_API_KEY";
+      the implementation is Gemini via google-genai). Tagged as the demo build.
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P8 + P9 + P10 + P11 + P12 landed this session on top of committed P6/P6b/P7
-  (eb7515a, 1d1099b, 84979a4). Uncommitted new files: scripts/fit_recovery.py,
-  config/learned_recovery.yaml, docs/learning_data.md, docs/learning_findings.md,
-  engine/learning.py, tests/test_learning.py, tests/test_fit_recovery.py,
-  tests/test_online_learning.py.
-  Changed: config/rules.yaml (learning block), engine/{config,brain,negotiation}.py,
-  main.py, sim/run_sim.py, report/build_report.py, report/templates/report.html.j2,
-  tests/test_experiment.py, CLAUDE.md. audit/outcomes_train.jsonl gitignored.
-- P12 is audit/report only: the six learned-decision keys appear in
-  audit/audit_log.jsonl only when learning.enabled + brain.ev_mode are both on;
-  the report's new "Learned decisions" section shows an empty state in the
-  shipped --compare (learning off). Verified over a learning-on 60-day run:
-  733/1644 learned decisions were rule-overridden (law_ceiling_rung_2 132x,
-  eligible_actions_policy 111x, escalation_rung_N_below_handoff 490x).
-- SHIPS OFF: config/rules.yaml learning.enabled: false -> negotiation uses the
-  hand-typed grid, byte-identical to before. 988 tests pass. To demo:
-  learning.enabled: true + brain.ev_mode: on (both, or check_config raises),
-  then learning.mode offline = posterior mean, online = Thompson sampling +
-  in-run updates (single agent run, dumps report/out/learned_posteriors_final.yaml).
-- P10 fitted means, per DELIVERED rung. SEND: good_customer firm 0.61 (n=748,
-  the workhorse) / soft_nudge 0.38 (n=79, thin) / legal_facts 0.44 (n=34, thin);
-  high_risk firm 0.17 / legal_facts 0.22; cash_flow firm 0.51 / legal_facts
-  0.77 (n=55, thin, selection-confounded); can_pay_but_wont firm 0.28 /
-  legal_facts 0.42 (no rung-1 cell -> soft_nudge falls back to hand-typed).
-  payment_plan/counter_settle unchanged: cash_flow 0.64, good_customer 0.59,
-  can_pay_but_wont counter_settle 0.31.
-- RECONCILIATION, settled: ledger sum + unattributed is SHORT of results.json
-  recovered_paise by exactly 189,480,000 paise on seed 42, and by the SAME
-  constant on all three arms. Not a leak -- 12 current invoices arrive at day0
-  already part-paid, and recovered_paise is a cumulative stock while the
-  ledger is an in-run flow. The ledger under-claims, which is the right
-  direction.
-- FINDING worth keeping: over a full --compare, hit rate within the 14-day
-  horizon is payment_plan 85/131, send 643/1616, baseline reminder 247/1519,
-  handoff 0/496. The handoff zero is NOT a bug -- the simulator has no model
-  of what the owner does after taking a case over, so no money can ever
-  arrive behind a handoff. Anything that later learns from outcomes.jsonl
-  must exclude handoff rows rather than read them as failures.
-- THE TWO HEADLINE CLAIMS, both true, both stated together everywhere a judge
-  would look: the core agent beats the naive baseline on rupees recovered in
-  6/6 tested seeds; the EV/negotiation layer adds a further Rs 9,81,368 on
-  seed 42 and wins on 5/6 of those same seeds (seed 2024 the one loss,
-  reported not hidden). 924 tests passing. All three shipped arms verified
-  byte-identical to the committed results.json after P7. One staleness note:
-  run_agent()'s report dict gained an "explore" key that the committed
-  results.json predates -- additive, read by nothing, picked up by the next
-  --compare. Only Phase 11 (demo video) and 12 (final submit) remain.
+- P8 through P16 are committed as of the demo-build tag; only Phase 11 (demo
+  video) and Phase 12 (final submit) remain on this checklist.
+- SHIPS OFF, verified live this freeze: config/rules.yaml's
+  learning.enabled: false + brain.ev_mode: off is the shipped default; 1032
+  tests pass (scipy now in requirements.txt, so a fresh clone gets the whole
+  suite, not a silently-skipped subset). To demo the learning layer live:
+  flip both to true/on (learning.mode: offline = posterior mean, online =
+  Thompson sampling + in-run updates, dumps
+  report/out/learned_posteriors_final.yaml).
+- THE HONEST HEADLINE, all three numbers together, everywhere a judge would
+  look: agent beats baseline 6/6 seeds; agent+EV beats agent 5/6 seeds (seed
+  2024 the one loss); agent+EV+learned LOSES to agent+EV 6/6 seeds, root-
+  caused to one mechanism (good_customer/firm vs wait -- see
+  docs/learning_findings.md) and confirmed robust to a +/-10% persona
+  perturbation (same 6/6 loss, same mechanism). None of the three hidden.
+- Remaining before submission: Phase 11's demo video should show the
+  --compare output including the honest 4-arm result and the report's
+  "Learned decisions" section; Phase 12 is the final read-through + submit.

@@ -1,17 +1,17 @@
 """The single door to the LLM.
 
 Every AI call in this project goes through :func:`llm`. No module anywhere else
-may import the anthropic SDK or hold an API key.
+may import the google-genai SDK or hold an API key.
 
 Mode is read from ``LLM_MODE`` in ``.env``:
 
 * ``mock`` (default) -- deterministic canned responses. No API key, no network,
   no cost. This is what a judge cloning the repo gets out of the box.
-* ``live``  -- real Anthropic API calls through the Anthropic SDK, with the
+* ``live``  -- real Gemini API calls through the google-genai SDK, with the
   model chosen per purpose in config/rules.yaml and the key read from .env.
 
 The key is read from .env and passed to the client explicitly. It is never
-exported into the shell: a global ANTHROPIC_API_KEY would make every tool on
+exported into the shell: a global GEMINI_API_KEY would make every tool on
 this machine bill the API, which is not what anyone wants from a demo.
 """
 

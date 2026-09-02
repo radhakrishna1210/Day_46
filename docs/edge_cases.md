@@ -28,10 +28,10 @@ three values:
 
 | Status | Count |
 |---|---|
-| TESTED | 62 |
+| TESTED | 66 |
 | HANDLED | 44 |
 | OUT OF SCOPE | 37 |
-| **Total** | **143** |
+| **Total** | **147** |
 
 This pass (see CLAUDE.md's Current status, E3) added regression tests for
 seven previously-incidental behaviours (TC-027, TC-033, TC-041, TC-042,
@@ -67,6 +67,14 @@ Phase 10 corrected TC-070, which had gone stale: it still described
 buyer-level consolidation as unbuilt after W3 (`engine/consolidate.py`)
 shipped it. Moved from OUT OF SCOPE to TESTED, citing
 `tests/test_consolidate.py`'s 10 tests.
+
+The freeze-day pass added TC-144 through TC-147: the learning layer's own
+edge cases (P8-P12's `config/learned_recovery.yaml`), surfaced by fitting
+real posteriors from simulated exploration data rather than designed in
+advance -- a missing cell, a thin (low-observation) cell, a right-censored
+outcome, and an unattributed payment. All four already had passing tests
+from the sessions that built the mechanisms; this pass is what named them as
+their own entries in this table.
 
 ---
 # 1. Promise and Payment-Date Cases
@@ -2432,3 +2440,185 @@ to know why, the same way it would for any other invoice: the numbers speak
 for themselves rather than a guard clause asserting the answer. This is the
 same "the arithmetic degrades honestly, nothing has to notice" pattern as
 TC-142's neutral-base ability score.
+
+---
+
+# 20. Learning-Layer Cases
+
+`scripts/fit_recovery.py` fits `config/learned_recovery.yaml`'s recovery-
+probability posteriors from real exploration-mode simulator runs rather than
+designing them in advance, and `engine/learning.py` reads them behind
+`config/rules.yaml`'s `learning.enabled` switch (ships off). Fitting from
+real data, on a fixed set of training seeds, surfaces edge cases the
+hand-typed grid never had to face: a combination that was simply never
+observed, a combination observed only a handful of times, an action taken
+too close to the end of the training window to know its outcome yet, and a
+payment that cannot be traced back to any recorded action at all.
+
+## TC-144 — Missing Learned-Recovery Cell
+
+**Status: TESTED** -- `tests/test_learning.py::test_a_missing_cell_falls_back_to_the_hand_typed_value`,
+`test_the_fallback_notice_is_logged_once_per_cell`,
+`test_recovery_probability_never_raises_over_a_missing_cell`,
+`test_negotiation_labels_a_fallback_cell_honestly`.
+
+### Initial State
+```text
+config/rules.yaml: learning.enabled: true, brain.ev_mode: on
+Quadrant/action pair: e.g. can_pay_but_wont / soft_nudge -- eligible
+(config/rules.yaml's negotiation.eligible_actions), but zero rung-1 SENDs
+were ever recorded for this quadrant across all 30 training seeds
+```
+
+### The Risk
+1. **Crash** -- `_resolve_cell()` looks up a key that is simply not present
+   in `config/learned_recovery.yaml`'s `recovery` dict; a naive lookup
+   raises `KeyError`.
+2. **Silently return a fabricated number** (`0.0`, or the Beta(1,1) prior's
+   mean of `0.5`) -- would read as a measured certainty (of failure, or of a
+   coin flip) when the truth is "never observed", a materially different
+   claim.
+
+### Expected Behaviour
+`_resolve_cell()` returns `None` for a cell absent from the fitted file;
+`has_cell()` reports `False`; `recovery_probability()` falls back to the
+hand-typed `config/rules.yaml` grid value, logging the fallback to stderr
+exactly once per `(quadrant, action)` pair (`engine.learning._fallback_logged`)
+so a hot path spends thousands of calls without spamming the log. This is
+never a startup error -- `check_config()` only rejects a genuinely *missing
+file*; an individual absent cell is an ordinary outcome of what one training
+run happened to observe, not a configuration mistake. The same fallback
+applies identically under offline (posterior mean) and online (Thompson
+sampling) modes: `OnlineLearner._build_posteriors()` only seeds a Beta
+posterior for a cell that already exists in the source YAML, so a missing
+cell has nothing to sample from either way -- both modes converge on the
+same hand-typed number, and "explore vs. commit" (see TC-145) does not apply
+to it at all.
+
+---
+
+## TC-145 — Thin Learned-Recovery Cell (Wide Posterior)
+
+**Status: TESTED** -- `tests/test_fit_recovery.py::test_a_thin_cell_has_a_visibly_wider_credible_interval`
+proves the core mechanism (`ci95_width` widens sharply below `THIN_OBS`
+observations). The online-vs-offline behavioural distinction below is
+covered by the broader `test_negotiation_uses_the_posterior_mean_when_learning_is_on`
+(offline) and `tests/test_online_learning.py`'s sampling tests (online),
+neither naming a thin cell specifically -- confirmed for an actual thin cell
+by a documented analysis, not a dedicated pytest test: `docs/learning_findings.md`'s
+"thin-cell audit" (freeze day) instrumented a real run and reported the
+exact numbers below.
+
+### Initial State
+```text
+config/learned_recovery.yaml: a fitted cell backed by very few observations,
+e.g. high_risk/soft_nudge -- alpha=2, beta=9, n=9, mean=0.1818, ci95_width=0.4198
+(vs. good_customer/firm's alpha=461, beta=289, n=748, ci95_width=0.0696)
+```
+
+### The Risk
+1. **Treat a noisy estimate as equally trustworthy as a well-observed one**
+   -- a mean of 18% from 9 outcomes is a much weaker claim than a mean of
+   61% from 748, but a bare float cannot show that difference on its own.
+2. **Refuse to use a thin cell at all** -- there is no principled n cutoff
+   that would not itself need justifying, and refusing would just fall back
+   to an equally-unverified hand-typed number, not a more honest one.
+
+### Expected Behaviour
+`ci95_width` is computed and shown for every cell, deliberately visible
+rather than hidden -- the honesty is in the interval being wide, not in code
+refusing to use it (`docs/learning_findings.md`'s "Thin SEND cells at rung
+1"). Offline mode (the posterior mean) does **not** special-case a thin
+cell: the mean feeds the EV formula exactly as any other cell's mean would,
+which means a noisy estimate is committed to just as confidently as a solid
+one. Online mode (Thompson sampling) behaves differently in exactly the way
+a bandit should: a thin cell's wide posterior produces genuinely
+high-variance samples (verified empirically over a real 120-day run:
+`high_risk`/`soft_nudge` sampled between 0% and 46% across 1,179
+evaluations, vs. `good_customer`/`firm`'s tight 48%-64% across 1,076) --
+appropriate uncertainty rather than false confidence. Reachability is a
+separate, prior gate: `config/rules.yaml`'s `negotiation.eligible_actions`
+can exclude a thin cell from ever being selected in a real decision
+regardless of its posterior width, and the freeze-day audit found every
+single cell under 20 observations in the current fit falls into exactly
+that category -- the rules, not the learner, decide whether the
+exploration-vs-commit distinction ever gets a chance to matter.
+
+---
+
+## TC-146 — Right-Censored Outcome (Attribution Horizon Runs Past the Window)
+
+**Status: TESTED** -- `tests/test_fit_recovery.py::test_right_censored_rows_are_excluded`
+and `test_counts_are_an_exact_partition`.
+
+### Initial State
+```text
+An action (SEND / payment_plan / counter_settle / handoff) is recorded close
+enough to the end of a simulated run that its own
+config/rules.yaml learning.attribution_horizon_days (14) window would still
+be open when the run itself stops -- its true outcome is not yet knowable.
+```
+
+### The Risk
+1. **Count "no payment recorded yet" as a genuine failure** -- but the truth
+   is unresolved, not negative; the horizon simply has not finished.
+2. **Wait for it and count it as a success once observed** -- impossible in
+   a fixed-length simulated run: there are no more simulated days after the
+   window ends, so an action whose horizon closes past the last day can
+   never be resolved at all within that run.
+
+### Expected Behaviour
+Two DIFFERENT, both deliberate, treatments exist for the same phenomenon.
+`scripts/fit_recovery.py`'s fitting pass computes a cutoff (the run's own
+last simulated day minus the horizon) and **excludes** any action whose
+horizon closes after it -- neither a success nor a failure, absent from the
+fit entirely, with the excluded count reported in `docs/learning_data.md`'s
+row partition (`excluded_right_censored`) so it is never silently absorbed.
+`engine/outcomes.py`'s own end-of-run ledger (what actually produces
+`results.json`'s headline numbers) makes the opposite choice on purpose: it
+has no run-end concept and marks every action not yet credited a payment as
+`paid_within_horizon: false`, `sim/run_sim.py`'s own comment stating the
+resulting bias explicitly rather than correcting for it -- "actions taken in
+the final `attribution_horizon_days` of the window ... can only ever look
+worse than they were, never better". Counting conservatively for the
+headline experiment and excluding for the fit are both honest choices for
+what each number is used for; neither silently mixes the two.
+
+---
+
+## TC-147 — Unattributed Payment (No Action Recorded Before It)
+
+**Status: TESTED** -- `tests/test_outcomes.py::test_a_payment_with_no_action_before_it_is_recorded_as_unattributed`,
+`test_a_payment_before_any_action_on_that_invoice_is_unattributed`; the fit's
+own side is covered by `tests/test_fit_recovery.py::test_non_action_records_are_ignored`.
+
+### Initial State
+```text
+A payment lands on an invoice, but no recorded action (SEND / payment_plan /
+counter_settle / handoff) exists on that invoice within the horizon before
+it -- e.g. a promise matures and is kept on a day nothing was sent (a WAIT
+day), or a payment simply arrives before the invoice's very first contact.
+```
+
+### The Risk
+1. **Attribute it to the nearest action regardless of timing or existence**
+   -- would credit an action for money it could not possibly have caused.
+2. **Drop the payment from every count** because it does not fit the
+   attribution model -- would make the ledger's own totals silently
+   disagree with `results.json`'s headline `recovered_paise`, with nothing
+   explaining the gap; exactly the kind of quiet discrepancy non-negotiable
+   #5 (honest measurement) exists to prevent.
+
+### Expected Behaviour
+`engine/outcomes.py`'s `OutcomeLedger.attribute()` records an unattributed
+payment as its own explicit `record_type` (`unattributed_payment`), counted
+in the run's own summary (`payments_unattributed`, `paise_unattributed`) --
+never dropped, never guessed at. `CLAUDE.md`'s own RECONCILIATION note (P6/P6b)
+documents exactly this in the headline numbers: ledger sum + unattributed is
+short of `results.json`'s cumulative `recovered_paise` by a constant,
+explained by invoices that arrive at day 0 already part-paid (a
+cumulative-stock-vs-in-run-flow difference, not a leak) -- verified to be
+the same constant across all three ablation arms on seed 42. `scripts/fit_recovery.py`
+reads only rows with `record_type == "action"`, so an unattributed payment
+can never be mistaken for a successful action's outcome or silently inflate
+a cell's success count.

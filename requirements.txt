@@ -3,3 +3,4 @@ python-dotenv
 jinja2
 pyyaml
 pytest
+scipy
