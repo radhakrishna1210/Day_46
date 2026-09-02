@@ -194,6 +194,90 @@ def test_view_carries_trip_wires_for_the_template(results_payload) -> None:
     assert "trip_wires" in build_report._view(results_payload)
 
 
+# --------------------------------------------------------------------------
+# learned decisions -- the bandit's proposal vs. what the rules allowed
+# (engine/brain.py writes these six keys into a decision's audit detail only
+# when config/rules.yaml's learning.enabled is on -- ships off)
+# --------------------------------------------------------------------------
+
+_LEARNED_OVERRIDE = {
+    "ts": "2026-07-01T00:00:00", "invoice_id": "INV-9", "buyer_id": "BUY-9",
+    "actor": "brain", "action": "send", "reason": "rung 2 send", "source": "rule",
+    "detail": {
+        "learning_method": "posterior_mean", "estimated_probability": 0.62,
+        "observations": 748, "bandit_top_choice": "legal_escalation",
+        "executed_action": "firm", "gate_reason": "law_ceiling_rung_2",
+    },
+}
+_LEARNED_CLEAN = {
+    "ts": "2026-07-02T00:00:00", "invoice_id": "INV-10", "buyer_id": "BUY-10",
+    "actor": "brain", "action": "send", "reason": "rung 2 send", "source": "rule",
+    "detail": {
+        "learning_method": "posterior_mean", "estimated_probability": 0.61,
+        "observations": 748, "bandit_top_choice": "firm",
+        "executed_action": "firm", "gate_reason": None,
+    },
+}
+
+
+def test_learned_decision_rows_reads_the_full_trail_and_flags_overrides(monkeypatch) -> None:
+    from engine import audit
+
+    monkeypatch.setattr(audit, "entries", lambda: [
+        {"action": "reply_parsed", "detail": {}}, _LEARNED_CLEAN, _LEARNED_OVERRIDE,
+    ])
+    rows = build_report._learned_decision_rows()
+    assert [r["invoice_id"] for r in rows] == ["INV-10", "INV-9"]
+    assert rows[0]["overridden"] is False and rows[0]["gate_reason"] is None
+    assert rows[1]["overridden"] is True
+    assert rows[1]["gate_reason"] == "law_ceiling_rung_2"
+    assert rows[1]["bandit_top_choice"] == "legal_escalation"
+
+
+def test_learned_decisions_excerpt_pulls_overrides_to_the_front(monkeypatch) -> None:
+    from engine import audit
+
+    clean = [{**_LEARNED_CLEAN, "invoice_id": f"C{i}"} for i in range(30)]
+    monkeypatch.setattr(audit, "entries", lambda: clean + [_LEARNED_OVERRIDE])
+    excerpt = build_report._learned_decisions_excerpt(build_report._learned_decision_rows())
+    assert excerpt[0]["invoice_id"] == "INV-9"          # the override, first
+    assert len(excerpt) == build_report.LEARNED_DECISION_EXCERPT_LINES
+
+
+def test_view_carries_learned_decisions_and_ships_empty(results_payload) -> None:
+    view = build_report._view(results_payload)
+    assert "learned_decisions" in view
+    # learning ships off, so a real --compare run records none
+    assert view["learned_decisions"] == []
+    assert view["learned_decisions_total"] == 0
+
+
+def test_build_report_renders_the_learned_decisions_override_line(
+    results_payload, tmp_path, monkeypatch,
+) -> None:
+    from engine import audit
+
+    monkeypatch.setattr(audit, "entries", lambda: [_LEARNED_OVERRIDE])
+    out = tmp_path / "report.html"
+    build_report.build(results_payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Learned decisions" in html
+    assert "law_ceiling_rung_2" in html
+    assert "legal_escalation" in html
+
+
+def test_build_report_shows_the_learned_decisions_empty_state(
+    results_payload, tmp_path, monkeypatch,
+) -> None:
+    from engine import audit
+
+    monkeypatch.setattr(audit, "entries", lambda: [{"action": "send", "detail": {}}])
+    out = tmp_path / "report.html"
+    build_report.build(results_payload, str(out))
+    html = out.read_text(encoding="utf-8")
+    assert "Learning is off in this run" in html
+
+
 def test_build_report_writes_a_readable_html_file(results_payload, tmp_path) -> None:
     out = tmp_path / "report.html"
     path = build_report.build(results_payload, str(out))

@@ -361,6 +361,107 @@ def test_brain_decide_stays_inert_with_ev_mode_off_even_when_learning_enabled(
 
 
 # --------------------------------------------------------------------------
+# learned-decision provenance in the audit trail (engine/brain.py)
+# --------------------------------------------------------------------------
+
+_BUYER = {"buyer_id": "BUY-01", "name": "ABC Traders", "opted_out": False,
+          "profile": "corporate"}
+_LEARNED_KEYS = ("learning_method", "estimated_probability", "observations",
+                 "bandit_top_choice", "executed_action", "gate_reason")
+
+
+def _decide_learned(quadrant: str, config: dict, *, record: dict | None = None,
+                    history: list | None = None) -> brain.Action:
+    record = record or _overdue_invoice()
+    position = law.legal_position(record, date(2026, 8, 24))
+    return brain.decide(record, _BUYER, _two_axis_score(quadrant), position,
+                        promises=[], history=history or [], log=False, config=config)
+
+
+@pytest.mark.parametrize("quadrant",
+                         ["good_customer", "cash_flow_problem", "can_pay_but_wont", "high_risk"])
+def test_brain_decide_records_the_learned_decision_fields(learning_on: dict, quadrant: str) -> None:
+    action = _decide_learned(quadrant, learning_on)
+    d = action.detail
+    for key in _LEARNED_KEYS:
+        assert key in d, key
+    assert d["learning_method"] in ("thompson_sampling", "posterior_mean", "hardcoded")
+    assert 0.0 <= d["estimated_probability"] <= 1.0
+    assert d["observations"] is None or isinstance(d["observations"], int)
+    assert d["bandit_top_choice"] in neg.ACTIONS
+    assert d["executed_action"] in neg.ACTIONS
+    # the existing fields are untouched, and executed_action mirrors them
+    assert d["executed_action"] == d["negotiation_action"]
+    assert "ev" in d
+    assert action.reason and action.source in ("rule", "llm")
+
+
+def test_brain_decide_records_no_learning_fields_when_learning_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ev_mode on but learning.enabled false: the EV branch still runs, but not
+    one learned-decision key is written -- byte-identical to before this change."""
+    settings = _config(enabled=False, ev_mode="on")
+    stub = lambda: settings
+    monkeypatch.setattr(cfg, "rules", stub)
+    monkeypatch.setattr(learning, "rules", stub)
+    monkeypatch.setattr(neg, "rules", stub)
+
+    action = _decide_learned("cash_flow_problem", settings)
+    assert "negotiation_action" in action.detail, "the EV branch must have run"
+    for key in _LEARNED_KEYS:
+        assert key not in action.detail, key
+
+
+def test_brain_decide_flags_when_eligible_actions_overrules_the_bandit(learning_on: dict) -> None:
+    """good_customer's eligible_actions menu withholds every legal/handoff
+    action, yet raw EV over the FULL action space ranks one on top (the
+    documented 'surprising result' in engine/negotiation.py). The bandit's pick
+    can never execute, and the audit trail must say so."""
+    menu = learning_on["negotiation"]["eligible_actions"]["good_customer"]
+    full_top = neg.rank_actions("good_customer", 50_000_000, broken_promises=0)[0]["action"]
+    assert full_top not in menu, f"fixture: expected a non-menu action on top, got {full_top}"
+
+    d = _decide_learned("good_customer", learning_on).detail
+    assert d["bandit_top_choice"] == full_top
+    assert d["executed_action"] in menu
+    assert d["executed_action"] != full_top
+    assert d["gate_reason"] is not None
+
+
+def test_brain_decide_names_the_law_ceiling_when_it_blocks_the_bandit(learning_on: dict) -> None:
+    """The headline case: raw EV wants legal_escalation, but the MSMED-Act
+    ceiling sits below the handoff rung, so a rung-<=ceiling send goes out
+    instead -- gate_reason == law_ceiling_rung_<ceiling>."""
+    record = {**_overdue_invoice(), "issue_date": "2026-08-05", "acceptance_date": "2026-08-05"}
+    position = law.legal_position(record, date(2026, 8, 24))
+    ceiling = position["available_rung"]
+    assert position["days_overdue"] > 0 and ceiling < brain.HANDOFF_RUNG, "fixture assumption"
+
+    full_top = neg.rank_actions("can_pay_but_wont", 50_000_000, broken_promises=0)[0]["action"]
+    assert full_top in (neg.HUMAN_HANDOFF, neg.LEGAL_ESCALATION), f"fixture: {full_top}"
+
+    d = _decide_learned("can_pay_but_wont", learning_on, record=record).detail
+    assert d["bandit_top_choice"] == full_top
+    assert d["gate_reason"] == f"law_ceiling_rung_{ceiling}"
+    assert d["executed_action"] != full_top
+
+
+def test_audit_method_and_observations_resolve_cells(learning_on: dict) -> None:
+    # good_customer / firm is the workhorse SEND tier: n=748, fitted
+    assert learning.audit_method("good_customer", "firm") == "posterior_mean"
+    assert learning.observations("good_customer", "firm") == 748
+    # an action the fit never covers, and the None cases
+    assert learning.audit_method("good_customer", "human_handoff") == "hardcoded"
+    assert learning.observations("good_customer", None) is None
+    assert learning.observations("can_pay_but_wont", "soft_nudge") is None   # absent tier
+
+
+def test_audit_method_is_hardcoded_when_learning_ships_off() -> None:
+    assert learning.audit_method("good_customer", "firm") == "hardcoded"
+
+
+# --------------------------------------------------------------------------
 # the CLI entry points call check_config at startup
 # --------------------------------------------------------------------------
 

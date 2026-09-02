@@ -369,6 +369,17 @@ class OnlineLearner:
             cell["beta"] += 1
             self._n_failure += 1
 
+    def observations(self, quadrant: str, action_kind: str) -> int | None:
+        """How many resolved attributions this cell's LIVE posterior now rests
+        on: alpha + beta - 2 (the two subtracted are the Beta(1, 1) prior). The
+        warm-start count from config/learned_recovery.yaml plus every in-run
+        update(), or just the in-run updates under cold_start. None when there
+        is no cell -- for the audit trail, not a decision."""
+        cell = _resolve_cell(self._posteriors, quadrant, action_kind)
+        if not isinstance(cell, dict):
+            return None
+        return int(cell["alpha"]) + int(cell["beta"]) - 2
+
     # -- output ------------------------------------------------------
 
     @property
@@ -469,3 +480,53 @@ def sample_probability(quadrant: str, action_kind: str) -> float | None:
     if _active_learner is None:
         return None
     return _active_learner.sample(quadrant, action_kind, _active_rng)
+
+
+# --------------------------------------------------------------------------
+# provenance for the audit trail -- how a P(recover) was sourced, and on how
+# much data. Read-only; never part of a decision. engine.brain calls these so
+# it can label a learned decision without drawing a second Thompson sample
+# just to find out which path P(recover) took.
+# --------------------------------------------------------------------------
+
+def audit_method(quadrant: str, action_kind: str | None) -> str:
+    """One of 'thompson_sampling' | 'posterior_mean' | 'hardcoded' -- how the EV
+    formula's base rate for this cell is being produced right now.
+
+      hardcoded         learning off, no `action_kind` (an action the fit never
+                        covers -- wait, either handoff flavor), or no learned
+                        cell for this (quadrant, action_kind): the hand-typed
+                        engine.negotiation grid value is used.
+      thompson_sampling learning on, learning.mode: online, and an OnlineLearner
+                        is bound for this decision -- one draw from the live
+                        Beta posterior fed the EV formula.
+      posterior_mean    learning on and the fitted cell's posterior mean fed the
+                        EV formula (offline mode, or online with no learner
+                        bound, e.g. main.py).
+
+    Matches, by construction, the branch engine.negotiation.recovery_probability()
+    actually took: same enabled() gate, same has_cell() check, same
+    online-learner test.
+    """
+    if not enabled() or action_kind is None or not has_cell(quadrant, action_kind):
+        return "hardcoded"
+    if mode() == "online" and _active_learner is not None:
+        return "thompson_sampling"
+    return "posterior_mean"
+
+
+def observations(quadrant: str, action_kind: str | None) -> int | None:
+    """How many resolved attributions sit behind this cell's current P(recover):
+    the live online posterior's count when an OnlineLearner is bound, otherwise
+    the fitted config/learned_recovery.yaml cell's `observations`, otherwise None
+    (a hand-typed number has observed nothing). For the audit trail."""
+    if action_kind is None:
+        return None
+    if _active_learner is not None:
+        live = _active_learner.observations(quadrant, action_kind)
+        if live is not None:
+            return live
+    cell = _cell(quadrant, action_kind)
+    if isinstance(cell, dict) and cell.get("observations") is not None:
+        return int(cell["observations"])
+    return None

@@ -206,6 +206,39 @@ def test_online_context_is_scoped_and_a_noop_when_the_learner_is_none(online_con
 
 
 # --------------------------------------------------------------------------
+# observations + audit_method -- provenance for the audit trail
+# --------------------------------------------------------------------------
+
+def test_observations_track_the_live_posterior(online_config) -> None:
+    learner = learning.OnlineLearner()
+    start = learner.observations("good_customer", "firm")
+    assert start is not None and start > 0            # warm start carries the fit's count
+    for _ in range(5):
+        learner.update("good_customer", "firm", success=True)
+    for _ in range(3):
+        learner.update("good_customer", "firm", success=False)
+    assert learner.observations("good_customer", "firm") == start + 8
+    assert learner.observations("good_customer", "human_handoff") is None
+
+
+def test_cold_start_observations_begin_at_zero(online_config) -> None:
+    cold = learning.OnlineLearner(cold_start=True)
+    assert cold.observations("good_customer", "firm") == 0
+    cold.update("good_customer", "firm", success=True)
+    assert cold.observations("good_customer", "firm") == 1
+
+
+def test_audit_method_is_thompson_sampling_only_inside_an_online_context(online_config) -> None:
+    learner = learning.OnlineLearner()
+    assert learning.audit_method("good_customer", "firm") == "posterior_mean"
+    with learning.online_sampling(learner, random.Random("d")):
+        assert learning.audit_method("good_customer", "firm") == "thompson_sampling"
+        assert learning.observations("good_customer", "firm") == \
+            learner.observations("good_customer", "firm")
+    assert learning.audit_method("good_customer", "firm") == "posterior_mean"
+
+
+# --------------------------------------------------------------------------
 # the dumped file -- report/out/learned_posteriors_final.yaml
 # --------------------------------------------------------------------------
 

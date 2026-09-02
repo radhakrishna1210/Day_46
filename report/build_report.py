@@ -43,6 +43,12 @@ DEFAULT_OUT_PATH = ROOT / "report" / "out" / "report.html"
 #: audit/audit_log.jsonl for anyone who wants to check further.
 AUDIT_EXCERPT_LINES = 20
 
+#: How many learned-decision lines the "bandit proposal vs. what the rules
+#: allowed" section shows. Gate-override lines are pulled to the front (see
+#: _learned_decisions_excerpt), so a reader sees the rules overruling the
+#: learner even when overrides are a minority of the trail.
+LEARNED_DECISION_EXCERPT_LINES = 15
+
 #: Static claims about how this comparison was guarded against being rigged,
 #: each pointing at the actual test or mechanism that backs it -- not run
 #: live at build time (that would need pytest as a report-build dependency
@@ -78,6 +84,15 @@ GUARDRAILS: tuple[dict[str, str], ...] = (
      "proof": "audit/audit_log.jsonl records every brain decision, message draft "
               "and delivery attempt from this run, timestamped and reasoned -- "
               "see the excerpt near the bottom of this report."},
+    {"claim": "When learning is on, the rules -- not the learned bandit -- have "
+              "the final say, and the log shows it.",
+     "proof": "With config/rules.yaml's learning.enabled on, engine/brain.py's "
+              "decide() records bandit_top_choice (raw expected value over the "
+              "full action space, no gate) beside executed_action and a "
+              "gate_reason naming the legal-leverage ceiling or the "
+              "eligible_actions policy whenever they diverge -- see the "
+              "\"Learned decisions\" section below and engine/brain.py's "
+              "_gate_reason()."},
 )
 
 
@@ -238,6 +253,47 @@ def _exception_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
 def _audit_excerpt() -> list[dict[str, Any]]:
     entries = audit.entries()
     return entries[-AUDIT_EXCERPT_LINES:]
+
+
+#: engine/brain.py's decide() writes these keys into a decision's audit `detail`
+#: ONLY when config/rules.yaml's learning.enabled is true (ships off). Scanned
+#: over the FULL trail like the trip-wire / early-warning rows below -- a gate
+#: override is exactly the kind of line that would fall outside the last-20
+#: excerpt. With learning off (the shipped state) this yields nothing and the
+#: report shows an honest empty state.
+def _learned_decision_rows() -> list[dict[str, Any]]:
+    rows = []
+    for entry in audit.entries():
+        detail = entry.get("detail") or {}
+        if "learning_method" not in detail:
+            continue
+        gate_reason = detail.get("gate_reason")
+        rows.append({
+            "ts": entry.get("ts"),
+            "invoice_id": entry.get("invoice_id"),
+            "action": entry.get("action"),
+            "method": detail.get("learning_method"),
+            "probability": detail.get("estimated_probability"),
+            "observations": detail.get("observations"),
+            "bandit_top_choice": detail.get("bandit_top_choice"),
+            "executed_action": detail.get("executed_action"),
+            "gate_reason": gate_reason,
+            # "exploration_sample" is the simulator sampling a non-argmax action,
+            # not a rule overruling the learner -- kept visible, not counted as
+            # an override.
+            "overridden": gate_reason not in (None, "exploration_sample"),
+        })
+    return rows
+
+
+def _learned_decisions_excerpt(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Override lines first (most recent first), then the rest, capped at
+    LEARNED_DECISION_EXCERPT_LINES -- so a gate override is always on screen
+    when any exists, without hiding the ordinary learned decisions entirely."""
+    overrides = [r for r in rows if r["overridden"]]
+    others = [r for r in rows if not r["overridden"]]
+    ordered = list(reversed(overrides)) + list(reversed(others))
+    return ordered[:LEARNED_DECISION_EXCERPT_LINES]
 
 
 #: engine/promises.py's coarse, rule-based trip-wires (never the model, never
@@ -436,6 +492,7 @@ def _ev_ablation_note(results: dict[str, Any]) -> str | None:
 def _view(results: dict[str, Any]) -> dict[str, Any]:
     handoff_reasons = results["agent"].get("handoff_reasons") or {}
     stop_reasons = results["agent"].get("stop_reasons") or {}
+    learned_decision_rows = _learned_decision_rows()
     return {
         "seed": results["seed"],
         "days": results["days"],
@@ -452,6 +509,10 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "handoff_reasons": sorted(handoff_reasons.items()),
         "stop_reasons": sorted(stop_reasons.items()),
         "audit_excerpt": _audit_excerpt(),
+        "learned_decisions": _learned_decisions_excerpt(learned_decision_rows),
+        "learned_decisions_total": len(learned_decision_rows),
+        "learned_decisions_override_count": sum(
+            1 for r in learned_decision_rows if r["overridden"]),
         "multi_seed": _multi_seed_rows(results),
         "edge_case_note": _edge_case_note(results),
         "guardrails": GUARDRAILS,

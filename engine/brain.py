@@ -63,7 +63,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from engine import audit, negotiation, rungs, samadhaan
+from engine import audit, learning, negotiation, rungs, samadhaan
 from engine.ability_willingness import outstanding_paise
 from engine.config import ev_mode_on as _ev_mode_selected, rules
 from engine.llm import LLMError, llm
@@ -343,6 +343,126 @@ def _negotiation_extra(evaluation: dict[str, Any], selection: str,
         "negotiation_proposed_rung": proposed_rung,
         "negotiation_gate_override": proposed_rung is not None and proposed_rung != executed_rung,
         "ev": evaluation,
+    }
+
+
+def _learned_cell_key(negotiation_action: str) -> str | None:
+    """The config/learned_recovery.yaml cell a negotiation action resolves to,
+    or None for one the fit never covers.
+
+    engine.learning._resolve_cell() maps a SEND tier name to send.<tier>;
+    payment_plan / counter_settle are flat cells; `wait` and both handoff
+    flavors have no learned cell (the fit excludes handoff rows -- post-handoff
+    recovery is unobservable in the simulator).
+    """
+    if negotiation_action in (negotiation.SOFT_NUDGE, negotiation.FIRM,
+                              negotiation.LEGAL_FACTS, negotiation.PAYMENT_PLAN,
+                              negotiation.COUNTER_SETTLE):
+        return negotiation_action
+    return None
+
+
+def _gate_reason(
+    *, bandit_top: str, executed: str, selection: str, quadrant_menu: tuple[str, ...],
+    chosen_rung: int, ceiling: int, law_capped: bool, rung_overridden: bool,
+) -> str | None:
+    """Why the executed action differs from what raw EV wanted -- or None when
+    the learner got its way and the delivered rung matched its label too.
+
+    That None-versus-a-string is the whole point of the field: per decision, a
+    reader can see whether the rules or the learned bandit had the final say.
+    The strings name the binding constraint:
+
+      law_ceiling_rung_N               the legal-leverage ceiling (engine.law)
+                                       sat below the rung the bandit's pick
+                                       needed.
+      escalation_rung_N_below_handoff  the bandit wanted a human handoff, but
+                                       this invoice's own escalation walk has not
+                                       reached the handoff rung (see
+                                       eligible_negotiation_actions()).
+      eligible_actions_policy          config/rules.yaml's negotiation.
+                                       eligible_actions for this quadrant does
+                                       not offer the bandit's pick at all (e.g.
+                                       a good_customer is never offered legal
+                                       pressure).
+      escalation_walk_rung_N           same action label, delivered at a
+                                       different rung by the escalation walk.
+      exploration_sample               SIMULATOR exploration mode sampled a
+                                       non-argmax action -- not a gate, labelled
+                                       so it is not read as one.
+    """
+    if bandit_top == executed:
+        if rung_overridden:
+            return (f"law_ceiling_rung_{ceiling}" if law_capped
+                    else f"escalation_walk_rung_{chosen_rung}")
+        return None
+    if selection == "explore":
+        return "exploration_sample"
+    if bandit_top in (negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION):
+        if ceiling < HANDOFF_RUNG:
+            return f"law_ceiling_rung_{ceiling}"
+        if chosen_rung < HANDOFF_RUNG:
+            return f"escalation_rung_{chosen_rung}_below_handoff"
+        return "eligible_actions_policy"
+    if bandit_top not in quadrant_menu:
+        return "eligible_actions_policy"
+    if law_capped:
+        return f"law_ceiling_rung_{ceiling}"
+    return "eligible_actions_policy"
+
+
+def _learning_audit(
+    evaluation: dict[str, Any],
+    selection: str,
+    *,
+    quadrant: str,
+    outstanding: int,
+    broken_promises: int,
+    chosen_rung: int,
+    ceiling: int,
+    law_capped: bool,
+    rung_overridden: bool,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """The six learned-decision fields for the audit trail, added by decide()'s
+    EV branches ONLY when config/rules.yaml's learning.enabled is true.
+
+    bandit_top_choice is negotiation.rank_actions() over the FULL action space --
+    what raw expected value would do with every gate removed. executed_action is
+    what decide() actually committed to, after negotiation.eligible_actions and
+    the law ceiling. gate_reason names the binding constraint when they differ,
+    None when they do not -- so every case of the rules overriding the learner
+    is a visible line in audit/audit_log.jsonl.
+
+    learning_method / estimated_probability / observations describe the number
+    the EV formula actually used for the executed action: the value from
+    engine.negotiation.recovery_probability() (0-1), and where it came from and
+    on how much data (engine.learning.audit_method() / .observations()).
+
+    The rank_actions() call here runs AFTER _pick_negotiation_action() chose the
+    executed action, so it cannot change the decision. Under online learning it
+    draws from the same per-(seed, invoice, day) Thompson RNG, which is fresh per
+    decision and discarded when engine.learning.online_sampling() exits --
+    selection, the outcome ledger and the posterior updates are all unaffected,
+    so a seeded run stays reproducible.
+    """
+    neg_action = evaluation["action"]
+    cell_key = _learned_cell_key(neg_action)
+    bandit_top = negotiation.rank_actions(
+        quadrant, outstanding, broken_promises=broken_promises,
+    )[0]["action"]
+    return {
+        "learning_method": learning.audit_method(quadrant, cell_key),
+        "estimated_probability": round(evaluation["probability"] / 100, 4),
+        "observations": learning.observations(quadrant, cell_key),
+        "bandit_top_choice": bandit_top,
+        "executed_action": neg_action,
+        "gate_reason": _gate_reason(
+            bandit_top=bandit_top, executed=neg_action, selection=selection,
+            quadrant_menu=tuple(config["negotiation"]["eligible_actions"][quadrant]),
+            chosen_rung=chosen_rung, ceiling=ceiling, law_capped=law_capped,
+            rung_overridden=rung_overridden,
+        ),
     }
 
 
@@ -639,7 +759,17 @@ def decide(
                     outstanding=outstanding_paise(invoice),
                     broken_promises=promise_count, explore_rng=explore_rng,
                 )
-                extra.update(_negotiation_extra(winner, selection, HANDOFF_RUNG))
+                handoff_extra = _negotiation_extra(winner, selection, HANDOFF_RUNG)
+                extra.update(handoff_extra)
+                if learning.enabled():
+                    extra.update(_learning_audit(
+                        winner, selection, quadrant=quadrant,
+                        outstanding=outstanding_paise(invoice),
+                        broken_promises=promise_count, chosen_rung=chosen,
+                        ceiling=ceiling, law_capped=capped,
+                        rung_overridden=handoff_extra["negotiation_gate_override"],
+                        config=config,
+                    ))
         return act(HANDOFF, HANDOFF_RUNG,
                    f"escalated to the final rung, so contact stops and a human takes over ({why})",
                    capped=capped, extra=extra)
@@ -722,6 +852,15 @@ def decide(
         )
         neg_action = winner["action"]
         ev_extra = _negotiation_extra(winner, selection, chosen)
+        if learning.enabled():
+            ev_extra.update(_learning_audit(
+                winner, selection, quadrant=quadrant,
+                outstanding=outstanding_paise(invoice),
+                broken_promises=promise_count, chosen_rung=chosen,
+                ceiling=ceiling, law_capped=capped,
+                rung_overridden=ev_extra["negotiation_gate_override"],
+                config=config,
+            ))
         how = (f"EV ranked {neg_action} highest" if selection == "argmax"
                else f"exploration sampled {neg_action} uniformly from "
                     f"{len(candidates)} eligible action(s)")

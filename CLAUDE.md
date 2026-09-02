@@ -271,16 +271,51 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       identical posteriors on a full run), rising mean on repeated successes
       (nested send/firm cell), cold start, dump schema, seeded sampling. 988
       tests pass.
+- [x] P12 - Learned-decision provenance in the audit trail + report, SHIPS
+      OFF with the rest of the learning layer. When config/rules.yaml's
+      learning.enabled is on, engine/brain.py's decide() writes six keys into
+      each EV decision's audit detail: learning_method (thompson_sampling |
+      posterior_mean | hardcoded), estimated_probability (the P(recover) the EV
+      formula used for the chosen action, 0-1), observations (behind that
+      number -- the live online posterior's alpha+beta-2, else the fitted
+      cell's, else null), bandit_top_choice (negotiation.rank_actions() over
+      the FULL 8-action space -- what raw EV wants with every gate removed),
+      executed_action, and gate_reason. gate_reason is null when the bandit got
+      its way, else names the binding rule (law_ceiling_rung_N /
+      escalation_rung_N_below_handoff / eligible_actions_policy /
+      escalation_walk_rung_N / exploration_sample) -- that null-vs-string is
+      the visible proof the RULES, not the learner, have the final say. reason
+      + source untouched; all six are new detail keys, so every existing audit
+      reader is unmodified. New engine/learning.py read-only helpers:
+      online_active(), audit_method(), observations(), +
+      OnlineLearner.observations(). report/build_report.py:
+      _learned_decision_rows() scans the FULL trail (like _trip_wire_rows()),
+      _learned_decisions_excerpt() floats override lines to the front; new
+      "Learned decisions" section in report.html.j2 with a learning-off empty
+      state (the shipped case) + a matching GUARDRAILS entry. brain.py's
+      rank_actions() call runs AFTER the executed action is chosen, so it
+      cannot change the decision; under online learning it draws from the same
+      fresh per-decision Thompson RNG (discarded at context exit) so a seeded
+      run stays reproducible. learning.enabled: false -> not one new key is
+      written, byte-identical to before. New tests: test_learning.py +9,
+      test_online_learning.py +3, test_experiment.py +6. 1005 tests pass.
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P8 + P9 + P10 + P11 landed this session on top of committed P6/P6b/P7
+- P8 + P9 + P10 + P11 + P12 landed this session on top of committed P6/P6b/P7
   (eb7515a, 1d1099b, 84979a4). Uncommitted new files: scripts/fit_recovery.py,
   config/learned_recovery.yaml, docs/learning_data.md, docs/learning_findings.md,
   engine/learning.py, tests/test_learning.py, tests/test_fit_recovery.py,
   tests/test_online_learning.py.
   Changed: config/rules.yaml (learning block), engine/{config,brain,negotiation}.py,
-  main.py, sim/run_sim.py, CLAUDE.md. audit/outcomes_train.jsonl gitignored.
+  main.py, sim/run_sim.py, report/build_report.py, report/templates/report.html.j2,
+  tests/test_experiment.py, CLAUDE.md. audit/outcomes_train.jsonl gitignored.
+- P12 is audit/report only: the six learned-decision keys appear in
+  audit/audit_log.jsonl only when learning.enabled + brain.ev_mode are both on;
+  the report's new "Learned decisions" section shows an empty state in the
+  shipped --compare (learning off). Verified over a learning-on 60-day run:
+  733/1644 learned decisions were rule-overridden (law_ceiling_rung_2 132x,
+  eligible_actions_policy 111x, escalation_rung_N_below_handoff 490x).
 - SHIPS OFF: config/rules.yaml learning.enabled: false -> negotiation uses the
   hand-typed grid, byte-identical to before. 988 tests pass. To demo:
   learning.enabled: true + brain.ev_mode: on (both, or check_config raises),

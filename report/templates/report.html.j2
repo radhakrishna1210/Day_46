@@ -366,6 +366,58 @@
   <p class="empty">No audit entries found -- run sim/run_sim.py --compare again to regenerate the trail.</p>
   {% endif %}
 
+  <h2>Learned decisions -- the bandit's proposal vs. what the rules allowed</h2>
+  {% if learned_decisions %}
+  <p class="reasons">
+    With config/rules.yaml's learning.enabled on, every expected-value decision
+    records the learned P(recover) it used, how many observations sit behind
+    that number, and -- the point of this table -- the action raw expected value
+    would have taken with <em>no gate at all</em> (bandit top choice) beside the
+    one the escalation ladder and the legal-leverage ceiling actually permitted
+    (executed). A gate reason means the rules overruled the learner; that is the
+    safety architecture working as designed, not a bug.
+    {{ learned_decisions_override_count }} of {{ learned_decisions_total }}
+    learned decisions this run were overridden by a rule.
+  </p>
+  <div class="card">
+    <table class="audit">
+      <thead>
+        <tr>
+          <th>Time</th><th>Invoice</th><th>Method</th><th class="num">P(recover)</th>
+          <th class="num">Obs.</th><th>Bandit top choice</th><th>Executed</th><th>Gate reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in learned_decisions %}
+        <tr>
+          <td>{{ row.ts }}</td>
+          <td>{{ row.invoice_id or "-" }}</td>
+          <td>{{ row.method }}</td>
+          <td class="num">{{ "%.2f"|format(row.probability) if row.probability is not none else "-" }}</td>
+          <td class="num">{{ row.observations if row.observations is not none else "-" }}</td>
+          <td>{{ row.bandit_top_choice or "-" }}</td>
+          <td>{{ row.executed_action or "-" }}</td>
+          <td{% if row.overridden %} class="lose"{% endif %}>{{ row.gate_reason or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="reasons">
+    Full trail: audit/audit_log.jsonl -- these six fields (learning_method,
+    estimated_probability, observations, bandit_top_choice, executed_action,
+    gate_reason) ride in each brain decision's detail object. Written by
+    engine/brain.py's decide(); the override logic is engine/brain.py's
+    _gate_reason().
+  </p>
+  {% else %}
+  <p class="empty">
+    Learning is off in this run (config/rules.yaml learning.enabled: false), so no
+    decision recorded a learned probability or a bandit-vs-rules comparison. Turn
+    it on together with brain.ev_mode to populate this section.
+  </p>
+  {% endif %}
+
   <h2>Methodology -- how this was guarded against being rigged</h2>
   <ul class="guardrails">
     {% for item in guardrails %}
