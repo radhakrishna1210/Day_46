@@ -185,23 +185,114 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       outcomes.gate_overrides() reads the rate back (kept out of the summary
       so results.json does not churn). explore=True implies ev_mode on and
       labels its ledger rows "agent_ev_explore".
+- [x] P8 - Recovery-probability fit, TRAINING SEEDS ONLY, OUTPUT ONLY: new
+      scripts/fit_recovery.py runs sim/run_sim.py's exploration mode across
+      seeds 1000-1029 (30, asserted disjoint from the 6 benchmark seeds
+      42/7/13/99/2024/555 -- fitting on a benchmark seed would let the numbers
+      memorise the world they are later scored on), accumulates into
+      audit/outcomes_train.jsonl (NOT the production audit/outcomes.jsonl),
+      and fits one Beta(1+successes, 1+failures) posterior -- weak uniform
+      prior -- per (quadrant, action_kind) cell. Excludes handoff rows
+      (post-handoff recovery is unobservable in the sim, per the FINDING note
+      below), right-censored rows (action + horizon past run end -- 0 at 120
+      days) and null-quadrant rows (0). Writes config/learned_recovery.yaml
+      (alpha/beta/mean/ci95_width/observations/successes/failures per cell;
+      header says nothing reads it) and docs/learning_data.md (seeds, the
+      exact 5499-row partition -> 4153 fitted, date, parameters). 7 cells.
+      NOTHING in engine/ imports or reads the YAML (grep-verified). The script
+      snapshots+restores data/seed/ and the audit trail. Re-fit fast with
+      `python scripts/fit_recovery.py --skip-run`.
+- [x] P9 - Wired the learned posteriors into the EV formula, behind a switch
+      that SHIPS OFF. New engine/learning.py: recovery_probability(quadrant,
+      action_kind) -> float in [0,1], read via engine/config.py's cached
+      learned_recovery() loader (same pattern as every other config file).
+      New config/rules.yaml learning.enabled (false) + learning.mode
+      (offline). engine/negotiation.py's recovery_probability() takes the
+      posterior mean as its base rate ONLY when learning.enabled; a cell
+      missing from the YAML falls back to the hand-typed grid value and logs
+      it (deduped, stderr), never crashes. (P9 fitted one coarse "send" cell
+      per quadrant; P10 split that by delivered rung -- see below.)
+      learning.check_config() (called at startup
+      by main.py and sim/run_sim.py) raises LearningConfigError on
+      enabled+ev_mode-off, enabled+mode:online, enabled+missing YAML -- never
+      a silent no-op. Fixed a latent bug this surfaced: YAML `brain.ev_mode:
+      on` parses as the boolean True, which the old `str(...) == "on"` check
+      read as OFF -- now one engine/config.ev_mode_on() accepts True or "on",
+      used by both brain.py and learning.py. ev_mode:off snapshot tests
+      unchanged (shipped defaults untouched). New tests/test_learning.py (29);
+      956 tests pass.
+- [x] P10 - SEND cells re-fit split by DELIVERED RUNG (Day 4 re-aggregation +
+      Day 5 lookup only; brain.py decision logic, Day 1/Day 3 data + code all
+      UNTOUCHED). Investigation found: engine/negotiation.py distinguishes
+      soft_nudge/firm/legal_facts as SEND actions and EV selects among them,
+      but engine/brain.py's escalation walk sets the delivered rung
+      INDEPENDENTLY -- proposed_action_kind matched the delivered rung only
+      7-80% of the time (gate_override true on 56% of SEND rows). So
+      scripts/fit_recovery.py now groups a SEND by the rung it was delivered
+      at, mapped to a tier via config/rules.yaml's ladder (1=soft_nudge,
+      2=firm, 3=legal_facts -- read from engine.rungs, not a new map), stored
+      nested at recovery.<quadrant>.send.<tier> with delivered_rung on each
+      cell. payment_plan/counter_settle unchanged (1:1 select->execute, one
+      flat cell). config/learned_recovery.yaml schema -> version 2. Re-fit
+      from the EXISTING audit/outcomes_train.jsonl (--skip-run, no new sim
+      runs). engine/learning.py resolves soft_nudge/firm/legal_facts to the
+      nested send.<tier> cell; a quadrant with no rung-1 sends (can_pay_but_wont)
+      has no soft_nudge cell and falls back to the hand-typed grid, logged.
+      Thin cells flagged: soft_nudge n=9-79 (walk rarely stops at rung 1) --
+      ci95_width 0.21-0.42 carries the warning, no falsely-confident number.
+      New docs/learning_findings.md records the label/execution gap as a KNOWN
+      LIMITATION with the future fix (make EV's choice set the executed rung)
+      recorded but NOT attempted. New tests/test_fit_recovery.py (13);
+      tests/test_learning.py updated to 32. ev_mode:off snapshot tests
+      untouched and passing.
+- [x] P11 - Online learning (config/rules.yaml learning.mode: online), SHIPS
+      OFF. engine/learning.py OnlineLearner: Beta posteriors in memory,
+      warm-started from config/learned_recovery.yaml (or uniform Beta(1,1) if
+      learning.cold_start: true, same cell set). engine/negotiation.py
+      Thompson-SAMPLES each eligible cell (learning.sample_probability, seeded
+      by sim/run_sim.py's own _rng(seed, inv, day, "thompson") handed in via
+      online_sampling()) and feeds the sample -- not the mean -- to the EV
+      formula. sim/run_sim.py's _resolve_online() does incremental horizon
+      attribution each simulated day (SAME rule engine/outcomes.py applies at
+      end-of-run; right-censored actions excluded) and calls learner.update()
+      -- alpha += 1 on a credited payment, beta += 1 on an elapsed horizon.
+      Executed (kind, rung) -> cell key via learning.delivered_action_kind()
+      (SEND -> delivered tier, plan/settle -> self, handoff -> None). ONE
+      resolver (_resolve_cell) for offline lookup + online sample + online
+      update. End of run: posteriors dump to
+      report/out/learned_posteriors_final.yaml (nested v2 schema, gitignored);
+      config/learned_recovery.yaml is NEVER written. Online mode is its own
+      experiment: sim/run_sim.py main() runs ONE online agent, skips --compare.
+      check_config() now ACCEPTS online (was "not implemented").
+      engine/brain.py decision logic UNTOUCHED -- the sampling context is a
+      learning.py module-global negotiation.py reads. engine/learning.py still
+      has no "outcomes" string (the guard test). New
+      tests/test_online_learning.py (17): reproducibility (same seed ->
+      identical posteriors on a full run), rising mean on repeated successes
+      (nested send/firm cell), cold start, dump schema, seeded sampling. 988
+      tests pass.
 - [ ] 11 - Demo assets + video prep
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P7 (exploration mode) landed this session, on top of P6/P6b which were
-  already committed (eb7515a, 1d1099b -- an earlier note claiming they were
-  unpushed was wrong). P7 touched engine/brain.py, engine/outcomes.py,
-  sim/run_sim.py, tests/test_outcomes.py and added
-  tests/test_exploration_respects_gates.py (11 tests). Nothing in engine/
-  reads outcomes -- a test enforces it by grepping for the module NAME, so do
-  not even mention it in brain.py prose.
-- P7 MEASUREMENT, first run (seed 42, 60 days): the gates override the
-  sampled action 36% of the time (57/157), and the overrides are almost
-  entirely soft_nudge (32/33) and legal_facts (22/35) -- i.e. the negotiation
-  LABEL routinely disagrees with the rung the escalation walk had already
-  settled on, because payment_plan/counter_settle/handoff ride at the chosen
-  rung and so can never be overridden. Worth reading before anyone treats
-  proposed_action_kind as what the buyer received.
+- P8 + P9 + P10 + P11 landed this session on top of committed P6/P6b/P7
+  (eb7515a, 1d1099b, 84979a4). Uncommitted new files: scripts/fit_recovery.py,
+  config/learned_recovery.yaml, docs/learning_data.md, docs/learning_findings.md,
+  engine/learning.py, tests/test_learning.py, tests/test_fit_recovery.py,
+  tests/test_online_learning.py.
+  Changed: config/rules.yaml (learning block), engine/{config,brain,negotiation}.py,
+  main.py, sim/run_sim.py, CLAUDE.md. audit/outcomes_train.jsonl gitignored.
+- SHIPS OFF: config/rules.yaml learning.enabled: false -> negotiation uses the
+  hand-typed grid, byte-identical to before. 988 tests pass. To demo:
+  learning.enabled: true + brain.ev_mode: on (both, or check_config raises),
+  then learning.mode offline = posterior mean, online = Thompson sampling +
+  in-run updates (single agent run, dumps report/out/learned_posteriors_final.yaml).
+- P10 fitted means, per DELIVERED rung. SEND: good_customer firm 0.61 (n=748,
+  the workhorse) / soft_nudge 0.38 (n=79, thin) / legal_facts 0.44 (n=34, thin);
+  high_risk firm 0.17 / legal_facts 0.22; cash_flow firm 0.51 / legal_facts
+  0.77 (n=55, thin, selection-confounded); can_pay_but_wont firm 0.28 /
+  legal_facts 0.42 (no rung-1 cell -> soft_nudge falls back to hand-typed).
+  payment_plan/counter_settle unchanged: cash_flow 0.64, good_customer 0.59,
+  can_pay_but_wont counter_settle 0.31.
 - RECONCILIATION, settled: ledger sum + unattributed is SHORT of results.json
   recovered_paise by exactly 189,480,000 paise on seed 42, and by the SAME
   constant on all three arms. Not a leak -- 12 current invoices arrive at day0

@@ -19,8 +19,8 @@ from typing import Any, Callable
 
 from data import generate, store
 from engine.money import enable_unicode_output, format_inr
-from engine import (audit, brain, channels, consolidate, law, llm, promises,
-                    score, validate, watchdog, writer)
+from engine import (audit, brain, channels, consolidate, law, learning, llm,
+                    promises, score, validate, watchdog, writer)
 
 DEFAULT_SEED = 42
 
@@ -357,6 +357,9 @@ def run(seed: int, dry_run: bool = False, send_email: bool = False,
         ignore_quiet_hours: bool = False) -> int:
     """Walk the pipeline. Returns a process exit code."""
     enable_unicode_output()
+    # Fail fast on a self-contradictory learning config (learning.enabled: true
+    # without brain.ev_mode: on does nothing) before any work starts.
+    learning.check_config()
     print(f"revenue recovery agent: starting (seed={seed}, llm_mode={llm.get_mode()})")
     if dry_run:
         audit.disable()

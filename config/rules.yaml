@@ -568,12 +568,48 @@ channels:
       an SMS gateway needs a registered sender ID and DLT templates, which is
       out of scope for this build
 
-# --- Outcome attribution (engine/outcomes.py, simulator only) -------------
-# How long after an action a payment may still be credited to it. Our own
-# analysis policy, not statute and not a measured number: 14 days is roughly
-# one B2B payment-run cycle, long enough that a buyer who acted on a message
-# still lands inside it, short enough that a message and a payment five weeks
-# apart are not called cause and effect. Nothing in engine/brain.py reads it
-# -- attribution observes, it never steers.
+# --- Outcome attribution + learned recovery (engine/outcomes.py, engine/learning.py) --
 learning:
+  # How long after an action a payment may still be credited to it
+  # (engine/outcomes.py, simulator only). Our own analysis policy, not statute
+  # and not a measured number: 14 days is roughly one B2B payment-run cycle,
+  # long enough that a buyer who acted on a message still lands inside it,
+  # short enough that a message and a payment five weeks apart are not called
+  # cause and effect. Nothing in engine/brain.py reads it -- attribution
+  # observes, it never steers.
   attribution_horizon_days: 14
+
+  # Master switch for feeding scripts/fit_recovery.py's fitted posteriors
+  # (config/learned_recovery.yaml, provenance in docs/learning_data.md) into
+  # the EV formula, in place of engine/negotiation.py's hand-typed
+  # negotiation.recovery_probability grid. SHIPS OFF.
+  #
+  #   enabled: false -> engine/negotiation.py uses the hand-typed grid.
+  #     Behaviour byte-identical to before this switch existed.
+  #   enabled: true  AND brain.ev_mode: off -> a configuration error at
+  #     startup (engine/learning.py check_config). Learned probabilities only
+  #     feed the EV formula, so this combination does nothing -- it is
+  #     rejected, never silently ignored.
+  #   enabled: true  AND brain.ev_mode: on  -> the EV formula uses the learned
+  #     posteriors (see `mode` below). A (quadrant, action) cell absent from
+  #     config/learned_recovery.yaml falls back to the hand-typed value and
+  #     the fallback is logged; a missing cell never stops a run.
+  enabled: false
+
+  #   offline -> the EV formula uses each cell's fitted posterior MEAN, read
+  #     from config/learned_recovery.yaml as-is.
+  #   online  -> engine/learning.py's OnlineLearner Thompson-SAMPLES each
+  #     eligible cell's Beta posterior for the EV comparison, and UPDATES the
+  #     posteriors in memory as the run's payment attribution resolves. Its
+  #     own experiment: sim/run_sim.py runs one online agent and skips the
+  #     --compare ablation. Final posteriors are dumped to
+  #     report/out/learned_posteriors_final.yaml; config/learned_recovery.yaml
+  #     is never overwritten. Sampling is seeded from the same per-invoice
+  #     stream every other reproducible roll uses, so an online run is
+  #     reproducible for a seed.
+  mode: offline
+
+  # online only: start the posteriors from uniform Beta(1,1) priors (keeping
+  # the same set of cells as config/learned_recovery.yaml) instead of the
+  # fitted warm start.
+  cold_start: false

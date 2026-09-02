@@ -52,7 +52,7 @@ if __package__ in (None, ""):
 
 from data import generate, store
 from engine import ability_willingness
-from engine import audit, brain, channels, consolidate, law, llm, outcomes, promises, validate, watchdog, writer
+from engine import audit, brain, channels, consolidate, law, learning, llm, outcomes, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
 from engine.config import rules
@@ -523,9 +523,64 @@ def _raise_early_warnings(
         )
 
 
+#: Where run_agent(online=True) writes the final Beta posteriors. Under
+#: report/out/ (gitignored), never config/learned_recovery.yaml.
+DEFAULT_ONLINE_POSTERIORS_PATH = (
+    Path(__file__).resolve().parents[1] / "report" / "out" / "learned_posteriors_final.yaml")
+
+
+def _resolve_online(learner, ledger, horizon: int, today: date, run_end: date,
+                    seen_payments: set[int], resolved: set[int]) -> None:
+    """Feed the online learner every action that has newly RESOLVED as of `today`.
+
+    Same attribution rule engine.outcomes applies at the end of a run: a
+    payment credits the MOST RECENT action on its invoice within `horizon`
+    (and recorded before it); an action whose whole horizon then elapsed with
+    nothing credited is a failure. Right-censored actions -- horizon still open
+    when the run ends -- are left unresolved, exactly the exclusion the offline
+    fit makes. `seen_payments` / `resolved` are carried across days so a
+    payment or an action is only ever folded in once.
+
+    The executed (action_kind, rung) is mapped to a cell key through
+    engine.learning.delivered_action_kind() -- a SEND to its delivered ladder
+    tier, payment_plan/counter_settle to themselves, a handoff to nothing.
+    """
+    actions_by_invoice: dict[str, list[Any]] = {}
+    for action_event in ledger.actions:
+        actions_by_invoice.setdefault(action_event.invoice_id, []).append(action_event)
+
+    def credit(action_event: Any, *, success: bool) -> None:
+        kind = learning.delivered_action_kind(action_event.action_kind, action_event.rung)
+        if kind is not None:
+            learner.update(action_event.quadrant, kind, success=success)
+
+    for payment in sorted(ledger.payments, key=lambda p: (p.day, p.seq)):
+        if payment.seq in seen_payments or payment.day > today:
+            continue
+        seen_payments.add(payment.seq)
+        eligible = [a for a in actions_by_invoice.get(payment.invoice_id, [])
+                    if a.seq < payment.seq and 0 <= (payment.day - a.day).days <= horizon]
+        if not eligible:
+            continue
+        winner = max(eligible, key=lambda a: (a.day, a.seq))
+        if winner.seq not in resolved:
+            resolved.add(winner.seq)
+            credit(winner, success=True)
+
+    at_end = today >= run_end
+    for action_event in ledger.actions:
+        if action_event.seq in resolved:
+            continue
+        horizon_close = action_event.day + timedelta(days=horizon)
+        if horizon_close < today or (at_end and horizon_close <= run_end):
+            resolved.add(action_event.seq)
+            credit(action_event, success=False)
+
+
 def run_agent(
     seed: int, days: int, verbose: bool = False, ev_mode: bool = False,
-    explore: bool = False,
+    explore: bool = False, online: bool = False,
+    online_posteriors_out: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
     channels -> persona reacts -> promises) over `days` simulated days.
@@ -572,20 +627,39 @@ def run_agent(
             Implies the EV path (there is nothing to sample from otherwise),
             so explore=True runs with brain.ev_mode "on" whatever `ev_mode`
             says, and reports ev_mode True.
+        online: ONLINE LEARNING (config/rules.yaml learning.mode: online).
+            engine.learning.OnlineLearner holds Beta posteriors -- warm-started
+            from config/learned_recovery.yaml, or uniform if
+            learning.cold_start -- that are Thompson-SAMPLED for every EV
+            comparison and UPDATED in memory as this run's payment attribution
+            resolves each action (_resolve_online() below, same rule
+            engine.outcomes applies at the end). Implies the EV path.
+            engine.negotiation only actually reads a sample when
+            learning.enabled() is also true, so this flag is inert unless the
+            config opts in. At end of run the final posteriors are written to
+            `online_posteriors_out` (default report/out/learned_posteriors_final.yaml);
+            config/learned_recovery.yaml is never touched.
     """
-    ev_mode = ev_mode or explore
+    ev_mode = ev_mode or explore or online
     decide_config = None
     if ev_mode:
         base_config = rules()
         decide_config = {**base_config, "brain": {**base_config.get("brain", {}), "ev_mode": "on"}}
 
+    online_learner = learning.OnlineLearner(cold_start=learning.cold_start()) if online else None
+    # (payment seq, action seq) already folded into online_learner, so a day's
+    # resolution pass never double-counts.
+    online_seen_payments: set[int] = set()
+    online_resolved: set[int] = set()
+
     # Outcome attribution (engine/outcomes.py). Collects during the run,
     # judges once at the end, and is READ BY NOBODY inside the loop -- no
     # brain.decide() call, no rung choice and no stop rule can see a record
     # it holds, which is what keeps adding it a pure observation rather than
-    # a behaviour change. The mode label distinguishes the ablation's two
-    # agent arms in the shared outcomes.jsonl.
-    mode_label = "agent_ev_explore" if explore else ("agent_ev" if ev_mode else "agent")
+    # a behaviour change. The mode label distinguishes the ablation's arms in
+    # the shared outcomes.jsonl.
+    mode_label = ("agent_online" if online else "agent_ev_explore" if explore
+                  else "agent_ev" if ev_mode else "agent")
     ledger = outcomes.OutcomeLedger(mode=mode_label, seed=seed)
 
     buyers, invoices, persona_of, day0 = _load_world(seed)
@@ -593,6 +667,12 @@ def run_agent(
     # Built once: invoice dicts are mutated in place by _apply_payment (never
     # replaced), so this stays valid for the whole run without refreshing.
     invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
+
+    # Online learning's incremental attribution needs the horizon and the last
+    # simulated day -- the same two numbers engine/outcomes.py's end-of-run
+    # attribution uses.
+    online_horizon = outcomes.horizon_days()
+    run_end = day0 + timedelta(days=days - 1)
 
     history: dict[str, list[dict[str, Any]]] = {}
     promises_by_invoice: dict[str, list[dict[str, Any]]] = {}
@@ -685,9 +765,17 @@ def run_agent(
                 # first. None outside explore mode, which is what keeps every
                 # other arm byte-identical.
                 explore_rng = _rng(seed, inv_id, today, "explore") if explore else None
-                action = brain.decide(invoice, buyer, two_axis, position,
-                                      promises=plist, history=hist, log=True,
-                                      config=decide_config, explore_rng=explore_rng)
+                # Online learning: the SAME per-(seed, invoice, day) stream
+                # family every reproducible roll here uses -- a fresh, distinct
+                # tag so the Thompson draws do not perturb any other stream.
+                # online_sampling() is a no-op when online_learner is None, and
+                # the rng is not even built then.
+                thompson_rng = (_rng(seed, inv_id, today, "thompson")
+                                if online_learner is not None else None)
+                with learning.online_sampling(online_learner, thompson_rng):
+                    action = brain.decide(invoice, buyer, two_axis, position,
+                                          promises=plist, history=hist, log=True,
+                                          config=decide_config, explore_rng=explore_rng)
                 quadrant_of[inv_id] = two_axis.get("quadrant")
                 # What the selection policy PROPOSED, kept beside the action
                 # actually executed so the ledger can record both. Absent
@@ -814,6 +902,14 @@ def run_agent(
                         last_action_by_invoice[inv_id]["reason"] = (
                             f"the buyer disputed the invoice; {action.reason}")
 
+            # End of this simulated day: feed the online learner every action
+            # that has newly resolved -- a payment landed inside its horizon,
+            # or its whole horizon has now elapsed with nothing. No-op unless
+            # this is an online run.
+            if online_learner is not None:
+                _resolve_online(online_learner, ledger, online_horizon, today, run_end,
+                                online_seen_payments, online_resolved)
+
     # A malformed invoice (engine.validate) is found here, once, against the
     # clock as it stands at the END of the run -- not at day0. TC-050's own
     # defect (an issue_date in the future) is inherently clock-relative: the
@@ -845,6 +941,18 @@ def run_agent(
     }
     last_rung_of = {inv_id: entry["rung"] for inv_id, entry in last_action_by_invoice.items()}
 
+    # Online learning: the last in-loop _resolve_online() ran with today ==
+    # run_end, so every non-censored action is already folded in. Dump the
+    # final posteriors -- to report/out/ (gitignored), never
+    # config/learned_recovery.yaml.
+    online_posteriors = None
+    online_posteriors_path = None
+    if online_learner is not None:
+        online_posteriors = online_learner.snapshot()
+        dest = Path(online_posteriors_out) if online_posteriors_out is not None \
+            else DEFAULT_ONLINE_POSTERIORS_PATH
+        online_posteriors_path = str(online_learner.dump(dest, seed=seed))
+
     # Report-only rollup, computed once at the very end from the same final
     # state everything above already settled on -- see engine/buyer_panel.py's
     # own docstring, and CLAUDE.md's W2 note: nothing above this line (every
@@ -859,7 +967,12 @@ def run_agent(
 
     return {
         "mode": "agent", "seed": seed, "days": days, "ev_mode": ev_mode,
-        "explore": explore,
+        "explore": explore, "online": online,
+        # Online-only (None otherwise): the final in-memory posteriors and
+        # where they were dumped. Additive -- read by nothing that predates it.
+        "online_posteriors": online_posteriors,
+        "online_posteriors_path": online_posteriors_path,
+        "online_updates": (online_learner.updates_applied if online_learner is not None else None),
         "final": _totals(invoices, last_day, invalid_ids),
         "messages_sent": messages_sent,
         # Kept alongside messages_sent, not in place of it: messages_sent now
@@ -1179,6 +1292,12 @@ def _print_outcomes_file(path: Path) -> None:
 
 def main() -> int:
     enable_unicode_output()
+    # Fail fast on a self-contradictory learning config (learning.enabled: true
+    # without brain.ev_mode: on feeds a learned number to nothing) before any
+    # run starts -- the ablation's ev-on arm is where learned probabilities
+    # would apply, and this stops that arm being demoed as meaningful when the
+    # config cannot deliver it.
+    learning.check_config()
     parser = argparse.ArgumentParser(description="Run the recovery simulation.")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="random seed (default: 42)")
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS, help="simulated days to run")
@@ -1205,6 +1324,29 @@ def main() -> int:
         print()
         for line in result["narrative"]:
             print(line)
+        return 0
+
+    # Online learning (config/rules.yaml learning.mode: online) is its own
+    # experiment, not part of the fixed baseline-vs-agent-vs-agent+EV ablation
+    # -- so it runs ONE Thompson-sampling agent and returns, whatever
+    # --compare says. check_config() above already made sure the config can
+    # deliver it (enabled + ev_mode on).
+    if learning.enabled() and learning.mode() == "online":
+        start = "cold (uniform priors)" if learning.cold_start() else "warm (learned_recovery.yaml)"
+        print(f"simulator: seed={args.seed}, days={args.days}, mode=online learning "
+              f"({start}); the --compare ablation is skipped in online mode")
+        outcomes_path = outcomes.start_file()
+        agent = run_agent(args.seed, args.days, verbose=args.verbose, online=True)
+        if args.verbose:
+            print()
+            for line in agent["narrative"]:
+                print(f"  {line}")
+        print()
+        _print_summary("agent (online learning)", agent)
+        upd = agent["online_updates"]
+        print(f"  posterior updates    {upd['successes']} success / {upd['failures']} failure")
+        print(f"final posteriors written to {agent['online_posteriors_path']}")
+        _print_outcomes_file(outcomes_path)
         return 0
 
     print(f"simulator: seed={args.seed}, days={args.days}, "

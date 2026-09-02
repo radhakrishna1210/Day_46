@@ -65,7 +65,7 @@ from typing import Any
 
 from engine import audit, negotiation, rungs, samadhaan
 from engine.ability_willingness import outstanding_paise
-from engine.config import rules
+from engine.config import ev_mode_on as _ev_mode_selected, rules
 from engine.llm import LLMError, llm
 
 #: Kinds of action. `wait` is recoverable, `stop` is terminal, `handoff` gives
@@ -477,7 +477,7 @@ def decide(
     # (which action generally) -- see eligible_negotiation_actions()'s own
     # docstring for what "quadrant present" does and does not unlock.
     quadrant = score.get("quadrant")
-    ev_mode_on = quadrant and str(config.get("brain", {}).get("ev_mode", "off")) == "on"
+    ev_mode_on = bool(quadrant) and _ev_mode_selected(config)
 
     invoice_id = invoice.get("invoice_id")
     buyer_id = invoice.get("buyer_id")

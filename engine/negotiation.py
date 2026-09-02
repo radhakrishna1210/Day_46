@@ -108,6 +108,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine import ability_willingness as aw
+from engine import learning
 from engine.config import rules
 from engine.law import _as_date
 from engine.money import round_paise
@@ -147,12 +148,42 @@ def recovery_probability(
         raise ValueError(f"unknown action {action!r}; expected one of {ACTIONS}")
 
     config = rules()["negotiation"]
-    base = float(config["recovery_probability"][quadrant][action])
     adjustment = config["promise_adjustment"]
+
+    # Base rate: the hand-typed grid, UNLESS config/rules.yaml's
+    # learning.enabled is true. Then, per learning.mode:
+    #   online  -> one Thompson draw from this cell's live Beta posterior
+    #              (engine.learning.sample_probability, seeded by the
+    #              per-invoice stream sim/run_sim.py hands in). None outside an
+    #              online run, so every other run falls through unchanged.
+    #   offline -> the fitted posterior mean (learning.recovery_probability),
+    #              which itself substitutes-and-logs the hand-typed value for a
+    #              cell absent from config/learned_recovery.yaml.
+    # round(..., 2) only clears float noise from the 0-1 -> 0-100 scaling
+    # (0.85 * 100 is 84.999...); a genuine value like 58.64 is untouched and the
+    # "rounded" breakdown entry below reconciles it to a whole percent. With
+    # learning.enabled false (the shipped default) this is byte-identical to
+    # before the switch existed -- and decide()'s EV path, the only caller in
+    # practice, is only reached with brain.ev_mode on, which check_config()
+    # forbids enabling learning without.
+    if learning.enabled():
+        sampled = learning.sample_probability(quadrant, action)
+        if sampled is not None:
+            base = round(sampled * 100, 2)
+            base_label = "online Thompson sample from the Beta posterior"
+        else:
+            base = round(learning.recovery_probability(quadrant, action) * 100, 2)
+            base_label = ("learned P(recover) (posterior mean)"
+                          if learning.has_cell(quadrant, action)
+                          else "hand-typed P(recover) (learning on, but no learned cell "
+                               "for this pair)")
+    else:
+        base = float(config["recovery_probability"][quadrant][action])
+        base_label = "assumed P(recover)"
 
     breakdown: list[dict[str, Any]] = [{
         "factor": "base rate",
-        "detail": f"assumed P(recover) for {action} against a {quadrant} buyer "
+        "detail": f"{base_label} for {action} against a {quadrant} buyer "
                   f"({aw.QUADRANT_MEANING[quadrant]})",
         "points": base,
     }]
@@ -175,6 +206,16 @@ def recovery_probability(
             "factor": "clamped",
             "detail": f"raw {round(unclamped, 1)} pulled inside 0-100",
             "points": round(probability - unclamped, 1),
+        })
+    elif probability != unclamped:
+        # A learned posterior mean is fractional in points (58.63, not 59);
+        # the hand-typed grid is always whole. Record the rounding so the
+        # breakdown still sums EXACTLY to `probability`, the same guarantee
+        # the clamp entry above preserves.
+        breakdown.append({
+            "factor": "rounded",
+            "detail": f"base rate {round(unclamped, 2)} rounded to a whole percent",
+            "points": round(probability - unclamped, 2),
         })
 
     return {"probability": probability, "breakdown": breakdown}
