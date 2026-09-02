@@ -1,0 +1,190 @@
+# config/learned_recovery.yaml
+#
+# GENERATED FILE -- produced by scripts/fit_recovery.py. Do not hand-edit;
+# re-run the script instead.
+#
+# Recovery-probability posteriors, fitted from exploration-mode simulator runs
+# on TRAINING seeds only (1000-1029). The six benchmark seeds (7, 13, 42, 99,
+# 555, 2024) are held out and were NOT used.
+#
+# Each cell is a Beta posterior over P(payment within the attribution horizon):
+#   alpha = 1 + successes,  beta = 1 + failures      (weak uniform Beta(1,1) prior)
+#   mean       = alpha / (alpha + beta)              -- the posterior mean
+#   ci95_width = width of the 95% central credible interval. Wide means the
+#                cell is thin: the mean is not yet worth trusting.
+#
+# CELL LAYOUT:
+#   recovery.<quadrant>.send.<tier>   -- a buyer-facing message, grouped by the
+#     rung it was DELIVERED at (ladder tier: soft_nudge/firm/legal_facts), NOT
+#     by the soft_nudge/firm/legal_facts label EV nominally selected. The
+#     escalation walk in engine/brain.py overrides that label ~56% of the time
+#     -- see docs/learning_findings.md. Each cell carries delivered_rung.
+#   recovery.<quadrant>.payment_plan / .counter_settle -- one flat cell; these
+#     map 1:1 from what EV selected to what was executed.
+#
+# READ BY engine/learning.py, behind config/rules.yaml's learning.enabled
+# switch (ships OFF). recovery_probability(quadrant, "firm") resolves to
+# recovery.<quadrant>.send.firm; payment_plan/counter_settle resolve directly.
+#
+# handoff rows are deliberately absent, not fitted as an empty cell: the
+# simulator has no model of post-handoff recovery, so their outcome is
+# unobservable rather than zero. See docs/learning_data.md.
+#
+# Full provenance -- seeds, observation counts, generation date, thin cells:
+#   docs/learning_data.md
+
+version: 2
+meta:
+  generated: '2026-09-02'
+  generator: scripts/fit_recovery.py
+  arm: agent_ev_explore  (sim/run_sim.py run_agent(explore=True))
+  training_seeds: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
+    1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026,
+    1027, 1028, 1029]
+  benchmark_seeds_held_out: [7, 13, 42, 99, 555, 2024]
+  simulated_days: 120
+  attribution_horizon_days: 14
+  prior: Beta(1, 1) -- weak uniform
+  excluded_action_kinds:
+  - handoff
+  send_cells_grouped_by: 'delivered rung -> ladder tier (config/rules.yaml: 1=soft_nudge,
+    2=firm, 3=legal_facts), NOT proposed_action_kind -- see docs/learning_findings.md'
+  send_rows_off_ladder: 0
+  row_partition:
+    action_rows_seen: 5499
+    excluded_handoff: 1346
+    excluded_right_censored: 0
+    excluded_null_quadrant: 0
+    fitted_observations: 4153
+recovery:
+  can_pay_but_wont:
+    send:
+      firm:
+        delivered_rung: 2
+        alpha: 113
+        beta: 294
+        mean: 0.2776
+        ci95_width: 0.0868
+        observations: 405
+        successes: 112
+        failures: 293
+      legal_facts:
+        delivered_rung: 3
+        alpha: 115
+        beta: 157
+        mean: 0.4228
+        ci95_width: 0.1171
+        observations: 270
+        successes: 114
+        failures: 156
+    counter_settle:
+      alpha: 73
+      beta: 165
+      mean: 0.3067
+      ci95_width: 0.1168
+      observations: 236
+      successes: 72
+      failures: 164
+  cash_flow_problem:
+    send:
+      soft_nudge:
+        delivered_rung: 1
+        alpha: 7
+        beta: 24
+        mean: 0.2258
+        ci95_width: 0.2863
+        observations: 29
+        successes: 6
+        failures: 23
+      firm:
+        delivered_rung: 2
+        alpha: 202
+        beta: 197
+        mean: 0.5063
+        ci95_width: 0.0979
+        observations: 397
+        successes: 201
+        failures: 196
+      legal_facts:
+        delivered_rung: 3
+        alpha: 44
+        beta: 13
+        mean: 0.7719
+        ci95_width: 0.2146
+        observations: 55
+        successes: 43
+        failures: 12
+    payment_plan:
+      alpha: 167
+      beta: 95
+      mean: 0.6374
+      ci95_width: 0.1161
+      observations: 260
+      successes: 166
+      failures: 94
+  good_customer:
+    send:
+      soft_nudge:
+        delivered_rung: 1
+        alpha: 31
+        beta: 50
+        mean: 0.3827
+        ci95_width: 0.2098
+        observations: 79
+        successes: 30
+        failures: 49
+      firm:
+        delivered_rung: 2
+        alpha: 461
+        beta: 289
+        mean: 0.6147
+        ci95_width: 0.0696
+        observations: 748
+        successes: 460
+        failures: 288
+      legal_facts:
+        delivered_rung: 3
+        alpha: 16
+        beta: 20
+        mean: 0.4444
+        ci95_width: 0.3182
+        observations: 34
+        successes: 15
+        failures: 19
+    payment_plan:
+      alpha: 251
+      beta: 177
+      mean: 0.5864
+      ci95_width: 0.0932
+      observations: 426
+      successes: 250
+      failures: 176
+  high_risk:
+    send:
+      soft_nudge:
+        delivered_rung: 1
+        alpha: 2
+        beta: 9
+        mean: 0.1818
+        ci95_width: 0.4198
+        observations: 9
+        successes: 1
+        failures: 8
+      firm:
+        delivered_rung: 2
+        alpha: 115
+        beta: 545
+        mean: 0.1742
+        ci95_width: 0.0578
+        observations: 658
+        successes: 114
+        failures: 544
+      legal_facts:
+        delivered_rung: 3
+        alpha: 119
+        beta: 430
+        mean: 0.2168
+        ci95_width: 0.0688
+        observations: 547
+        successes: 118
+        failures: 429
