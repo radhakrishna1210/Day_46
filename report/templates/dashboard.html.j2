@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receivables Command Center &mdash; seed {{ payload.meta.seed }}</title>
+<style>
+  :root {
+    --paper:        #f3f5f2;
+    --surface:      #ffffff;
+    --surface-alt:  #f7f9f6;
+    --ink:          #1f2a24;
+    --ink-soft:     #55605a;
+    --rule:         #d4dbd5;
+    --rule-strong:  #b9c2bb;
+    --statute:      #5b2aa6;
+    --statute-ink:  #4a1f8c;
+    --statute-wash: #ede5fa;
+    --pos:          #2c6a4a;
+    --neg:          #a23b2c;
+    --focus:        #5b2aa6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", "Consolas", "Roboto Mono", monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:        #13170f;
+      --surface:      #1b211b;
+      --surface-alt:  #20271f;
+      --ink:          #e4eae1;
+      --ink-soft:     #9aa69d;
+      --rule:         #333c33;
+      --rule-strong:  #4b564b;
+      --statute:      #b89ce9;
+      --statute-ink:  #cdb6f2;
+      --statute-wash: #2a2141;
+      --pos:          #74b891;
+      --neg:          #e18b7a;
+      --focus:        #b89ce9;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #13170f; --surface: #1b211b; --surface-alt: #20271f;
+    --ink: #e4eae1; --ink-soft: #9aa69d; --rule: #333c33; --rule-strong: #4b564b;
+    --statute: #b89ce9; --statute-ink: #cdb6f2; --statute-wash: #2a2141;
+    --pos: #74b891; --neg: #e18b7a; --focus: #b89ce9;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  .layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+
+  /* ---- left nav ---- */
+  nav.sidebar {
+    position: sticky; top: 0; align-self: start; height: 100vh;
+    border-right: 1px solid var(--rule); padding: 1.4rem 0 1.4rem 1.4rem;
+    display: flex; flex-direction: column; gap: 0.1rem;
+    background: var(--paper);
+  }
+  nav.sidebar .brand { font-weight: 700; font-size: 13.5px; line-height: 1.25; letter-spacing: -0.01em; margin-bottom: 1.1rem; padding-right: 1rem; }
+  nav.sidebar a {
+    display: flex; gap: 0.6rem; align-items: baseline;
+    text-decoration: none; color: var(--ink-soft); font-size: 13.5px;
+    padding: 0.32rem 0.5rem 0.32rem 0; border-radius: 3px; white-space: nowrap;
+  }
+  nav.sidebar a .k {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-soft);
+    width: 1.1em; text-align: right; flex: none;
+  }
+  nav.sidebar a:hover { color: var(--ink); }
+  nav.sidebar a.active { color: var(--statute-ink); font-weight: 600; }
+  nav.sidebar a.active .k { color: var(--statute); }
+  nav.sidebar .foot {
+    margin-top: auto; font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-soft); line-height: 1.5; padding-right: 1rem;
+  }
+
+  /* ---- main column ---- */
+  main { padding: 1.6rem 2.2rem 6rem; max-width: 1220px; }
+  section { padding-top: 2.6rem; border-top: 1px solid var(--rule); margin-top: 2.6rem; }
+  section:first-of-type { border-top: none; margin-top: 0; padding-top: 0.6rem; }
+  h1 { font-size: 23px; font-weight: 700; letter-spacing: -0.015em; margin: 0 0 0.15rem; }
+  h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.012em; margin: 0 0 0.3rem; }
+  h3 { font-size: 14px; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.005em; }
+  .prov { color: var(--ink-soft); font-size: 13px; margin: 0 0 1.3rem; max-width: 68ch; }
+  .lede { font-size: 15px; max-width: 66ch; margin: 0 0 1.4rem; }
+  p { margin: 0 0 0.8rem; }
+
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 0.44rem 0.7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { color: var(--ink-soft); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--rule-strong); }
+  th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.mono { white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--surface-alt); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  .table-scroll table td:first-child, .table-scroll table th:first-child { padding-left: 0.9rem; }
+
+  .reason { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
+  .persona { color: var(--ink-soft); font-family: var(--mono); font-size: 12px; }
+
+  /* ---- badges / chips ---- */
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 11.5px;
+    padding: 0.06rem 0.42rem; border-radius: 3px; border: 1px solid var(--rule-strong);
+    color: var(--ink-soft); white-space: nowrap;
+  }
+  .chip.send    { border-color: var(--rule-strong); color: var(--ink); }
+  .chip.wait    { color: var(--ink-soft); }
+  .chip.handoff { border-color: var(--neg); color: var(--neg); }
+  .chip.stop    { border-color: var(--ink-soft); color: var(--ink-soft); }
+  .chip.payment_plan, .chip.counter_settle { border-color: var(--ink); color: var(--ink); }
+  .chip.watch   { border-color: #b98a00; color: #8a6a00; }
+  .chip.high    { border-color: var(--neg); color: var(--neg); }
+  .chip.statute { border-color: var(--statute); color: var(--statute-ink); background: var(--statute-wash); }
+  @media (prefers-color-scheme: dark) { .chip.watch { border-color: #d6a94a; color: #d6a94a; } }
+
+  /* ---- the statute signal ---- */
+  .statute { color: var(--statute-ink); }
+  .statute-strike { text-decoration: line-through; text-decoration-color: var(--statute); text-decoration-thickness: 2px; color: var(--ink-soft); }
+  .statute-mark { color: var(--statute-ink); font-weight: 600; border-bottom: 2px solid var(--statute); }
+
+  /* ---- hero / statutory recomputation ---- */
+  .hero { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 2.4rem; align-items: start; padding-bottom: 1.6rem; border-bottom: 2px solid var(--statute); margin-bottom: 2rem; }
+  .hero .figure { font-family: var(--mono); font-size: 60px; line-height: 1; font-weight: 500; letter-spacing: -0.03em; }
+  .hero .figure .unit { font-size: 15.5px; color: var(--ink-soft); letter-spacing: 0; display: block; margin-top: 0.55rem; font-family: var(--sans); font-weight: 400; max-width: 34ch; line-height: 1.45; }
+  .hero-sub { font-size: 14px; margin: 1rem 0 0; max-width: 34ch; color: var(--ink); }
+  .recompute { border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); padding: 1rem 1.15rem; font-size: 13.5px; }
+  .recompute h3 { color: var(--ink-soft); font-weight: 600; font-size: 12px; }
+  .recompute dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; margin: 0.5rem 0 0; }
+  .recompute dt { color: var(--ink-soft); }
+  .recompute dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .recompute .lever { margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--rule); color: var(--ink); font-family: var(--sans); }
+
+  /* ---- KPI strip ---- */
+  .kpis { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); overflow: hidden; }
+  .kpis .kpi { flex: 1 1 120px; padding: 0.85rem 1rem; border-right: 1px solid var(--rule); }
+  .kpis .kpi:last-child { border-right: none; }
+  .kpis .kpi .v { font-family: var(--mono); font-size: 21px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .kpis .kpi .l { font-size: 12px; color: var(--ink-soft); margin-top: 0.15rem; }
+  .consol { font-size: 13px; color: var(--ink-soft); margin-top: 0.9rem; }
+
+  /* ---- Section 3: the spine ---- */
+  .spine { display: grid; grid-template-columns: 316px minmax(0, 1fr); gap: 1.4rem; align-items: start; }
+  .queue { border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); max-height: 620px; overflow-y: auto; }
+  .queue-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.6rem;
+    width: 100%; text-align: left; border: none; background: none; cursor: pointer;
+    padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--rule); color: var(--ink);
+    font-family: var(--sans); font-size: 13px;
+  }
+  .queue-row:hover { background: var(--surface-alt); }
+  .queue-row[aria-selected="true"] { background: var(--statute-wash); box-shadow: inset 3px 0 0 var(--statute); }
+  .queue-row .qid { font-family: var(--mono); font-size: 12.5px; }
+  .queue-row .qbuyer { color: var(--ink-soft); font-size: 12px; grid-column: 1; }
+  .queue-row .qmeta { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; }
+  .queue-row .qscore { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); display: block; margin-top: 0.15rem; }
+
+  .detail-stack { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+  .panel { border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); padding: 1rem 1.15rem; }
+  .panel > h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+  .panel > h3 .sub { font-weight: 400; font-size: 11.5px; color: var(--ink-soft); font-family: var(--mono); }
+
+  .legal-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.32rem 1.1rem; font-size: 13px; margin-top: 0.3rem; }
+  .legal-grid dt { color: var(--ink-soft); }
+  .legal-grid dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .legal-grid dd.wide { font-family: var(--sans); }
+  .derivation { font-size: 12px; color: var(--ink-soft); font-family: var(--sans); }
+
+  /* ---- the escalation ladder (hero element) ---- */
+  .ladder { display: flex; flex-direction: column; margin: 0.5rem 0 0; }
+  .rung { display: grid; grid-template-columns: 1.5rem 260px 1fr; align-items: center; gap: 0.75rem; padding: 0.22rem 0; }
+  .rung .rn { font-family: var(--mono); font-size: 13px; color: var(--ink-soft); text-align: right; }
+  .rung .track { height: 22px; border: 1px solid var(--rule-strong); border-radius: 2px; background: var(--surface-alt); overflow: hidden; position: relative; }
+  .rung .track .fill { position: absolute; inset: 0; background: var(--ink); }
+  .rung .track .ghost { position: absolute; inset: 1px; border: 1px dashed var(--ink-soft); border-radius: 2px;
+    background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--rule-strong) 4px 5px); }
+  .rung .rlabel { font-size: 12.5px; color: var(--ink-soft); }
+  .rung .rlabel .suffix { color: var(--ink-soft); }
+  .rung.chosen .rlabel { color: var(--ink); font-weight: 600; }
+  .rung.chosen .rlabel .suffix { color: var(--ink); }
+  .rung.chosen .rn { color: var(--ink); font-weight: 700; }
+  .rung.wanted .rlabel .suffix { color: var(--ink-soft); }
+  .rung.locked .rn { color: var(--statute); }
+  .rung.locked .rlabel, .rung.locked .rlabel .suffix { color: var(--statute); }
+  .rung.locked .track { border-color: var(--statute); background: var(--statute-wash); }
+  .ceiling-rail { border-top: 2px solid var(--statute); margin: 0.35rem 0 0.15rem;
+    padding-top: 0.18rem; font-family: var(--mono); font-size: 10.5px; color: var(--statute-ink); text-align: right; }
+  .ladder-caption { margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px solid var(--rule); font-size: 12.5px; color: var(--ink-soft); }
+  .ladder-caption b { color: var(--statute-ink); font-weight: 600; }
+  .ladder-alt { border: 1px dashed var(--rule-strong); border-radius: 3px; padding: 0.75rem 0.9rem; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+
+  /* ---- message preview ---- */
+  .envelope { border: 1px solid var(--rule); border-radius: 3px; background: var(--surface-alt); padding: 0.8rem 0.95rem; margin-top: 0.5rem; }
+  .envelope .esub { font-weight: 600; font-size: 13px; margin-bottom: 0.4rem; }
+  .envelope .ebody { font-size: 12.5px; white-space: pre-wrap; line-height: 1.5; max-height: 240px; overflow-y: auto; }
+  .facts { list-style: none; margin: 0.5rem 0 0; padding: 0; font-size: 12px; }
+  .facts li { padding: 0.18rem 0; border-bottom: 1px dotted var(--rule); color: var(--ink-soft); }
+  .facts li:last-child { border-bottom: none; }
+  .facts li .fk { font-family: var(--mono); color: var(--statute-ink); }
+  .llm-note { font-size: 12px; color: var(--ink-soft); margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px solid var(--rule); }
+  .no-message { font-size: 13px; color: var(--ink-soft); padding: 0.4rem 0; }
+
+  /* ---- Section 5: benchmark ---- */
+  .arms { display: flex; flex-direction: column; gap: 0.55rem; margin: 0.5rem 0 1.4rem; }
+  .arm { display: grid; grid-template-columns: 190px 1fr 128px; gap: 0.8rem; align-items: center; }
+  .arm .aname { font-size: 13px; }
+  .arm .aname .asub { display: block; font-size: 11px; color: var(--ink-soft); line-height: 1.35; margin-top: 0.1rem; }
+  .arm .bar { height: 26px; background: var(--ink); border-radius: 2px; min-width: 2px; }
+  .arm.learned .bar { background: var(--neg); }
+  .arm .aval { font-family: var(--mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .arm .aval .amsg { display: block; font-size: 11px; color: var(--ink-soft); }
+
+  .deltas { display: flex; flex-wrap: wrap; gap: 0 2.4rem; margin: 0.4rem 0 1.6rem; padding: 1rem 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .delta .dv { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .delta .dv.pos { color: var(--pos); }
+  .delta .dl { font-size: 12.5px; color: var(--ink-soft); }
+  .loss-note { max-width: 70ch; font-size: 14px; padding: 0.9rem 1rem; border: 1px solid var(--neg); border-radius: 4px; background: var(--surface); }
+  .loss-note b { color: var(--neg); }
+
+  .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; margin-top: 1.4rem; }
+  .selection-note { font-size: 13px; color: var(--ink-soft); max-width: 72ch; margin-top: 0.9rem; }
+
+  .winmark { font-family: var(--mono); }
+  .winmark.y { color: var(--pos); }
+  .winmark.n { color: var(--neg); }
+
+  /* ---- Section 6: samadhaan doc ---- */
+  .handoff-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem; }
+  .blocked-banner {
+    border: 1px solid var(--statute); border-left: 4px solid var(--statute);
+    background: var(--statute-wash); border-radius: 4px; padding: 0.9rem 1.1rem; margin: 1.4rem 0 1rem;
+  }
+  .blocked-banner .bl-title { font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--statute-ink); letter-spacing: 0.02em; }
+  .blocked-banner .bl-why { margin-top: 0.4rem; font-size: 13.5px; }
+  .blocked-banner .bl-frame { margin-top: 0.5rem; font-size: 12.5px; color: var(--ink-soft); }
+  .doc {
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--surface);
+    padding: 1.6rem 1.9rem; max-height: 560px; overflow-y: auto; font-size: 13px;
+  }
+  .doc h2 { font-size: 16px; margin: 0 0 0.6rem; border: none; padding: 0; letter-spacing: 0; }
+  .doc h3 { font-size: 13.5px; margin: 1.3rem 0 0.4rem; letter-spacing: 0; }
+  .doc blockquote { margin: 0 0 0.8rem; padding: 0.5rem 0.8rem; border-left: 3px solid var(--statute); background: var(--statute-wash); font-family: var(--mono); font-size: 12px; color: var(--statute-ink); }
+  .doc table { font-size: 12px; margin: 0.3rem 0 0.6rem; }
+  .doc table td, .doc table th { padding: 0.28rem 0.5rem; }
+  .doc hr { border: none; border-top: 1px solid var(--rule); margin: 1rem 0; }
+  .doc .doc-list { list-style: none; padding: 0; margin: 0.3rem 0 0.6rem; }
+  .doc .doc-list li { padding: 0.16rem 0; }
+  .doc .chk { display: inline-block; width: 11px; height: 11px; border: 1px solid var(--rule-strong); border-radius: 2px; margin-right: 0.5rem; vertical-align: baseline; }
+
+  /* ---- Section 7: audit ---- */
+  .filters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.3rem 0 1rem; }
+  .filters button {
+    font-family: var(--mono); font-size: 11.5px; padding: 0.16rem 0.5rem; border-radius: 3px;
+    border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink-soft); cursor: pointer;
+  }
+  .filters button[aria-pressed="true"] { border-color: var(--statute); color: var(--statute-ink); background: var(--statute-wash); }
+  .audit-scroll { max-height: 660px; overflow-y: auto; }
+  table.audit { font-family: var(--mono); font-size: 12px; }
+  table.audit td { padding: 0.3rem 0.6rem; }
+  table.audit td.a-reason { font-family: var(--sans); font-size: 12.5px; white-space: normal; min-width: 22rem; }
+  table.audit .a-ts, table.audit .a-inv { color: var(--ink-soft); white-space: nowrap; }
+  table.audit thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+
+  a { color: var(--statute-ink); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    nav.sidebar { position: sticky; top: 0; z-index: 5; height: auto; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--rule); padding: 0.7rem 1rem; gap: 0.2rem 0.9rem; }
+    nav.sidebar .brand { display: none; }
+    nav.sidebar .foot { display: none; }
+    main { padding: 1.2rem 1.1rem 4rem; }
+    .hero, .spine, .two-up, .handoff-cols { grid-template-columns: minmax(0, 1fr); }
+    .queue { max-height: 360px; }
+    .arm { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+    .arm .aval { text-align: left; }
+    .rung { grid-template-columns: 1.4rem minmax(0, 1fr) auto; }
+  }
+  @media (max-width: 620px) {
+    h1 { font-size: 20px; }
+    .hero .figure { font-size: 46px; }
+    .deltas { gap: 0.6rem 1.6rem; }
+    .kpis .kpi { flex: 1 1 44%; }
+    .kpis .kpi .v { font-size: 18px; }
+    .recompute dl { grid-template-columns: minmax(0, 1fr); gap: 0.1rem 0; }
+    .recompute dt { margin-top: 0.4rem; }
+  }
+</style>
+</head>
+<body>
+{% set m = payload.meta %}
+{% set d0 = payload.day0 %}
+{% set bm = payload.benchmark %}
+<div class="layout">
+
+  <nav class="sidebar" aria-label="Sections">
+    <div class="brand">Receivables<br>Command&nbsp;Center</div>
+    <a href="#portfolio" data-sec="portfolio"><span class="k">1</span> Portfolio</a>
+    <a href="#early-warning" data-sec="early-warning"><span class="k">2</span> Early warning</a>
+    <a href="#queue" data-sec="queue"><span class="k">3</span> Decision queue</a>
+    <a href="#buyer-risk" data-sec="buyer-risk"><span class="k">4</span> Buyer risk</a>
+    <a href="#benchmark" data-sec="benchmark"><span class="k">5</span> Recovery benchmark</a>
+    <a href="#handoff" data-sec="handoff"><span class="k">6</span> Handoff &amp; Samadhaan</a>
+    <a href="#audit" data-sec="audit"><span class="k">7</span> Audit trail</a>
+    <div class="foot">
+      seed {{ m.seed }}<br>
+      day 0 &nbsp;{{ m.day0 }}<br>
+      day {{ m.days }} {{ m.day120 }}<br>
+      RBI Bank Rate {{ m.legal.bank_rate_pct }}%<br>
+      built {{ m.generated[:16] }}
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- 1 ==================== PORTFOLIO ==================== -->
+    <section id="portfolio">
+      <h1>Receivables Command Center</h1>
+      <p class="prov">Two time views of one seeded world. Portfolio, early warning and the decision queue are a live pipeline pass at day&nbsp;0 ({{ m.day0 }}). The recovery benchmark and everything after it is the {{ m.days }}-day simulation. Each block says which it is.</p>
+
+      {% if d0.hero %}
+      <div class="hero">
+        <div>
+          <div class="figure">{{ d0.portfolio.void_terms_queue }}<span class="unit">contract terms in today&rsquo;s queue exceed the Section&nbsp;15 ceiling and were recomputed to the statutory due date &mdash; {{ d0.portfolio.void_terms_current }} across all {{ d0.portfolio.invoices_current }} current invoices.</span></div>
+          <p class="hero-sub">{{ d0.hero.void_outstanding }} of the amount at risk sits behind a payment term the Act voids.</p>
+        </div>
+        <div class="recompute">
+          <h3>Worked example &mdash; {{ d0.hero.invoice_id }}, {{ d0.hero.buyer_name }}</h3>
+          <dl>
+            <dt>Outstanding</dt><dd>{{ d0.hero.outstanding }}</dd>
+            <dt>Agreed term</dt><dd><span class="statute-strike">{{ d0.hero.agreed_days }} days</span> &rarr; <span class="statute">{{ d0.hero.statutory_days }} days</span></dd>
+            <dt>Payment due</dt><dd><span class="statute-strike">{{ d0.hero.agreed_due_date }}</span> &rarr; <span class="statute-mark">{{ d0.hero.statutory_due_date }}</span></dd>
+          </dl>
+          <div class="lever">Section 15 of the MSMED Act caps any written term at {{ m.legal.max_agreement_days }} days. The agent chases from the statutory date, not the one the contract claimed &mdash; {{ d0.hero.days_gained }} days of leverage the supplier did not know they had.</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="kpis">
+        <div class="kpi"><div class="v">{{ d0.portfolio.buyers }}</div><div class="l">Buyers</div></div>
+        <div class="kpi"><div class="v">{{ d0.portfolio.invoices_current }}</div><div class="l">Current invoices</div></div>
+        <div class="kpi"><div class="v">{{ d0.portfolio.amount_at_risk }}</div><div class="l">Amount at risk</div></div>
+        <div class="kpi"><div class="v">{{ d0.portfolio.overdue }}</div><div class="l">Overdue today</div></div>
+        <div class="kpi"><div class="v">{{ d0.portfolio.early_warnings }}</div><div class="l">Early warnings</div></div>
+        <div class="kpi"><div class="v">{{ payload.handoff.counts.total }}</div><div class="l">Handoffs (120-day run)</div></div>
+      </div>
+      <p class="consol">Over the {{ m.days }}-day run the agent sent <b class="mono">{{ bm.agent_messages }}</b> envelopes covering <b class="mono">{{ bm.agent_invoice_contacts }}</b> invoice-contacts, a <b class="mono">{{ bm.consolidation_ratio }}&times;</b> consolidation ratio &mdash; a day&rsquo;s reminders for one buyer fold into one message. Today&rsquo;s decisions: {{ d0.portfolio.decision_tally }}.</p>
+    </section>
+
+    <!-- 2 ==================== EARLY WARNING ==================== -->
+    <section id="early-warning">
+      <h2>Early warning</h2>
+      <p class="prov">{{ d0.early_warning.provenance }}</p>
+      {% if d0.early_warning.rows %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Invoice</th><th>Buyer</th><th class="num">Outstanding</th><th class="num">Days to due</th><th class="num">Score</th><th>Band</th><th>Why it is flagged</th></tr></thead>
+          <tbody>
+          {% for r in d0.early_warning.rows %}
+            <tr>
+              <td class="mono">{{ r.invoice_id }}</td>
+              <td>{{ r.buyer_name }}</td>
+              <td class="num">{{ r.outstanding }}</td>
+              <td class="num">{{ r.days_until_due }}</td>
+              <td class="num">{{ r.score }}</td>
+              <td><span class="chip {{ r.band }}">{{ r.band }}</span></td>
+              <td class="reason">{{ r.reasons }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="no-message">No invoice is inside the {{ m.early_warning_window_days }}-day pre-due window with enough bad signals to flag this run.</p>
+      {% endif %}
+    </section>
+
+    <!-- 3 ==================== DECISION QUEUE (the spine) ==================== -->
+    <section id="queue">
+      <h2>Decision queue, legal position, message</h2>
+      <p class="prov">{{ d0.decision_queue.provenance }}</p>
+      <div class="spine">
+        <div class="queue" id="queue-list" role="listbox" aria-label="Overdue invoices" tabindex="0">
+          {% for r in d0.decision_queue.rows %}
+          <button class="queue-row" id="qr-{{ loop.index0 }}" role="option" tabindex="-1" data-idx="{{ loop.index0 }}" aria-selected="{{ 'true' if loop.first else 'false' }}">
+            <span class="qid">{{ r.invoice_id }}</span>
+            <span class="qbuyer">{{ r.buyer_name }}</span>
+            <span class="qmeta">
+              <span class="chip {{ r.decision }}">{{ r.decision }}{% if r.decision in ('send','payment_plan','counter_settle') %} r{{ r.rung }}{% endif %}</span>
+              <span class="qscore">score {{ r.score }} &nbsp; {{ r.days_overdue }}d overdue</span>
+            </span>
+          </button>
+          {% endfor %}
+        </div>
+
+        <div class="detail-stack">
+          <div class="panel" id="p-legal">
+            <h3>Legal position <span class="sub" id="legal-inv"></span></h3>
+            <dl class="legal-grid" id="legal-grid"></dl>
+          </div>
+
+          <div class="panel" id="p-ladder">
+            <h3>Escalation ladder</h3>
+            <div id="ladder-mount"></div>
+          </div>
+
+          <div class="panel" id="p-message">
+            <h3>Message <span class="sub" id="msg-sub"></span></h3>
+            <div id="message-mount"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 ==================== BUYER RISK ==================== -->
+    <section id="buyer-risk">
+      <h2>Buyer risk</h2>
+      <p class="prov">{{ payload.buyer_risk.provenance }}. Worst first by amount outstanding.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Buyer</th><th class="num">Score</th><th>Confidence</th><th>Trend</th>
+            <th class="num">Outstanding</th><th class="num">Overdue</th><th class="num">Oldest</th>
+            <th class="num">Broken promises</th><th class="num">Disputes</th>
+            <th>Promise reliability</th><th>Response rate</th><th>State</th>
+          </tr></thead>
+          <tbody>
+          {% for r in payload.buyer_risk.rows %}
+            <tr>
+              <td>{{ r.name }}</td>
+              <td class="num">{{ r.score if r.score is not none else 'n/a' }}</td>
+              <td>{{ r.confidence or 'n/a' }}</td>
+              <td>{{ r.trend }}</td>
+              <td class="num">{{ r.outstanding }}</td>
+              <td class="num">{{ r.overdue_count }}</td>
+              <td class="num">{{ (r.oldest_days_overdue ~ 'd') if r.oldest_days_overdue is not none else '—' }}</td>
+              <td class="num">{{ r.broken_promises if r.broken_promises is not none else 0 }}</td>
+              <td class="num">{{ r.disputes if r.disputes is not none else 0 }}</td>
+              <td>{{ r.promise_reliability }}</td>
+              <td>{{ r.response_rate }}</td>
+              <td class="reason">{{ r.state }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5 ==================== RECOVERY BENCHMARK ==================== -->
+    <section id="benchmark">
+      <h2>Recovery benchmark</h2>
+      <p class="prov">{{ bm.provenance }}. The baseline is a fixed three-reminder schedule with one message for everyone &mdash; how payment-link reminders behave today.</p>
+
+      <div class="arms">
+        {% for a in bm.arms %}
+        <div class="arm {{ 'learned' if a.key == 'agent_learned' }}">
+          <div class="aname">{{ a.label }}<span class="asub">{{ a.sub }}</span></div>
+          <div class="bar" style="width: {{ (a.recovered_paise / bm.max_recovered_paise * 100) | round(1) }}%"></div>
+          <div class="aval">{{ a.recovered }}<span class="amsg">{{ a.messages }} messages</span></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="deltas">
+        <div class="delta"><div class="dv pos">+{{ bm.headline.gain }}</div><div class="dl">recovered, agent vs baseline</div></div>
+        <div class="delta"><div class="dv">{{ bm.headline.fewer_messages }}</div><div class="dl">fewer messages sent</div></div>
+        <div class="delta"><div class="dv">{{ bm.headline.seed_win_rate }}</div><div class="dl">seeds the agent won on recovery</div></div>
+      </div>
+
+      {% if bm.learned %}
+      <p class="loss-note">
+        <b>The learned bandit lost.</b> Swapping the hand-typed recovery grid for the fitted
+        posteriors (agent + EV + learned) recovered less on <b>{{ bm.learned.win_rate }}</b>
+        of the {{ bm.learned.n_seeds }} benchmark seeds &mdash; mean {{ bm.learned.mean }}, ranging from
+        {{ bm.learned.min }} to {{ bm.learned.max }}. {{ bm.learned.n_seeds }} seeds is a small
+        sample; the range matters more than the mean. Root cause is one cell &mdash; see docs/learning_findings.md.
+        {% if bm.ev_win_rate %}Agent&nbsp;+&nbsp;EV alone still beat the plain agent on {{ bm.ev_win_rate }} seeds.{% endif %}
+      </p>
+      {% endif %}
+
+      <div class="two-up">
+        <div>
+          <h3>Agent &mdash; recovery by rung</h3>
+          <table>
+            <thead><tr><th>Rung</th><th class="num">Contacted</th><th class="num">Recovered here</th><th class="num">Rate</th></tr></thead>
+            <tbody>
+            {% for r in bm.per_rung %}
+              <tr><td>{{ r.rung }}</td><td class="num">{{ r.contacted }}</td><td class="num">{{ r.recovered_here }}</td><td class="num">{{ r.effectiveness_pct }}%</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Baseline &mdash; recovery by reminder</h3>
+          <table>
+            <thead><tr><th>Attempt</th><th class="num">Contacted</th><th class="num">Recovered here</th><th class="num">Rate</th></tr></thead>
+            <tbody>
+            {% for r in bm.baseline_decay %}
+              <tr><td>{{ r.attempt }}</td><td class="num">{{ r.contacted }}</td><td class="num">{{ r.recovered_here }}</td><td class="num">{{ r.effectiveness_pct }}%</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="selection-note">
+        Rung 3 recovers a smaller share than rung 2 because only invoices that already
+        failed rungs 1&ndash;2 ever reach it. The baseline&rsquo;s own three identical
+        reminders decay {{ bm.baseline_decay[0].effectiveness_pct }}%
+        &rarr; {{ bm.baseline_decay[1].effectiveness_pct }}%
+        &rarr; {{ bm.baseline_decay[2].effectiveness_pct }}% for the same reason &mdash;
+        it is the control that isolates the selection effect from the escalation.
+      </p>
+
+      {% if bm.multi_seed %}
+      {% set has_ev = bm.multi_seed[0].agent_ev is not none %}
+      {% set has_learned = bm.multi_seed[0].agent_learned is not none %}
+      <h3 style="margin-top:1.6rem">Every benchmark seed</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Seed</th><th class="num">Baseline</th><th class="num">Agent</th><th>Win</th>
+            {% if has_ev %}<th class="num">Agent + EV</th><th>vs agent</th>{% endif %}
+            {% if has_learned %}<th class="num">+ learned</th><th>vs EV</th>{% endif %}
+          </tr></thead>
+          <tbody>
+          {% for r in bm.multi_seed %}
+            <tr>
+              <td class="mono">{{ r.seed }}{{ ' (above)' if loop.first }}</td>
+              <td class="num">{{ r.baseline }}</td>
+              <td class="num">{{ r.agent }}</td>
+              <td><span class="winmark {{ 'y' if r.money_win else 'n' }}">{{ 'win' if r.money_win else 'loss' }}</span></td>
+              {% if has_ev %}
+              <td class="num">{{ r.agent_ev }}</td>
+              <td><span class="winmark {{ 'y' if r.ev_win else 'n' }}">{{ 'win' if r.ev_win else 'loss' }}</span></td>
+              {% endif %}
+              {% if has_learned %}
+              <td class="num">{{ r.agent_learned }}</td>
+              <td><span class="winmark {{ 'y' if r.learned_win else 'n' }}">{{ 'win' if r.learned_win else 'loss' }}</span></td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if bm.matched_days.n %}
+      <p class="selection-note">
+        On the {{ bm.matched_days.n }} invoices both the baseline and the agent recovered &mdash;
+        the like-for-like comparison &mdash; the agent was paid in
+        {{ bm.matched_days.agent }} days against the baseline&rsquo;s {{ bm.matched_days.baseline }}.
+      </p>
+      {% endif %}
+    </section>
+
+    <!-- 6 ==================== HANDOFF & SAMADHAAN ==================== -->
+    <section id="handoff">
+      <h2>Handoff &amp; Samadhaan</h2>
+      <p class="prov">{{ payload.handoff.provenance }}. {{ payload.handoff.counts.total }} cases left the agent: {{ payload.handoff.counts.dispute }} on a detected dispute, {{ payload.handoff.counts.rung4 }} on reaching the rung-4 ceiling.</p>
+
+      <div class="handoff-cols">
+        <div>
+          <h3>Disputed &mdash; routed to a human to resolve the dispute</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Invoice</th><th>Buyer</th><th class="num">Outstanding</th><th class="num">Overdue</th></tr></thead>
+              <tbody>
+              {% for r in payload.handoff.dispute %}
+                <tr><td class="mono">{{ r.invoice_id }}</td><td>{{ r.buyer_name }}<br><span class="persona">{{ r.persona }}</span></td><td class="num">{{ r.outstanding }}</td><td class="num">{{ r.days_overdue }}d</td></tr>
+              {% endfor %}
+              {% if payload.handoff.dispute_more %}<tr><td colspan="4" class="reason">and {{ payload.handoff.dispute_more }} more, largest first</td></tr>{% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3>Rung-4 ceiling &mdash; the Samadhaan reference path</h3>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Invoice</th><th>Buyer</th><th class="num">Outstanding</th><th class="num">Overdue</th></tr></thead>
+              <tbody>
+              {% for r in payload.handoff.rung4 %}
+                <tr><td class="mono">{{ r.invoice_id }}</td><td>{{ r.buyer_name }}<br><span class="persona">{{ r.persona }}</span></td><td class="num">{{ r.outstanding }}</td><td class="num">{{ r.days_overdue }}d</td></tr>
+              {% endfor %}
+              {% if payload.handoff.rung4_more %}<tr><td colspan="4" class="reason">and {{ payload.handoff.rung4_more }} more, largest first</td></tr>{% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {% if payload.handoff.samadhaan %}
+      {% set sd = payload.handoff.samadhaan %}
+      <div class="blocked-banner">
+        <div class="bl-title">BLOCKED &mdash; NOT READY TO FILE</div>
+        <div class="bl-why">
+          {% for b in sd.blockers %}{{ b }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+        </div>
+        <div class="bl-frame">
+          This is the system working correctly, and it is where the demo ends. Every figure in
+          the draft below &mdash; the statutory due date, {{ m.legal.effective_rate_pct }}% interest,
+          the buyer&rsquo;s tax exposure &mdash; is computed and checkable. The draft refuses to
+          call itself ready while the Udyam registration is still the shipped placeholder.
+          {{ sd.note }} Invoice {{ sd.invoice_id }}, {{ sd.buyer_name }}, {{ sd.outstanding }}
+          outstanding, as of day {{ m.days }}.
+        </div>
+      </div>
+      <div class="doc">{{ sd.html | safe }}</div>
+      {% endif %}
+    </section>
+
+    <!-- 7 ==================== AUDIT TRAIL ==================== -->
+    <section id="audit">
+      <h2>Audit trail</h2>
+      <p class="prov">{{ payload.audit.provenance }}. {{ payload.audit.total }} entries in all; this table holds {{ payload.audit.shown }} of them &mdash; {{ payload.audit.note }}. Newest first. Full file: <span class="mono">{{ payload.audit.path }}</span>, one JSON object per action.</p>
+      <div class="filters" id="audit-filters">
+        <button data-kind="all" aria-pressed="true">all</button>
+        {% for k in payload.audit.action_kinds %}
+        <button data-kind="{{ k }}" aria-pressed="false">{{ k }}</button>
+        {% endfor %}
+      </div>
+      <div class="table-scroll audit-scroll">
+        <table class="audit">
+          <thead><tr><th>Time</th><th>Invoice</th><th>Actor</th><th>Action</th><th>Source</th><th>Reason</th></tr></thead>
+          <tbody id="audit-body">
+          {% for e in payload.audit.rows %}
+            <tr data-kind="{{ e.action }}">
+              <td class="a-ts">{{ e.ts[:10] }}</td>
+              <td class="a-inv">{{ e.invoice_id }}</td>
+              <td>{{ e.actor }}</td>
+              <td>{{ e.action }}</td>
+              <td>{{ e.source }}</td>
+              <td class="a-reason">{{ e.reason }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script id="dashboard-data" type="application/json">{{ payload_json | safe }}</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("dashboard-data").textContent);
+  var rows = DATA.day0.decision_queue.rows;
+  var RUNG_NAMES = { 1: "soft nudge", 2: "firm", 3: "legal facts", 4: "stop + handoff" };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  // ---- legal panel ----
+  function renderLegal(r) {
+    document.getElementById("legal-inv").textContent = r.invoice_id + ", " + r.buyer_name;
+    var L = r.legal, parts = [];
+    function row(dt, dd, wide) {
+      parts.push("<dt>" + esc(dt) + "</dt><dd class='" + (wide ? "wide" : "") + "'>" + dd + "</dd>");
+    }
+    if (L.agreed_term_void) {
+      row("Statutory due date",
+        "<span class='statute-strike'>" + esc(L.agreed_due_date) + "</span> &rarr; <span class='statute-mark'>" + esc(L.statutory_due_date) + "</span>");
+      row("", "<span class='derivation statute'>recomputed from a void " + esc(L.agreed_days) + "-day term &mdash; Section 15 caps it at " + esc(DATA.meta.legal.max_agreement_days) + "</span>", true);
+    } else {
+      row("Statutory due date", "<span class='mono'>" + esc(L.statutory_due_date) + "</span>");
+    }
+    row("Days overdue", esc(L.days_overdue));
+    row("Principal", esc(L.principal));
+    row("Interest accrued", esc(L.interest));
+    row("", "<span class='derivation'>" + esc(L.effective_rate_pct) + "% p.a. = " + esc(DATA.meta.legal.multiplier) + " &times; RBI Bank Rate " + esc(L.bank_rate_pct) + "%, compounded monthly</span>", true);
+    row("Daily accrual", esc(L.interest_per_day) + " / day");
+    row("Cost of waiting", esc(L.cost_of_waiting) + " over " + esc(L.waiting_horizon_days) + " days");
+    row("Buyer tax exposure", esc(L.tax_exposure));
+    row("", "<span class='derivation'>deferred deduction at a " + esc(L.tax_rate_pct) + "% rate if unpaid on " + esc(L.fy_end) + "</span>", true);
+    row("Dispute hold", L.dispute_hold ? "yes — held" : "no");
+    row("Law permits up to", "<span class='statute'>rung " + esc(L.available_rung) + "</span>");
+    document.getElementById("legal-grid").innerHTML = parts.join("");
+  }
+
+  // ---- the escalation ladder ----
+  function renderLadder(r) {
+    var mount = document.getElementById("ladder-mount");
+    var chosen = r.rung, ceiling = r.ceiling, wanted = r.wanted, capped = r.capped;
+    var decision = r.decision;
+
+    if (decision === "stop") {
+      mount.innerHTML = "<div class='ladder-alt'>Contact has stopped for this buyer &mdash; " + esc(r.reason) + ". The ladder does not apply.</div>";
+      return;
+    }
+    if (decision === "handoff" && chosen === 0) {
+      mount.innerHTML = "<div class='ladder-alt'>Jumped straight past the ladder to a human: " + esc(r.reason) + "</div>";
+      return;
+    }
+
+    var wantCap = Math.min(wanted, 4);
+    var html = "<div class='ladder'>";
+    for (var rung = 4; rung >= 1; rung--) {
+      // the ceiling rail sits on the TOP edge of the ceiling rung
+      if (rung === ceiling) {
+        html += "<div class='ceiling-rail'>ceiling &mdash; the law permits up to rung " + ceiling + "</div>";
+      }
+      var locked = rung > ceiling;
+      var isChosen = rung === chosen;
+      var inWalk = rung > chosen && rung <= wantCap;
+      var filled = rung <= chosen && rung <= ceiling;
+      var cls = ["rung"];
+      if (locked) cls.push("locked");
+      if (isChosen) cls.push("chosen");
+      else if (inWalk) cls.push("wanted");
+
+      var suffix = isChosen ? " — chosen" : (inWalk ? " — wanted" : (locked ? " — locked" : ""));
+      html += "<div class='" + cls.join(" ") + "'>" +
+              "<span class='rn'>" + rung + "</span>" +
+              "<span class='track'>" + (filled ? "<span class='fill'></span>" : (inWalk ? "<span class='ghost'></span>" : "")) + "</span>" +
+              "<span class='rlabel'>" + esc(RUNG_NAMES[rung]) + "<span class='suffix'>" + suffix + "</span></span>" +
+              "</div>";
+    }
+    html += "</div><div class='ladder-caption'>";
+    if (capped) {
+      var wantTxt = wanted > 4 ? "to escalate further" : ("rung " + wanted);
+      html += "The escalation walk wanted <b>" + wantTxt + "</b>. The statute capped it at rung " + ceiling +
+              " &mdash; the violet line is the physical stop.";
+    } else if (chosen < ceiling) {
+      html += "The law permits up to rung " + ceiling + "; the agent chose rung " + chosen +
+              ". The ceiling never forces escalation.";
+    } else {
+      html += "The agent is at rung " + chosen + ", level with the ceiling the law currently permits.";
+    }
+    html += "</div>";
+    mount.innerHTML = html;
+  }
+
+  // ---- message preview ----
+  function renderMessage(r) {
+    var mount = document.getElementById("message-mount");
+    var sub = document.getElementById("msg-sub");
+    var msg = r.message;
+    if (!msg) {
+      sub.textContent = "";
+      mount.innerHTML = "<div class='no-message'>" + esc(r.no_message_reason || "No message for this decision.") + "</div>";
+      return;
+    }
+    sub.textContent = "rung " + r.rung + " draft, " + msg.language + ", guardrail " + msg.guardrail;
+    var covers = msg.covers.length > 1
+      ? "<p class='derivation'>One envelope covering " + msg.covers.length + " invoices for this buyer (" + esc(msg.covers.join(", ")) + ").</p>"
+      : "";
+    var facts = "";
+    if (r.facts && r.facts.length) {
+      facts = "<ul class='facts'>" + r.facts.map(function (f) {
+        return "<li><span class='fk'>" + esc(f.key) + "</span> &mdash; " + esc(f.label) + "</li>";
+      }).join("") + "</ul>";
+    } else {
+      facts = "<p class='derivation'>No legal facts permitted at this rung &mdash; courtesy reminder only.</p>";
+    }
+    mount.innerHTML =
+      covers +
+      "<div class='envelope'><div class='esub'>" + esc(msg.subject) + "</div>" +
+      "<div class='ebody'>" + esc(msg.body) + "</div></div>" +
+      "<h3 style='margin-top:0.9rem'>Facts the writer was allowed to state</h3>" + facts +
+      "<div class='llm-note'>The language model chose the wording inside this fixed fact skeleton. " +
+      "It did not compute a figure, choose the rung, or cite a statute &mdash; those come from the law engine and the ladder.</div>";
+  }
+
+  // ---- selection ----
+  var list = document.getElementById("queue-list");
+  var buttons = Array.prototype.slice.call(list.querySelectorAll(".queue-row"));
+  var selected = 0;
+
+  function select(idx) {
+    if (idx < 0 || idx >= rows.length) return;
+    buttons[selected].setAttribute("aria-selected", "false");
+    selected = idx;
+    var btn = buttons[selected];
+    btn.setAttribute("aria-selected", "true");
+    list.setAttribute("aria-activedescendant", btn.id);
+    var r = rows[idx];
+    renderLegal(r);
+    renderLadder(r);
+    renderMessage(r);
+  }
+
+  buttons.forEach(function (btn, i) {
+    btn.addEventListener("click", function () { select(i); });
+  });
+  list.addEventListener("keydown", function (ev) {
+    if (ev.key === "ArrowDown") { ev.preventDefault(); select(Math.min(selected + 1, rows.length - 1)); buttons[selected].scrollIntoView({ block: "nearest" }); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); select(Math.max(selected - 1, 0)); buttons[selected].scrollIntoView({ block: "nearest" }); }
+  });
+  select(0);
+
+  // ---- audit filter ----
+  var filterWrap = document.getElementById("audit-filters");
+  var auditRows = Array.prototype.slice.call(document.querySelectorAll("#audit-body tr"));
+  filterWrap.addEventListener("click", function (ev) {
+    var b = ev.target.closest("button");
+    if (!b) return;
+    Array.prototype.forEach.call(filterWrap.querySelectorAll("button"), function (x) {
+      x.setAttribute("aria-pressed", x === b ? "true" : "false");
+    });
+    var kind = b.getAttribute("data-kind");
+    auditRows.forEach(function (tr) {
+      tr.hidden = !(kind === "all" || tr.getAttribute("data-kind") === kind);
+    });
+  });
+
+  // ---- keyboard 1-9 jump + scroll spy ----
+  var secIds = ["portfolio", "early-warning", "queue", "buyer-risk", "benchmark", "handoff", "audit"];
+  document.addEventListener("keydown", function (ev) {
+    if (ev.target.matches("input, textarea") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var n = parseInt(ev.key, 10);
+    if (n >= 1 && n <= 9) {
+      var id = secIds[Math.min(n, secIds.length) - 1];
+      var el = document.getElementById(id);
+      if (el) { el.scrollIntoView(); history.replaceState(null, "", "#" + id); }
+    }
+  });
+
+  var navLinks = {};
+  Array.prototype.forEach.call(document.querySelectorAll("nav.sidebar a"), function (a) {
+    navLinks[a.getAttribute("data-sec")] = a;
+  });
+  if ("IntersectionObserver" in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          Object.keys(navLinks).forEach(function (k) { navLinks[k].classList.remove("active"); });
+          if (navLinks[e.target.id]) navLinks[e.target.id].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-10% 0px -80% 0px" });
+    secIds.forEach(function (id) { var el = document.getElementById(id); if (el) spy.observe(el); });
+  }
+})();
+</script>
+</body>
+</html>
