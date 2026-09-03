@@ -17,7 +17,7 @@ This document does **not** define implementation rules, decision rules, threshol
 
 ## Status Summary
 
-Every one of the 143 cases below carries a `**Status:**` line, using exactly
+Every one of the 147 cases below carries a `**Status:**` line, using exactly
 three values:
 
 - **TESTED** -- has a passing test; the test file and function are named.

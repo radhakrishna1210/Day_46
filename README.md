@@ -16,25 +16,35 @@ trail with the reason behind it.
 
 **Status:** the original 12-day MVP, four rounds of edge-case hardening
 (E1-E4), four post-MVP additions (W1-W4: early warning, buyer panel,
-buyer-level message consolidation, experiment refresh), and four
+buyer-level message consolidation, experiment refresh), four
 negotiation-model phases (ability/willingness split, recovery-probability +
 EV ranking, wiring that ranking into the Brain behind a config flag, and
-persona differentiation + a third experiment arm ablating it) are all done --
-877 tests passing, agent beats baseline on rupees recovered on 6/6 tested
-seeds, and the EV layer beats the plain agent on 5/6. Demo video and final
-submission polish are what's left (see
-[Honest scope](#honest-scope-built-vs-future-work) below).
+persona differentiation + a third experiment arm ablating it), and a
+contextual-bandit learning layer (fits a recovery-probability posterior from
+simulated data and wires it into the same EV formula behind its own config
+flag -- see [Honest scope](#honest-scope-built-vs-future-work)) are all
+done -- 1032 tests passing, agent beats baseline on rupees recovered on
+6/6 tested seeds, the EV layer beats the plain agent on 5/6, and the learned
+layer honestly *loses* to the EV layer on 6/6 (reported, not hidden). Both
+the negotiation-model phases and the learning layer ship **off** by
+default; turning them on is a deliberate, visible flag flip, not the
+shipped state. Demo video and final submission polish are what's left.
 
 **At a glance:**
-- Recovers **₹22,98,757 more** than a fixed-reminder baseline bot on the
-  same seeded invoices (seed 42) -- and wins on rupees recovered in **6/6**
-  tested seeds.
-- The negotiation layer (Phase 4's ablation) recovers a further **₹9,81,368**
-  on top of that on seed 42, and wins on **5/6** seeds -- reported honestly,
+- Recovers **₹56,42,158 more** than a fixed-reminder baseline bot on the
+  same seeded invoices (seed 7, the primary benchmark seed) -- and wins on
+  rupees recovered in **6/6** tested seeds.
+- The negotiation layer (EV ablation) recovers a further **₹3,53,079** on
+  top of that on seed 7, and wins on **5/6** seeds -- reported honestly,
   including the one seed where it doesn't.
+- A fourth arm, agent+EV+learned, was measured the same honest way: it
+  **loses** to agent+EV on **6/6** seeds (mean **-₹22,53,175**) -- root-
+  caused to one specific mechanism, not six separate coincidences, in
+  [`docs/learning_findings.md`](docs/learning_findings.md). Reported
+  because it's true, not smoothed into a partial win.
 - Every money-related decision is **explainable and audit-logged** -- no
   silent actions, no invented legal numbers.
-- **877 tests passing**; of 143 documented edge cases, 62 have a dedicated
+- **1032 tests passing**; of 147 documented edge cases, 66 have a dedicated
   test, the rest are HANDLED or explicitly OUT OF SCOPE -- never left vague.
 - Full numbers in [Results](#results); what's built vs. not in
   [Honest scope](#honest-scope-built-vs-future-work).
@@ -98,8 +108,8 @@ seeded data.
 ```bash
 pip install -r requirements.txt
 cp .env.example .env                          # LLM_MODE=mock by default; no API key needed
-python data/generate.py --seed 42              # generates buyers.json, invoices.json (gitignored)
-python sim/run_sim.py --compare --seed 42 --days 120   # baseline vs agent vs agent+EV -> report/out/results.json
+python data/generate.py --seed 7               # generates buyers.json, invoices.json (gitignored)
+python sim/run_sim.py --compare --seed 7 --days 120    # baseline vs agent vs agent+EV vs agent+EV+learned -> report/out/results.json
 python report/build_report.py                  # -> report/out/report.html
 pytest -q
 ```
@@ -118,31 +128,38 @@ calls the real Gemini API using `GEMINI_API_KEY` from `.env`.
 
 ## Results
 
-Baseline vs agent vs agent+EV, seed 42, 120-day simulation window
-(`report/out/results.json`, regenerated for Phase 4; the baseline/agent
-columns are byte-identical to the original 2026-08-27 run, since `ev_mode`
-defaults off):
+Baseline vs agent vs agent+EV vs agent+EV+learned, **seed 7** (the primary
+benchmark seed, matching `docs/demo_runbook.md`), 120-day simulation window
+(`report/out/results.json`, regenerated 2026-09-03; the fourth column exists
+because `learning.enabled` is forced on for that one ablation arm inside
+`--compare` only -- the shipped default everywhere else stays off):
 
-| Metric | Baseline | Agent | Agent + EV |
-|---|---|---|---|
-| Recovered | ₹1,36,80,472 (₹1.37 Cr) | ₹1,59,79,229 (₹1.60 Cr) | ₹1,69,60,597 (₹1.70 Cr) |
-| Outstanding at end of window | ₹1,69,13,928 (₹1.69 Cr) | ₹1,46,15,171 (₹1.46 Cr) | ₹1,36,33,802 (₹1.36 Cr) |
-| Invoices fully paid | 36 | 41 | 42 |
-| Messages sent | 252 | 73 envelopes (141 invoice-level contacts before W3 consolidation) | 64 envelopes (132 invoice-level contacts) |
-| Avg days to pay (all paid invoices) | 93.3 | 95.5 | 96.6 |
-| Avg days to pay (matched set -- same 25 invoices baseline+agent both recovered) | 101.2 | 97.7 | n/a (see note) |
-| Handoffs to a human | 0 | 42 (17 disputed, 25 rung-4 escalation) | 41 |
-| Stops | 0 | 6 (opted out) | 6 (opted out) |
-| Disputed invoices (current, at end of window) | 12 | 17 | 17 |
-| Not recovered in the window (exceptions) | 64 | 59 | 58 |
+| Metric | Baseline | Agent | Agent + EV | Agent + EV + learned |
+|---|---|---|---|---|
+| Recovered | ₹88,38,375 (₹0.88 Cr) | ₹1,44,80,534 (₹1.45 Cr) | ₹1,48,33,614 (₹1.48 Cr) | ₹1,16,76,702 (₹1.17 Cr) |
+| Outstanding at end of window | ₹1,83,39,024 (₹1.83 Cr) | ₹1,26,96,866 (₹1.27 Cr) | ₹1,23,43,786 (₹1.23 Cr) | ₹1,55,00,697 (₹1.55 Cr) |
+| Invoices fully paid | 28 | 42 | 44 | 33 |
+| Messages sent | 259 | 63 envelopes (139 invoice-level contacts) | 59 envelopes (131 invoice-level contacts) | 53 envelopes (113 invoice-level contacts) |
+| Avg days to pay (all paid invoices) | 99.7 | 92.4 | 91.3 | 90.3 |
+| Avg days to pay (matched set -- same 21 invoices baseline+agent both recovered) | 99.4 | 95.4 | n/a (see note) | n/a (see note) |
+| Handoffs to a human | 0 | 47 (18 disputed, 29 rung-4 escalation) | 46 (18 disputed, 28 rung-4 escalation) | 43 (15 disputed, 28 rung-4 escalation) |
+| Stops | 0 | 2 (opted out) | 2 (opted out) | 2 (opted out) |
+| Disputed invoices (current, at end of window) | 20 | 18 | 18 | 15 |
+| Not recovered in the window (exceptions) | 72 | 58 | 56 | 67 |
 
-**Agent+EV recovered ₹9,81,368 more than the plain agent** on this seed --
-the Phase 4 ablation of whether the negotiation layer adds recovery on top
-of the already-built agent. The matched-set days-to-pay row has no
-three-way figure: `matched_avg_days_to_pay()` is a pairwise comparison
-(baseline vs. agent), and a three-way intersection wasn't worth building
-for one report row -- see the [Phase 4 section](#persona-differentiation--the-ev-ablation-phase-4)
-for the full ablation story, including the one seed where it loses.
+**Agent recovered ₹56,42,158 more than the baseline** on this seed.
+**Agent+EV recovered ₹3,53,079 more than the plain agent** -- the EV-layer
+ablation of whether the negotiation layer adds recovery on top of the
+already-built agent. **Agent+EV+learned recovered ₹31,56,911 *less* than
+agent+EV** on this seed -- the learned-posteriors ablation, and this
+happens to be the single worst seed for it (see below). The matched-set
+days-to-pay row has no three- or four-way figure: `matched_avg_days_to_pay()`
+is a pairwise comparison (baseline vs. agent), and a wider intersection
+wasn't worth building for one report row -- see the
+[Persona differentiation + the EV ablation](#persona-differentiation--the-ev-ablation-phase-4)
+section for the EV ablation's full per-seed story, and
+[`docs/learning_findings.md`](docs/learning_findings.md) for the learned
+layer's.
 
 **A note on the disputed-invoices row:** `results.json` also has a second,
 related field, `disputes`, that counts something different -- invoices that
@@ -159,17 +176,18 @@ cross-reference the raw JSON, don't expect these two numbers to match.
 figure compares two *different* sets of paid invoices -- the agent
 recovers a harder set than baseline gives up on, which drags its raw
 average up even though it's the stronger performer. The matched-set row
-(the 25 invoices *both* sides actually recovered) is the fair comparison,
-and there the agent wins: 97.7 days vs 101.2. Reporting both, not just the
-flattering one, is the point.
+(the 21 invoices *both* sides actually recovered, on seed 7) is the fair
+comparison, and there the agent wins: 95.4 days vs 99.4. Reporting both,
+not just the flattering one, is the point.
 
-**Across all 6 tested seeds** (42, 7, 13, 99, 2024, 555): agent wins on
-rupees recovered **6/6**, and on matched-set days-to-pay **6/6**.
+**Across all 6 tested seeds** (7, 42, 13, 99, 2024, 555 -- seed 7 primary):
+agent wins on rupees recovered **6/6**, and on matched-set days-to-pay
+**6/6**.
 
 | Seed | Baseline recovered | Agent recovered | Matched N | Baseline days | Agent days | Malformed invoices | Superseded promises |
 |---|---|---|---|---|---|---|---|
+| 7 (primary) | ₹0.88 Cr | ₹1.45 Cr | 21 | 99.4 | 95.4 | 0 | 6 |
 | 42 | ₹1.37 Cr | ₹1.60 Cr | 25 | 101.2 | 97.7 | 0 | 0 |
-| 7 | ₹0.88 Cr | ₹1.45 Cr | 21 | 99.4 | 95.4 | 0 | 6 |
 | 13 | ₹1.32 Cr | ₹1.70 Cr | 25 | 91.5 | 87.2 | 2 | 2 |
 | 99 | ₹1.01 Cr | ₹1.45 Cr | 23 | 101.5 | 98.3 | 0 | 5 |
 | 2024 | ₹1.00 Cr | ₹1.47 Cr | 26 | 89.1 | 83.4 | 0 | 4 |
@@ -180,23 +198,47 @@ never came up": 5 of the 6 seeds contain a buyer who renegotiated a promise
 before it fell due, and 2 of the 6 contain a structurally malformed invoice
 -- the win happens *despite* those, not in their absence.
 
-**The Phase 4 ablation, on the identical 6 seeds:** agent+EV beat the plain
+**The EV ablation, on the identical 6 seeds:** agent+EV beat the plain
 agent (`ev_mode` off) on rupees recovered in **5 of 6 seeds**.
 
 | Seed | Agent recovered | Agent+EV recovered | EV win vs. agent |
 |---|---|---|---|
+| 7 (primary) | ₹1.45 Cr | ₹1.48 Cr | ✓ (+₹3,53,079) |
 | 42 | ₹1.60 Cr | ₹1.70 Cr | ✓ (+₹9,81,368) |
-| 7 | ₹1.45 Cr | ₹1.48 Cr | ✓ (+₹3,53,080) |
 | 13 | ₹1.70 Cr | ₹1.72 Cr | ✓ (+₹1,38,856) |
 | 99 | ₹1.45 Cr | ₹1.50 Cr | ✓ (+₹5,18,172) |
 | 2024 | ₹1.47 Cr | ₹1.47 Cr | ✗ (-₹51,765) |
 | 555 | ₹1.17 Cr | ₹1.17 Cr | ✓ (+₹45,978) |
 
 Reported as it came out, including seed 2024's loss -- see the
-[Phase 4 section](#persona-differentiation--the-ev-ablation-phase-4) for why
-this gain traces almost entirely to `payment_plan`, the one action that
-changes what a simulated buyer actually experiences rather than only the
-audit trail's stated reasoning.
+[Persona differentiation + the EV ablation](#persona-differentiation--the-ev-ablation-phase-4)
+section for why this gain traces almost entirely to `payment_plan`, the one
+action that changes what a simulated buyer actually experiences rather than
+only the audit trail's stated reasoning.
+
+**The learned-posteriors ablation, on the identical 6 seeds:**
+agent+EV+learned *lost* to agent+EV (the hand-typed grid) on rupees
+recovered in **0 of 6 seeds** -- mean **-₹22,53,175**, range **-₹31,56,911**
+(seed 7) to **-₹5,16,048** (seed 99, the least-bad seed in both this and a
+persona-perturbed re-run).
+
+| Seed | Agent+EV recovered | Agent+EV+learned recovered | Learned win vs. agent+EV |
+|---|---|---|---|
+| 7 (primary) | ₹1.48 Cr | ₹1.17 Cr | ✗ (-₹31,56,911) |
+| 42 | ₹1.70 Cr | ₹1.48 Cr | ✗ (-₹21,67,500) |
+| 13 | ₹1.72 Cr | ₹1.55 Cr | ✗ (-₹16,14,423) |
+| 99 | ₹1.50 Cr | ₹1.45 Cr | ✗ (-₹5,16,048) |
+| 2024 | ₹1.47 Cr | ₹1.16 Cr | ✗ (-₹31,34,386) |
+| 555 | ₹1.17 Cr | ₹0.88 Cr | ✗ (-₹29,29,786) |
+
+Every single seed loses, and it's one mechanism, not six coincidences: the
+fitted `good_customer`/`firm` posterior (61.47%, the best-supported cell in
+the file, n=748) sits only 1.5 points above `wait`'s untouched hand-typed
+60%, and a pre-existing rule (-4 points per broken promise on `firm`, not on
+`wait`) is enough to flip the ranking the moment a buyer has any broken
+promise on file. Full root-cause, plus a persona-perturbation robustness
+check that reproduces the same 6/6 loss, in
+[`docs/learning_findings.md`](docs/learning_findings.md).
 
 The full exceptions list (every invoice not recovered in the window, and
 why) is in `report/out/report.html` after you run the Quickstart above.
@@ -334,10 +376,14 @@ EV = P(recover) x expected_recovery_paise - cost_paise
 ```
 
 `P(recover)` is a flat, assumed percentage per `(quadrant, action)` pair in
-`config/rules.yaml`, not a weighted formula: unlike ability/willingness's
-per-signal weights, there is no measured recovery-rate data behind any of
-these numbers, so a visibly-a-guess grid is more honest than dressing a guess
-up as arithmetic. `expected_recovery_paise` scales the outstanding amount by
+`config/rules.yaml` -- as shipped in Phase 2, not a weighted formula: unlike
+ability/willingness's per-signal weights, there is no measured recovery-rate
+data behind any of these numbers, so a visibly-a-guess grid is more honest
+than dressing a guess up as arithmetic. (A measured alternative was built
+later -- see [Honest scope](#honest-scope-built-vs-future-work)'s learning-layer
+bullet -- but it ships off by default, and the hand-typed grid described here
+is what actually runs unless that flag is switched on.) `expected_recovery_paise`
+scales the outstanding amount by
 how much of it the action collects *when it succeeds* -- full value for a
 message or a payment plan, a partial settlement for `counter_settle` /
 `human_handoff` / `legal_escalation`. `cost_paise` is one LLM draft call, or
@@ -588,10 +634,10 @@ the full test evidence.
 
 ## Edge cases
 
-`docs/edge_cases.md` documents 141 edge cases the agent could encounter,
+`docs/edge_cases.md` documents 147 edge cases the agent could encounter,
 each honestly marked:
 
-- **60 TESTED** -- has a passing test, named.
+- **66 TESTED** -- has a passing test, named.
 - **44 HANDLED** -- correct in the code, no dedicated test, named.
 - **37 OUT OF SCOPE** -- neither, with the specific integration or data it
   would need, named -- never left vague.
@@ -622,6 +668,22 @@ each honestly marked:
   section's own scope note. Switched on, it recovers more money on 5/6
   seeds -- the Phase 4 section has the honest per-seed numbers, including
   the one seed where it doesn't.
+- **The learning layer** -- `engine/learning.py`, `config/learned_recovery.yaml`,
+  and `scripts/fit_recovery.py` fit a recovery-probability posterior per
+  `(quadrant, action)` cell from the agent's own simulated behaviour (a
+  **contextual bandit**, not reinforcement learning -- one binary reward
+  per decision, no state carried across decisions, no multi-step credit
+  assignment), trained on 30 seeds disjoint from the 6 benchmark seeds
+  results are measured on, never on real buyer data (none exists). It reads
+  back behind its own `config/rules.yaml`'s `learning.enabled` flag, off by
+  default, and can run in offline (posterior mean) or online (Thompson
+  sampling, in-run updates) mode. **The honest finding:** wired into a real
+  four-arm ablation (`agent+EV+learned`), it *loses* to the hand-typed EV
+  grid on rupees recovered in 6 of 6 benchmark seeds, root-caused to one
+  specific mechanism and confirmed robust to a persona perturbation -- see
+  [`docs/learning_findings.md`](docs/learning_findings.md). Built,
+  measured, and reported exactly as it came out, not reframed as a partial
+  win.
 
 **FUTURE WORK:** see the list below, and `docs/winning_layer.md` for the
 larger roadmap (predictive risk, cash-flow intelligence, payment
@@ -686,10 +748,19 @@ Ideas that came up during the build and were deliberately **not** built:
 
 `docs/winning_layer.md` is the full roadmap beyond W1-W4: a dynamic trader
 financial profile, cash-flow intelligence, payment propensity prediction,
-next-best-action beyond the current rung ladder, expected-recovery/cost
-optimization, a strategy simulator, and closed-loop learning at a deeper
-level than promise tracking. None of it is built -- it's explicitly future
-work, not a claim of current capability.
+next-best-action beyond the current rung ladder, and a strategy simulator.
+Most of it is still not built -- it's explicitly future work, not a claim
+of current capability. The two exceptions, built in this project's own
+scope rather than waiting on Razorpay-scale data: expected-recovery/cost
+optimization (`engine/negotiation.py`'s EV ranking, wired into the Brain
+behind `brain.ev_mode`) and a form of closed-loop learning deeper than
+promise tracking (`engine/learning.py`'s contextual bandit, fit entirely in
+simulation and wired in behind its own `learning.enabled` flag -- see
+[Honest scope](#honest-scope-built-vs-future-work) and
+[`docs/learning_findings.md`](docs/learning_findings.md)). Both ship off by
+default, and the honest finding on the learning layer is that it currently
+*loses* to the hand-typed EV grid -- built, measured, and reported, not a
+claim that it already helps.
 
 The honest reason it isn't built here: most of it needs real
 transaction/payment data that a standalone tool like this one structurally

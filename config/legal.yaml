@@ -50,7 +50,10 @@ max_agreement_days: 45
 # Source: https://www.rbi.org.in/ (Current Rates panel)
 # Retrieved: 2026-08-23, showing rates as at 2026-08-21
 # Cross-check: repo 5.25%, SDF 5.00%, MSF 5.50%, Bank Rate 5.50%
-# RE-VERIFY BEFORE SUBMISSION -- the MPC meets roughly every two months.
+# RE-VERIFIED 2026-09-03: still 5.50% (Bank Rate == MSF). The Aug MPC
+# meeting (3-5 Aug 2026) set this rate and held repo at 5.25%; the next
+# MPC meeting is 5-7 Oct 2026, after the Sept 5 submission deadline, so
+# this value cannot change before submission -- no update needed.
 rbi_bank_rate: 0.0550
 bank_rate_multiplier: 3
 # Effective statutory rate: 0.0550 x 3 = 0.1650 = 16.50% per annum,
