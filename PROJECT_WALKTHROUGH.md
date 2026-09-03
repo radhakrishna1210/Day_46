@@ -2,7 +2,7 @@
 
 *Compiled by reading the current repository directly — `engine/`, `sim/`, `report/`, `config/`, `data/`, `tests/`, `main.py`, and the live `audit/` trail — plus CLAUDE.md, ARCHITECTURE.md, README.md, `docs/edge_cases.md` and `docs/winning_layer.md` as they stand today. No files were modified to produce this document. Where the build diverged from the original plan, that is called out explicitly rather than assumed away.*
 
-**Headline numbers (seed 7, the primary benchmark seed):** ₹56,42,158 more recovered than the baseline · 6/6 seeds won on rupees recovered · the expected-value negotiation layer (Phase 4) adds a further ₹3,53,079 on top, winning on 5/6 of those same seeds · a fourth arm, agent+EV+learned, honestly *loses* to agent+EV on 6/6 seeds (mean -₹22,53,175, see `docs/learning_findings.md`) · 1032 tests passing · 147 edge cases documented (66 tested / 44 handled / 37 out of scope) · 141 invoice-level contacts consolidated into 73 outbound envelopes on seed 42, where that W3 measurement was originally taken.
+**Headline numbers (seed 7, the primary benchmark seed; all figures read from `report/out/results.json`):** ₹56,42,158 more recovered than the baseline · 6/6 seeds won on rupees recovered · the expected-value negotiation layer adds a further ₹3,53,079 on top, winning on 5/6 of those same seeds · a fourth arm, agent+EV+learned, honestly *loses* to agent+EV on 6/6 seeds (mean -₹22,53,175, see `docs/learning_findings.md`) and ships **off** by default · 1032 tests passing · 147 edge cases documented (66 tested / 44 handled / 37 out of scope) · 139 invoice-level contacts consolidated into 63 outbound envelopes on seed 7.
 
 ---
 
@@ -93,7 +93,7 @@ Derived from what `sim/run_sim.py::run_agent()` actually calls, in order, every 
 
 14. **Roll up + report** — `engine/buyer_panel.py` → `report/build_report.py`. In: the finished run's invoices, promises, history and audit trail. Out: `report/out/results.json` then `report/out/report.html`.
 
-> **A real example from this run's own audit log:** `INV-2026-0171` (buyer `BUY-11`) was flagged **watch** risk 4 days before its due date: "buyer score 0 (poor); 9 prior invoices went overdue" — two signals, both real, both computed by code already in this pipeline. It never received a message because of this — early warning is human-facing only.
+> **A real example from the seed-7 `--compare` audit log:** `INV-2026-0160` (buyer `BUY-01`) was flagged **watch** risk 4 days before its due date: "buyer score 0 (poor); 9 prior invoices went overdue" — two signals, both real, both computed by code already in this pipeline. It never received a message because of this — early warning is human-facing only. (One invoice, `INV-2026-0156` / `BUY-05`, reaches the **high** band on simulated day 13, once a broken promise adds the third signal.)
 
 ---
 
@@ -208,7 +208,7 @@ Derived from what `sim/run_sim.py::run_agent()` actually calls, in order, every 
 
 ### `sim/run_sim.py` — orchestration
 - **Input:** seed, number of days, `--compare`, and, since Phase 4, `run_agent(..., ev_mode=...)`.
-- **Output:** `run_agent()` and `run_baseline()` results, written to `report/out/results.json` -- `--compare` now runs and reports a third `agent_ev` arm (the same agent with `brain.ev_mode` forced on) alongside baseline/agent, on the same seed set.
+- **Output:** `run_agent()` and `run_baseline()` results, written to `report/out/results.json` -- `--compare` runs and reports four arms on the same seed set: baseline, agent, `agent_ev` (`brain.ev_mode` forced on), and `agent_ev_learned` (`learning.enabled` also forced on, offline posterior mean).
 - **Calls:** the entire engine stack, in a day loop, with `LLM_MODE` force-pinned to `mock`.
 - **Why it exists:** the experiment. Deep dive in §14.
 
@@ -431,15 +431,17 @@ A dispute short-circuits this entirely: the invoice is marked `disputed` and the
 
 **E2 — Invoice/input validation.** Discovered: nothing checked for a missing acceptance date, a non-numeric agreed term, a future issue date, impossible chronology, a zero/negative amount, or a duplicate invoice_id (TC-052 — could have double-counted a receivable in every headline money figure). Fixed: `engine/validate.py`.
 
-**E3 — Regression tests + honest status markup.** Added regression tests for seven previously-incidental behaviours and fixed a second real gap — TC-092: the dispute trip-wire only watched replies the model classified as a *promise*, missing a dispute the model itself misclassified as a refusal, question, or noise. Established the three-way TESTED / HANDLED / OUT OF SCOPE markup for all 141 cases.
+**E3 — Regression tests + honest status markup.** Added regression tests for seven previously-incidental behaviours and fixed a second real gap — TC-092: the dispute trip-wire only watched replies the model classified as a *promise*, missing a dispute the model itself misclassified as a refusal, question, or noise. Established the three-way TESTED / HANDLED / OUT OF SCOPE markup, now covering all 147 documented cases (the freeze-day pass added TC-144..TC-147 for the learning layer).
 
 **E4 — TC-141, the end-to-end scenario.** Moved from OUT OF SCOPE to TESTED via `sim/scenario_tc141.py` — a single scripted buyer/invoice through the real pipeline across 90 days. See §17.
 
 | Status | Count | Meaning |
 |---|---|---|
-| TESTED | 60 | Has a passing test, named |
+| TESTED | 66 | Has a passing test, named |
 | HANDLED | 44 | Correct in the code, no dedicated test, file/function named |
 | OUT OF SCOPE | 37 | Neither — the specific integration or data it would need is named |
+
+Counts here match `docs/edge_cases.md`'s own header table (66 / 44 / 37 / **147 total**).
 
 ---
 
@@ -449,7 +451,7 @@ A dispute short-circuits this entirely: the invoice is marked `disputed` and the
 
 **W2 — Buyer / trader panel + promise reliability.** Problem before: everything invoice-level; no single "how bad is this relationship" view. Added: `engine/buyer_panel.py`. Guardrail: pure rollup, nothing feeds back into `brain.decide()` this phase.
 
-**W3 — Buyer-level message consolidation.** Problem before: five overdue invoices meant five same-day emails. Added: `engine/consolidate.py` — at most two envelopes per buyer per day (courtesy / escalated tier), never mixed. Result on seed 42: 141 invoice-level contacts became 73 envelopes, with **zero** change to which invoices were contacted, on which days, or to any final recovery number — proven invoice by invoice.
+**W3 — Buyer-level message consolidation.** Problem before: five overdue invoices meant five same-day emails. Added: `engine/consolidate.py` — at most two envelopes per buyer per day (courtesy / escalated tier), never mixed. Result on seed 7 (`report/out/results.json`): 139 invoice-level contacts became 63 outbound envelopes, with **zero** change to which invoices were contacted, on which days, or to any final recovery number — proven invoice by invoice.
 
 **W4 — Experiment refresh.** Re-ran the full 6-seed comparison at HEAD and added per-seed edge-case-count columns, so a "6/6 win" reads as "despite these edge cases," not "they never came up."
 
@@ -531,35 +533,45 @@ Nothing in this module touches a random number or re-runs the simulation.
 
 `audit/audit_log.jsonl` — append-only, one JSON object per line, non-negotiable #1. Every entry carries a timestamp on the *simulation* clock, the invoice, the buyer, who acted, what happened, the reason in plain English, and `source: "rule"` or `source: "llm"`.
 
-**What's actually in the log from this repo's last run:**
+**What's in the trail `sim/run_sim.py --compare --seed 7` leaves on disk**
+(the plain agent arm, restored after the four arms run; a transient file, so
+these counts move with whatever command last wrote it):
 
 | Action | Count |
 |---|---|
-| handoff | 550 |
-| wait | 530 |
-| send | 215 |
-| message_drafted | 215 |
-| blocked | 166 |
-| stop | 95 |
-| would_send | 81 |
-| reply_parsed | 38 |
-| promise_recorded | 22 |
-| dispute_detected | 16 |
-| promise_kept | 13 |
-| promise_broken | 8 |
-| early_warning_raised | 7 |
+| handoff | 5136 |
+| wait | 1618 |
+| stop | 227 |
+| send | 139 |
+| message_drafted | 139 |
+| blocked | 97 |
+| reply_parsed | 53 |
+| would_send | 42 |
+| promise_recorded | 35 |
+| promise_kept | 20 |
+| dispute_detected | 17 |
+| promise_broken | 15 |
+| early_warning_raised | 6 |
+
+`handoff` and `wait` dominate because `decide()` re-emits the same terminal
+decision once per simulated day for an invoice already handed off or held —
+`report/build_report.py` and `scripts/build_dashboard.py` both collapse that
+repetition when they render the trail.
 
 **A real entry:**
 
 ```json
-{"ts": "2026-08-24T00:00:00", "invoice_id": "INV-2026-0171", "buyer_id": "BUY-11",
+{"ts": "2026-08-24T00:00:00", "invoice_id": "INV-2026-0160", "buyer_id": "BUY-01",
  "actor": "watchdog", "action": "early_warning_raised",
  "reason": "watch risk, 2 signal(s): due in 4 day(s); buyer score 0 (poor);
             9 prior invoices went overdue",
  "source": "rule", ...}
 ```
 
-Two more of the same shape follow immediately — `INV-2026-0166` (score 20, 10 prior overdue) and `INV-2026-0157` (score 7, 15 prior overdue) — every one `source: "rule"`, since early warning is pure watchdog arithmetic.
+Two more of the same shape are logged the same day — `INV-2026-0165` (score 32,
+11 prior overdue) and `INV-2026-0163` (score 21, 7 prior overdue) — every one
+`source: "rule"`, since early warning is pure watchdog arithmetic. One invoice,
+`INV-2026-0156` / `BUY-05`, later reaches the **high** band on day 13.
 
 Why it matters: without it, "explainable" is a claim; with it, it's a file you can grep — a judge can answer "why did the agent do that?" for any invoice, on any day, without asking the developer.
 
@@ -663,7 +675,7 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 | E4 — TC-141 scenario | ✅ complete | `sim/scenario_tc141.py` + `tests/test_scenario_tc141.py` |
 | W1 — early warning | ✅ complete | `engine/watchdog.py::early_warnings()` |
 | W2 — buyer panel | ✅ complete | `engine/buyer_panel.py`, populated in `results.json` |
-| W3 — message consolidation | ✅ complete | `engine/consolidate.py`; 141→73 envelopes, zero recovery change |
+| W3 — message consolidation | ✅ complete | `engine/consolidate.py`; on seed 7, 139→63 envelopes, zero recovery change |
 | W4 — experiment refresh | ✅ complete | 6-seed table with edge-case-count columns |
 | Phase 10 — docs + hygiene | ✅ complete | README/ARCHITECTURE/edge_cases/winning_layer synced |
 | P0 — repo hygiene | ✅ complete | Multi-seed audit-trail clobbering bug fixed; Quickstart artifacts regenerated self-consistently |
@@ -733,7 +745,7 @@ The short version: this repo is unusually self-auditing already — the Phase 10
 | CLAUDE.md | "max 3 messages per rung" | Per-rung caps in `config/rules.yaml`'s `ladder.rungs` are rung-specific: 2 for rung 1, 3 for rungs 2 and 3. Rung 1's real ceiling is stricter than the stated "3." | Low | Left as-is — the real behaviour is same-or-stricter than claimed, and CLAUDE.md's non-negotiables predate this project's own phases; not touched. |
 | config/rules.yaml | `stop_rules.max_per_rung: 3` was defined and pinned by `tests/test_smoke.py` | `engine/brain.py` never read `stop_rules["max_per_rung"]` at all — enforcement came entirely from each rung's own `max_messages`. Dead configuration, tested only for its own existence. | Low | **Removed** in Phase 5 (not wired up — introducing a new enforced limit this close to submission would have been a real behaviour change, not a cleanup). `tests/test_smoke.py` now instead pins each rung's own `max_messages` directly. |
 
-Everything else checked out as of that Phase 5 pass. **A later freeze-day audit (2026-09-03) found this document itself had drifted** — frozen at its own Phase 5 snapshot through Phases 6–16 (the entire learning layer, the fourth `agent+EV+learned` ablation arm, and its honest 6/6-loss finding never mentioned), a stale test count (877, actual 1032), a stale edge-case count (141/60/44/37, actual 147/66/44/37 — `docs/edge_cases.md` itself had a matching internal inconsistency, since fixed), and headline numbers still keyed to seed 42 after `docs/demo_runbook.md` established seed 7 as the primary benchmark seed. All of the above is now synced to that freeze-day state; re-verified directly against `report/out/results.json` (baseline recovered on seed 7 is `883837557` paise, byte for byte) rather than re-asserted. The test-file count in ARCHITECTURE.md now matches the actual `tests/` directory (30 files, 1032 tests, as of the freeze-day build); ARCHITECTURE.md's own illustrative "score 48 → skip straight to rung 2" story from Day 1 is, in fact, exactly what the current `poor_below: 50` / `pacing.poor.start_rung: 2` config produces.
+Everything else checked out as of that Phase 5 pass. This document was itself re-audited on the freeze day (2026-09-03) and again for submission (2026-09-04): it had been frozen at its Phase 5 snapshot through Phases 6–16 (the entire learning layer and the fourth `agent+EV+learned` ablation arm, with its honest 6/6-loss finding, went unmentioned), carried a stale test count and edge-case count, and still keyed its headline numbers to seed 42 after `docs/demo_runbook.md` had established seed 7 as the primary benchmark seed. All of that is now synced: **1032 tests**, **147 edge cases (66 / 44 / 37)**, and every ₹ figure and count in this document re-read directly from `report/out/results.json` on seed 7 rather than re-asserted (baseline recovered is `883837557` paise, `format_inr` → ₹88,38,375). The test-file count in ARCHITECTURE.md matches the actual `tests/` directory (30 files, 1032 tests); ARCHITECTURE.md's illustrative "score 48 → skip straight to rung 2" story is exactly what the current `poor_below: 50` / `pacing.poor.start_rung: 2` config produces.
 
 ---
 
@@ -746,6 +758,6 @@ Everything else checked out as of that Phase 5 pass. **A later freeze-day audit 
 5. No real person is ever contacted. Email goes only to the owner's own test inbox, checked by four independent barriers; WhatsApp and SMS just log "would send."
 6. The simulator's hidden personas are provably invisible to the engine — `tests/test_sim_isolation.py` was verified to actually catch a deliberately-introduced leak.
 7. The baseline (3 fixed reminders) is never weakened to flatter the agent — and the agent still wins on rupees recovered in 6 of 6 tested seeds.
-8. W3's message consolidation changed *how many envelopes* carry a day's decisions (141 → 73 on seed 42, where that measurement was taken) and changed *nothing* about which invoices were contacted, when, or what was recovered.
+8. W3's message consolidation changed *how many envelopes* carry a day's decisions (139 → 63 on seed 7) and changed *nothing* about which invoices were contacted, when, or what was recovered.
 9. 147 edge cases are documented and honestly triaged — 66 tested, 44 handled-but-untested, 37 explicitly out of scope with the specific gap named — never left vague.
 10. Cash-flow intelligence (can this buyer pay, will they) and a next-best-action EV ranking ARE built (Phases 1–3), and there IS a real ablation (Phase 4): the same agent with that layer on beats itself with it off in 5 of the same 6 seeds, one honest loss included. A *learned* (not stated-assumption) probability model IS also built now (`engine/learning.py`, a contextual bandit, Phases 8–10) and was wired into a fourth ablation arm (Phase 13–14) — which honestly *loses* to the hand-typed EV grid on all 6 benchmark seeds, root-caused rather than just observed. Both the EV layer and the learning layer ship off by default. What's genuinely still not built: message content that differs by the chosen negotiation action, reactive settlement-offer handling, a full strategy simulator, and the two items that remain on the checklist — the demo video and final submission (CLAUDE.md's items 11 and 12).

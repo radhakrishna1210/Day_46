@@ -65,11 +65,12 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - Log lines: human-readable, one action per line, no emoji.
 
 ## Commands
-- Run full simulation:      python main.py --seed 42
-- Run baseline comparison:  python sim/run_sim.py --compare --seed 42
-- Regenerate fake data:     python data/generate.py --seed 42
-- Tests:                    pytest -q
-- Build report:             python report/build_report.py
+- Run the live single-pass agent:  python main.py --seed 42   (seed 42 = the demo_runbook's live-agent seed)
+- Run the 4-arm comparison:         python sim/run_sim.py --compare --seed 7 --extra-seeds 42,13,99,2024,555 --days 120
+- Regenerate fake data:             python data/generate.py --seed 7
+- Tests:                            pytest -q   (1032 passed)
+- Build report:                     python report/build_report.py
+- Build the demo dashboard:         python scripts/build_dashboard.py --seed 7
 
 ## Git & secrets
 - .env holds GEMINI_API_KEY, TEST_INBOX_EMAIL, SMTP creds. .env is in
@@ -375,11 +376,26 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       learning), trained entirely in simulation, never on real data. Fixed
       engine/llm.py's stale docstring (said "Anthropic SDK"/"ANTHROPIC_API_KEY";
       the implementation is Gemini via google-genai). Tagged as the demo build.
-- [ ] 11 - Demo assets + video prep
+- [x] 11 - Demo assets: the Receivables Command Center dashboard
+      (scripts/build_dashboard.py + report/templates/dashboard.html.j2, one
+      self-contained HTML file), the display fixes it needed (phantom rung,
+      MOCK label, learned-fallback noise), plus submission packaging:
+      demo-dashboard merged to main; report/out/{results.json,report.html,
+      dashboard.html,dashboard.json} force-committed so a reviewer sees the
+      measured result without running the 3.5-min sim; docs/index.html +
+      docs/.nojekyll for GitHub Pages (/docs on main -- URL to be pasted into
+      README once enabled); README rewritten to the Track-03 structure;
+      ARCHITECTURE.md given the 13-step decide() flow, the double-enforced
+      ceiling, the payments-API seam (NOT IMPLEMENTED), and the rules/AI
+      boundary; every ₹ figure across README/PROJECT_WALKTHROUGH/ARCHITECTURE/
+      winning_layer re-read from results.json on seed 7, all "877 tests" ->
+      1032, seed-42/3-arm result figures -> seed 7 / 4 arms. Video not yet
+      recorded.
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P8 through P16 are committed as of the demo-build tag; only Phase 11 (demo
-  video) and Phase 12 (final submit) remain on this checklist.
+- P8 through P16 committed as of the demo-build tag; the dashboard + submission
+  packaging (Phase 11) is on main now. Only the demo video and Phase 12
+  (final read-through + submit form) remain.
 - SHIPS OFF, verified live this freeze: config/rules.yaml's
   learning.enabled: false + brain.ev_mode: off is the shipped default; 1032
   tests pass (scipy now in requirements.txt, so a fresh clone gets the whole

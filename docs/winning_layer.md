@@ -28,12 +28,15 @@ The recommended implementation priority is deliberately limited. The strongest v
 ## Implementation Status (added Phase 10)
 
 This document was written before any Winning Layer work started, and reads
-end to end as a forward-looking plan. Eight slices of it have since actually
-been built: four under the project's own W1-W4 labels, and four more under
-this project's separate "Phase 1-4" negotiation-model track (ability/
-willingness scoring, recovery-probability + EV ranking, wiring that ranking
-into the Brain, and persona differentiation + an EV ablation) -- see
-CLAUDE.md's Current status for both. **Neither label set maps 1:1 onto this
+end to end as a forward-looking plan. Several slices of it have since
+actually been built: four under the project's own W1-W4 labels, four more
+under the separate "Phase 1-4" negotiation-model track (ability/willingness
+scoring, recovery-probability + EV ranking, wiring that ranking into the
+Brain, and persona differentiation + an EV ablation), and a
+contextual-bandit learning layer that fits the EV grid from simulated data
+(Phases 8-16, shipped off, and it *loses* the ablation -- reported, not
+hidden) -- see CLAUDE.md's Current status for all of them. **Neither label
+set maps 1:1 onto this
 document's own Enhancement/Phase numbering above** -- they were renamed,
 reordered, and in most cases built as a deliberately partial first slice
 rather than the full capability originally planned here. The PARTIALLY BUILT
@@ -92,6 +95,23 @@ covers; anything not named in this section at all is genuinely untouched.
   third experiment arm this makes meaningful: measured across the same
   6-seed comparison, agent+EV beats the plain agent on rupees recovered in
   **5/6** seeds -- reported honestly, loss included.
+- **The learning layer (Phases 8-16)** -- `engine/learning.py`,
+  `config/learned_recovery.yaml`, `scripts/fit_recovery.py`: a **contextual
+  bandit** (one Beta posterior per `(quadrant, action)` cell, one binary
+  reward per decision -- not reinforcement learning) that *fits* the
+  `P(recover)` grid Phase 2 hand-typed, trained entirely on 30 simulated
+  exploration seeds disjoint from the 6 benchmark seeds, never on real
+  buyer data. It reads back behind `learning.enabled` (**off** by default,
+  and `check_config()` refuses to start with it on but `brain.ev_mode`
+  off), in offline (posterior mean) or online (Thompson sampling +
+  in-run updates) mode. It was wired into a real fourth ablation arm,
+  `agent+EV+learned` -- which honestly **loses** to the hand-typed EV grid
+  on rupees recovered in **0/6** benchmark seeds (mean -Rs 22,53,175,
+  range -Rs 31,56,911 to -Rs 5,16,048), root-caused to one mechanism and
+  confirmed robust to a persona perturbation. Built, fitted, evaluated, and
+  reported as it came out -- see `docs/learning_findings.md` and
+  `docs/learning_data.md`. A fresh clone reproduces the pre-learning agent
+  exactly (pinned snapshot test).
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
 the *reasoning* half and deliberately not the *data* half. What exists: a
@@ -106,10 +126,15 @@ works unchanged; until then this is a demonstration of the reasoning on
 plausible fake data, not a cash-flow product. Two further caveats worth
 stating: as shipped in Phase 1, nothing *acted* on the score yet
 (`engine/brain.py` did not read it -- that took until Phase 3, and even then
-only behind `brain.ev_mode`, off by default), and there is still no
-probability *model* anywhere -- `P(recover)` (Phase 2) is a stated
-assumption grid, not a learned one -- so Payment Propensity Prediction
-(Enhancement 4) remains unbuilt.
+only behind `brain.ev_mode`, off by default). `P(recover)` (Phase 2) started
+as a hand-typed assumption grid; Phases 8-14 later fit a real
+recovery-probability *model* (`engine/learning.py`, a contextual bandit
+trained entirely on simulated exploration data, behind `learning.enabled`,
+off by default) and wired it into a fourth ablation arm -- which honestly
+*loses* to the hand-typed grid on 0/6 benchmark seeds (`docs/learning_findings.md`).
+Payment Propensity Prediction (Enhancement 4) -- a model trained on *real*
+cross-vendor payment behaviour -- remains unbuilt: that needs data a
+standalone tool cannot see.
 
 **PARTIALLY BUILT -- Next-Best Recovery Action (Enhancement 6) and Expected
 Recovery and Cost (Enhancement 7):** Phase 2 built the *ranking* half; Phase 3
@@ -1635,8 +1660,10 @@ It should satisfy:
                                                       Learning, Enhancement 8,
                                                       remains unbuilt)
 [x] Strategy comparison can be demonstrated        (sim/run_sim.py --compare's
-                                                      3-arm report, Phase 4)
-[x] Existing MVP still works                       (877 tests, byte-identical
+                                                      4-arm report: baseline /
+                                                      agent / agent+EV /
+                                                      agent+EV+learned)
+[x] Existing MVP still works                       (1032 tests, byte-identical
                                                       proofs at every phase)
 [x] Existing audit trail still works
 [x] Existing baseline experiment still works

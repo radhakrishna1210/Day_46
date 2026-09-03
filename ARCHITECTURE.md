@@ -468,8 +468,10 @@ gains an additive top-level `"agent_ev"` section; `report/build_report.py`
 and its Jinja template render a third "Agent + EV" column when present and
 degrade to the existing two-column layout when it is absent.
 
-`sim/run_sim.py`'s `--compare` CLI now runs and reports all three arms by
-default. **An ordering bug caught during this phase's own review:**
+As shipped in Phase 4, `sim/run_sim.py`'s `--compare` CLI ran and reported
+all three arms (baseline / agent / agent+EV) by default; Phase 13 added a
+fourth, `agent+EV+learned`, so `--compare` reports four arms today. **An
+ordering bug caught during this phase's own review:**
 `run_agent()` unconditionally clears and rewrites the shared on-disk audit
 trail on every call, and `report/build_report.py`'s audit excerpt / early
 warnings / trip wires, plus `multi_seed_summary()`'s own "restore the
@@ -641,10 +643,65 @@ Rung 4  STOP + HANDOFF (Samadhaan draft + flag to human)
 ANY TIME: dispute detected → jump to human handoff immediately
 ```
 **How score changes the path:** score 80+ starts at Rung 1 and waits 7 days between rungs. Score below 50 starts at Rung 2 and waits 4 days. Broken promise = jump one rung.
-**Hard stopping rules (never violated):** max 3 messages per rung, max 5 total; no messages in quiet hours; opt-out respected instantly; NEVER threaten — only state facts with sources.
+**Hard stopping rules (never violated):** max messages per rung is the rung's own `max_messages` (2 for rung 1, 3 for rungs 2-3), max 5 total per invoice; no messages in quiet hours; no weekend sends; opt-out respected instantly; NEVER threaten — only state facts with sources.
 **Mostly rules; AI is consulted only for genuinely ambiguous cases** (e.g., "buyer partially paid and sent a confusing reply — what now?") and its reasoning is saved to the audit trail.
-**Phase 3, behind `config/rules.yaml`'s `brain.ev_mode` (shipped off):** once every rule above has cleared and a rung is chosen, the Brain can pick *what to send at that rung* by expected value instead of always sending — see Block 2d for the full mechanics. Every hard-stopping rule above still runs first, unconditionally, whether or not this is on.
+
+#### `decide()` — the 13 checks, in order, exactly as coded
+
+Every check below is a `[RULE]` except step 12's one ambiguous case and, when
+`brain.ev_mode` is on, step 13's EV ranking (itself deterministic arithmetic
+over `engine/negotiation.py` — no model call). **The order is load-bearing:
+every hard stop is evaluated before any EV logic can run.** `main.py` and
+`sim/scenario_tc141.py` pass a plain score with no `quadrant` key, so for them
+step 13 never fires at all and `decide()` is byte-identical to its pre-Phase-3
+form.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Buyer has opted out | **STOP** — outranks everything, including a 200-day-overdue case |
+| 2 | Invoice is disputed | **HANDOFF** to a human, before any other rule runs, on every future pass too |
+| 3 | Nothing owed / already paid | **STOP** (settled) |
+| 4 | Not yet past the statutory due date | **WAIT**, review the day after that date |
+| 5 | 5 total contacts already made on this invoice | **HANDOFF** (hard cap) |
+| 6 | An active promise, still inside its grace period | **WAIT**, review after the promised date + grace |
+| 7 | **Rung selection** — score band → starting rung + pacing cadence; each broken promise jumps one rung; a first-ever contact on an already-old backlog opens one rung ahead; **`chosen = min(desired, available_rung)`** — the legal ceiling always wins |
+| 7b | Rung out of its own message budget, ceiling still allows higher | walk `chosen` up, then **re-apply `min(chosen, available_rung)`** |
+| 8 | `chosen >= 4` | **HANDOFF** + generate the Samadhaan draft (whatever its readiness). Sits *above* the send gates because rung 4 has 0 allowed messages and step 9 would otherwise swallow it into a WAIT. With `ev_mode` on, EV additionally picks which *flavor* (`human_handoff` / `legal_escalation`) the audit trail records — never whether the handoff fires. |
+| 9 | No room left at `chosen` and the ceiling forbids going higher | **WAIT**, review in 7 days (the ceiling rises as the invoice ages) |
+| 10 | Today is a weekend | **WAIT** until Monday |
+| 11 | Too soon since the last contact at this rung | **WAIT** until the spacing clears |
+| 12 | Otherwise **SEND** at `chosen` — *unless* this is the one ambiguous case (partial payment + an unclassifiable reply), where the LLM is asked and may only turn the SEND into a WAIT, never the reverse |
+| 13 | *(only if `ev_mode` on AND the caller supplied a two-axis score)* replace the plain SEND with an EV-ranked choice among `wait` / `send` / `payment_plan` / `counter_settle` for this buyer's quadrant. Cannot select a handoff (step 8 already intercepted every case where one is reachable). Behind `learning.enabled` (also off), the `P(recover)` the ranking multiplies can come from the fitted bandit posterior instead of the hand-typed grid — one number, same formula. |
+
+**Phase 3, behind `config/rules.yaml`'s `brain.ev_mode` (shipped off):** step 13
+above — see Block 2d for the full mechanics. Every hard stop (steps 1-11) runs
+first, unconditionally, whether or not this is on.
 **Behind `learning.enabled` too (shipped off, Block 2f):** the EV formula's `P(recover)` can come from a fitted contextual-bandit posterior instead of the hand-typed grid. Nothing about the ladder, the stop rules, or the rung ceiling above changes either way — learning only ever supplies one number the same formula already used.
+
+#### The statutory ceiling — enforced twice, on purpose
+
+`engine/law.py`'s `available_rung()` returns the highest rung (1-4) whose facts
+are *materially true today* — a legal fact, not a decision. The invariant is:
+
+```
+chosen == 0   OR   1 <= chosen <= available_rung(invoice, today)
+```
+
+It is enforced in **two independent places**:
+
+1. **In `engine/brain.py`'s `decide()`** — `chosen = min(desired, available_rung)`
+   at step 7, and again as `min(chosen, available_rung)` after the step-7b
+   escalation walk. A pacing decision can never out-run the law.
+2. **Independently, in `engine/rungs.py`'s `fact_skeleton()`** — which raises
+   `RungNotAvailable` if it is ever handed a rung above `available_rung`, before
+   a single fact sentence is assembled.
+
+Two barriers because they fail differently. A `min()` in `brain.py` could be
+removed by a careless refactor; `rungs.py`'s exception is a second, structural
+tripwire that a message for an unsupported rung can never be *built*, no matter
+how it was chosen. `tests/test_no_legal_constants.py` AST-scans for any statute
+name or number outside `config/legal.yaml`, so neither barrier can be quietly
+bypassed with an inline literal either.
 
 ### Block 6 — Message Writer (`engine/writer.py`)
 **What:** The AI (Gemini, via `engine/llm.py`) writes the actual message for the chosen rung.
@@ -658,6 +715,26 @@ ANY TIME: dispute detected → jump to human handoff immediately
 - **Email = REAL** (Gmail SMTP + app password, sent to your own test inbox — great video moment).
 - **WhatsApp & SMS = STUBBED** (they log "would send"). README says why: WhatsApp Business API needs business verification — a deliberate, documented scope call.
 **Never contacts any real person except your own test inbox.**
+
+#### THE INTEGRATION SEAM — where a payments API plugs in (NOT IMPLEMENTED)
+
+`engine/channels.py`'s `send(channel, to, message)` is the **only** point in
+the system that touches the outside world, and it is the exact seam where
+Razorpay would connect. Two integrations would attach here, and **neither is
+built** — this project makes no live network call to any Razorpay API:
+
+| Razorpay surface | Would replace | What it changes upstream |
+|---|---|---|
+| **Payment Links / Payment Pages API** | the `send()` body for the `whatsapp` / `sms` / `email` channels — issue a real payment link and deliver the drafted message through Razorpay's own channel infrastructure instead of SMTP + stubs | nothing. The Brain still decides the rung, the Writer still drafts the words, the guardrail still runs. Only the transport changes. |
+| **Invoices / Payments (read) API** | `data/generate.py` + `data/store.py` — the synthetic invoice and payment-history feed | the buyer score, the ability axis, and the statutory clock would run on real ledger data instead of a seed. `engine/` reads a fixed record shape; a thin adapter mapping the Razorpay payload to that shape is the whole change. |
+
+The architecture is deliberately shaped so that this is an adapter swap, not a
+rewrite: every module under `engine/` reads config and a fixed data record and
+writes to the audit trail; none of them knows or cares where the invoice came
+from or how the message goes out. Naming this seam honestly is the point —
+the intelligence layer (scoring, legal-leverage math, the escalation logic,
+the promise/score loop) is what this prototype demonstrates; the rails are
+what a payments platform supplies.
 
 ### Block 8 — Promise Tracker (`engine/promises.py`)
 **What:** When a (simulated) buyer replies, the AI reads the free text and extracts structure:
@@ -689,17 +766,33 @@ and which personas it applies to.
 - **Our agent:** everything above
 - **Our agent + EV** (Phase 4): the same agent with `config/rules.yaml`'s `brain.ev_mode` on — the ablation of whether the negotiation layer adds recovery on top of the agent, not just whether the agent beats the baseline
 - **Our agent + EV + learned** (Block 2f): the same agent+EV, with `learning.enabled` also on — the ablation of whether the fitted bandit posteriors add recovery on top of the hand-typed EV grid. Reported honestly even though the answer is no on this seed set (6/6 loss) — see Block 2f
-**Report (also the star slide of the video):**
+**Report (the star slide of the video).** Real numbers, seed 7, 120-day
+window, read from `report/out/results.json` (`sim/run_sim.py --compare
+--seed 7`):
+
 ```
-                     Baseline      Our Agent    Agent + EV
-₹ recovered          ₹6.1L         ₹8.4L        ₹9.4L        (agent +₹2.3L, +EV +₹1.0L more)
-Avg days to pay      71            52           n/a          (−19 days agent vs baseline)
-Messages sent        300           187          164          (fewer = less annoying)
-Escalated to human   0             6            6            (correctly!)
-Not recovered        11 invoices   4 invoices   4 invoices   → full exceptions list
+                        Baseline      Agent      Agent+EV   Agent+EV+learned
+₹ recovered           ₹88,38,375  ₹1,44,80,534 ₹1,48,33,614   ₹1,16,76,702
+Invoices fully paid           28           42           44             33
+Messages (envelopes)         259           63           59             53
+Avg days to pay (all)       99.7         92.4         91.3           90.3
+Avg days to pay (matched)   99.4         95.4          —              —      (21 invoices baseline+agent both recovered)
+Escalated to a human           0    47 (18 disp,  46 (18 disp,   43 (15 disp,
+                                     29 rung-4)    28 rung-4)     28 rung-4)
+Not recovered (exceptions)    72           58           56             67
 ```
-The Agent + EV column only renders when `results.json` carries Phase 4's
-additive `agent_ev` section — see Block 2e for the ablation's actual finding.
+
+- **Agent vs baseline:** +₹56,42,158 recovered, 196 fewer messages, wins
+  6/6 seeds.
+- **Agent+EV vs agent (the EV ablation):** +₹3,53,079 on seed 7, wins 5/6
+  seeds (seed 2024 loses −₹51,765).
+- **Agent+EV+learned vs agent+EV (the learned ablation):** −₹31,56,911 on
+  seed 7, **loses 0/6 seeds**, mean −₹22,53,175 across all 6 (range
+  −₹31,56,911 to −₹5,16,048). Reported because it is true — see Block 2f
+  and `docs/learning_findings.md`. That arm ships **off**.
+
+The Agent+EV and Agent+EV+learned columns only render when `results.json`
+carries their additive `agent_ev` / `agent_learned` sections.
 **Plus the audit trail:** every action ever taken, with timestamp, reason, and rule/AI reasoning — exportable, viewable, honest.
 
 ### Block 11 — The Winning Layer (built after Day 9, labels W1-W4)
@@ -736,20 +829,48 @@ already produces, not new model calls.
 
 ---
 
-## 7. Where AI is used vs plain code (say this in the pitch!)
+## 7. The rules-first / narrow-AI boundary
+
+One pitch line: *"Rules where mistakes are expensive, AI where language is messy."*
 
 | Job | Rules or AI? | Why |
 |---|---|---|
-| Detect overdue | Rules | Date math. Using AI here would look naive. |
-| Buyer score | Rules | Must be explainable and auditable. |
-| Law calculations | Rules + config | Law is deterministic. |
-| Escalation ladder | Rules | Safety-critical → must be predictable. |
-| Reading buyer replies | **AI** | Messy Hinglish free text → structure. |
-| Writing messages | **AI** | Tone, language, context — LLM's home turf. |
-| Ambiguous judgment calls | **AI** (logged) | Partial payment + confusing reply etc. |
-| Deciding when to STOP | Rules | Never let an LLM decide to keep pushing. |
+| Detect overdue, build the work queue | **Rules** | Date math against the statutory deadline. Deterministic. |
+| Buyer score, ability/willingness split, the quadrant | **Rules** | Must be explainable and auditable line by line; every score ships with its arithmetic. |
+| Statutory due date, compound interest, tax exposure, which rung is *legally available* | **Rules + `config/legal.yaml`** | Law is deterministic. `engine/law.py` holds zero legal constants; a test AST-scans for any that leak in. |
+| Which rung is *chosen*, pacing, every stop rule, quiet hours, opt-out, dispute handoff | **Rules** | Safety-critical → must be predictable, hard-coded, and the same on every run. |
+| Recovery-probability + EV ranking, message consolidation | **Rules** (arithmetic) | `P(recover)` is a config grid, or a fitted posterior — either way a number the same fixed formula multiplies. No inference in the loop. |
+| Reading a buyer's free-text reply into structured intent | **AI** (logged) | Messy Hinglish/English → `{promise / dispute / refusal / question / noise}` + a date hint. The calendar math *after* is still a rule. |
+| Drafting the actual message body | **AI** (logged) | Tone, order, phrasing — inside a fixed fact skeleton, checked by a guardrail against numbers the model never chose. |
+| One ambiguous judgment call (partial paid + unclassifiable reply) | **AI** (logged) | The one case the rules admit they can't settle — and even here the model may only make the outcome *gentler* (SEND → WAIT), never harsher. |
 
-One pitch line: *"Rules where mistakes are expensive, AI where language is messy."*
+### Why the LLM never makes a money-or-stopping decision
+
+The agent's output is, in effect, **a legal claim about money** — "you owe
+₹X principal plus ₹Y statutory interest under Section 16, due since date D."
+A wrong number, an invented citation, or a threat is not a bad UX; it is a
+false legal assertion sent to a real business. So the parts of the system
+that produce those assertions are deterministic code with sourced constants,
+and the LLM is boxed in on three sides:
+
+1. **It cannot choose the rung.** `chosen` is a `min()` against the legal
+   ceiling, enforced twice (Block 5). A prompt can be jailbroken; a `min()`
+   cannot.
+2. **It cannot invent a figure.** Every number reaches the writer through
+   `engine/rungs.py`'s fact skeleton; the guardrail rejects any currency
+   string in the draft that is not in the set `engine/law.py` produced, and
+   any threat phrase, and any statutory citation in a rung-1 courtesy note.
+   Two guardrail failures → a plain factual fallback that is built only from
+   the skeleton and structurally cannot fail.
+3. **It cannot decide to keep pushing.** In the one place its judgment is
+   consulted, its only permitted effect is turning a rule-chosen SEND into a
+   WAIT.
+
+Bounded AI is the correct engineering choice here precisely *because* the
+stakes are legal and financial: it lets the messy-language work (Hinglish
+parsing, tone) go to the model while the money math, the escalation, and the
+stop conditions stay in code that a reviewer can read, a test can pin, and an
+audit trail can replay.
 
 ---
 
@@ -808,7 +929,7 @@ revenue-recovery-agent/
 ├── sim/
 │   ├── personas.py                    ← Phase 4: react() differentiates payment_plan/counter_settle
 │   ├── run_sim.py                     ← --compare, --seed, --days, --extra-seeds, --scenario
-│   │                                     Phase 4: run_agent(ev_mode=...) is the third experiment arm
+│   │                                     --compare runs 4 arms: baseline / agent / agent+EV (Phase 4) / agent+EV+learned (Phase 13)
 │   ├── scenario_tc141.py              ← the E4 end-to-end scripted scenario fixture
 │   └── hidden_personas.json           ← generated by data/generate.py --persona-out; gitignored; engine/ must never read it
 ├── scripts/
@@ -900,7 +1021,7 @@ place each to live, rather than being copy-pasted across blocks.
 - **0:00–0:30 — The problem, with numbers.** "Indian SMEs wait 73 days to get paid against a 45-day legal limit. The average SME has ₹3.83 crore stuck over a year. And 40% of India's B2B sales run on credit — that stat is from Razorpay's own blog."
 - **0:30–1:00 — What I built.** The one-liner + the architecture diagram, 20 seconds on the ladder.
 - **1:00–3:30 — Live demo.** Run the batch. Show: the Brain choosing different paths for a 90-score buyer vs a 45-score buyer → one Hinglish message → the Law Engine's interest + tax-cost math on screen → a promise being made, broken, and caught → the REAL email arriving in your inbox → the Samadhaan draft for the deadbeat.
-- **3:30–4:30 — Proof.** The baseline-vs-agent table. Then the exceptions list: "It failed on these 4 — here's why each one." (Honesty is a feature.)
+- **3:30–4:30 — Proof.** The four-arm table (baseline / agent / agent+EV / agent+EV+learned, seed 7): +₹56,42,158 recovered, 196 fewer messages, 6/6 seeds — *and* the learned arm losing 0/6, shown not hidden. Then the exceptions list: every invoice not recovered in the window, with its reason, per invoice. (Honesty is a feature.)
 - **4:30–5:00 — Why Razorpay.** "A single vendor can't build the buyer score — Razorpay's network can. Razorpay has the rails and the reminders; this is the brain. Future work: real WhatsApp channel, live RBI rate feed, TReDS integration."
 
 ---
