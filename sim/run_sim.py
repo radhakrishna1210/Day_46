@@ -37,11 +37,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import io
 import json
 import os
 import random
 import sys
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, redirect_stderr
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,42 @@ def _forced_learned_mode():
         learning_block["enabled"] = previous_enabled
         learning_block["mode"] = previous_mode
         brain_block["ev_mode"] = previous_ev_mode
+
+
+@contextmanager
+def _collapsed_learning_fallbacks(verbose: bool):
+    """Fold engine.learning's per-cell "no learned cell ... falling back" stderr
+    lines into one summary.
+
+    engine/learning.py logs one line the first time config/learned_recovery.yaml
+    is missing a (quadrant, action) cell it is asked for. The agent+EV+learned
+    arm (run_agent(learned=True)) trips a burst of them -- the fit deliberately
+    has no `wait` / handoff cells, and thin quadrants have no soft_nudge cell --
+    before any headline number prints, which reads as breakage on camera.
+
+    Not verbose: swallow those specific lines, forward everything else on stderr
+    untouched, then print one stdout summary naming the count and the fallback.
+    Verbose: pass straight through, one line per cell, as before.
+    """
+    if verbose:
+        yield
+        return
+    _MARK = "engine.learning: no learned cell for ("
+    before = set(learning.fallbacks_logged())
+    buffer = io.StringIO()
+    try:
+        with redirect_stderr(buffer):
+            yield
+    finally:
+        for line in buffer.getvalue().splitlines():
+            if _MARK not in line:
+                print(line, file=sys.stderr)
+        new = sorted(set(learning.fallbacks_logged()) - before)
+        if new:
+            print(f"engine.learning: {len(new)} (quadrant, action) cell(s) have no "
+                  f"fitted posterior in config/learned_recovery.yaml and fell back to "
+                  f"the hand-typed negotiation.recovery_probability grid "
+                  f"(expected for the agent+EV+learned arm; --verbose lists each cell)")
 
 
 def _rng(seed: int, invoice_id: str, today: date, tag: str) -> random.Random:
@@ -1522,7 +1559,8 @@ def main() -> int:
         # mean) -- does swapping the hand-typed recovery_probability grid for
         # scripts/fit_recovery.py's learned numbers change what agent+EV
         # alone recovers.
-        agent_learned = run_agent(args.seed, args.days, verbose=args.verbose, learned=True)
+        with _collapsed_learning_fallbacks(args.verbose):
+            agent_learned = run_agent(args.seed, args.days, verbose=args.verbose, learned=True)
         audit.restore(agent_trail)
         if args.verbose:
             print()
@@ -1570,9 +1608,10 @@ def main() -> int:
             print()
             print(f"running {len(extra_seeds)} more seeds for the multi-seed table "
                   f"(baseline, agent, agent+EV, agent+EV+learned): {extra_seeds}")
-            multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days,
-                                            primary_agent_ev=agent_ev,
-                                            primary_agent_learned=agent_learned)
+            with _collapsed_learning_fallbacks(args.verbose):
+                multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days,
+                                                primary_agent_ev=agent_ev,
+                                                primary_agent_learned=agent_learned)
             print(f"agent won on rupees recovered in {multi_seed['money_win_rate']} seeds, "
                   f"on avg days-to-pay (fair comparison) in {multi_seed['days_win_rate']} seeds")
             print(f"agent+EV beat agent (ev off) on rupees recovered in "

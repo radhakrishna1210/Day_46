@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,33 @@ class ResultsMissing(FileNotFoundError):
 
 def _money(paise: int) -> str:
     return format_inr(int(paise))
+
+
+#: Two reason-string touch-ups for the reader, both presentation-only:
+#:  * engine/llm.py's mock judgment-call response prefixes its reason with
+#:    "MOCK:" so a live run can never be mistaken for a canned one. In a
+#:    user-facing table the bare word reads as unfinished work rather than
+#:    what it is -- the deterministic mock-LLM path (LLM_MODE=mock, the shipped
+#:    default, no API key needed).
+#:  * an older audit trail (before engine/brain.py stopped naming a rung past
+#:    the top of the 1-4 ladder) can carry "wanted rung 5 but the law supports
+#:    at most 4"; rung 5 does not exist. A fresh run no longer writes this, but
+#:    the trail on disk may predate the fix.
+_PHANTOM_RUNG_RE = re.compile(r"wanted rung (\d+) but the law supports at most (\d+)")
+
+
+def _present_reason(text: str | None) -> str:
+    if not text:
+        return text or ""
+    text = text.replace("MOCK:", "deterministic mock-LLM judgment:")
+
+    def _fix(match: re.Match[str]) -> str:
+        wanted, ceiling = int(match.group(1)), match.group(2)
+        if wanted > 4:
+            return f"wanted to escalate further but the law supports at most {ceiling}"
+        return match.group(0)
+
+    return _PHANTOM_RUNG_RE.sub(_fix, text)
 
 
 def _days(value: float | None) -> str:
@@ -253,6 +281,7 @@ def _exception_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
     for item in exceptions_list(results):
         rows.append({
             **item,
+            "reason": _present_reason(item.get("reason")),
             "outstanding": _money(item["outstanding_paise"]),
             # None for a malformed invoice (sim.run_sim._exceptions): its own
             # dates are what is wrong, so "days overdue" cannot be stated.
@@ -263,7 +292,8 @@ def _exception_rows(results: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _audit_excerpt() -> list[dict[str, Any]]:
     entries = audit.entries()
-    return entries[-AUDIT_EXCERPT_LINES:]
+    return [{**entry, "reason": _present_reason(entry.get("reason"))}
+            for entry in entries[-AUDIT_EXCERPT_LINES:]]
 
 
 #: engine/brain.py's decide() writes these keys into a decision's audit `detail`

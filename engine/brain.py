@@ -702,8 +702,17 @@ def decide(
 
     base_detail.update({"scored_band": scored_band, "effective_band": effective_band})
     capped = desired > ceiling
-    cap_note = (f"; wanted rung {desired} but the law supports at most {ceiling}"
-                if capped else "")
+    if not capped:
+        cap_note = ""
+    elif desired > HANDOFF_RUNG:
+        # `desired` ran past the top of the ladder (rungs are 1-4) -- naming a
+        # rung 5+ that does not exist reads as an off-by-one bug. Say what
+        # actually happened: the walk wanted to keep escalating and the law
+        # stopped it. A real, in-range desired rung keeps its exact wording
+        # ("wanted rung 3 but the law supports at most 2").
+        cap_note = f"; wanted to escalate further but the law supports at most {ceiling}"
+    else:
+        cap_note = f"; wanted rung {desired} but the law supports at most {ceiling}"
     if effective_band != scored_band:
         seen = int(score.get("history_count", 0) or 0)
         how_paced = (f"{scored_band} band, paced as {effective_band}: low confidence "
