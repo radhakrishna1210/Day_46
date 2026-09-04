@@ -14,8 +14,18 @@ data/seed/*
 # generated hidden personas (simulator only, never committed)
 sim/hidden_personas.json
 
-# generated reports
-report/out/
+# generated reports -- the directory is ignored, but four artifacts are
+# committed on purpose so a reviewer sees the measured result without running
+# the ~3.5-min simulation. They regenerate byte-for-byte (deterministic; only
+# the `generated` timestamp changes):
+#   python sim/run_sim.py --compare --seed 7 --extra-seeds 42,13,99,2024,555 --days 120
+#   python report/build_report.py
+#   python scripts/build_dashboard.py --seed 7
+report/out/*
+!report/out/results.json
+!report/out/report.html
+!report/out/dashboard.html
+!report/out/dashboard.json
 
 # python
 __pycache__/
