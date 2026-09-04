@@ -55,6 +55,12 @@ TEMPLATE_DIR = ROOT / "report" / "templates"
 DEFAULT_RESULTS_PATH = ROOT / "report" / "out" / "results.json"
 DEFAULT_OUT_PATH = ROOT / "report" / "out" / "dashboard.html"
 DEFAULT_JSON_PATH = ROOT / "report" / "out" / "dashboard.json"
+#: The GitHub Pages entry point. Written in the SAME run as DEFAULT_OUT_PATH,
+#: from the identical rendered string, so the published page and the repo copy
+#: can never drift. `docs/.nojekyll` (created here if missing) tells Pages to
+#: serve the folder as-is.
+DEFAULT_PAGES_PATH = ROOT / "docs" / "index.html"
+PAGES_NOJEKYLL = ROOT / "docs" / ".nojekyll"
 AUDIT_LOG_PATH = ROOT / "audit" / "audit_log.jsonl"
 
 #: How many of the newest audit-trail lines to embed. The full file is linked
@@ -795,7 +801,15 @@ def build_payload(seed: int, days: int, results_path: Path) -> dict[str, Any]:
     }
 
 
-def build(payload: dict[str, Any], out_path: Path, json_path: Path) -> Path:
+def build(payload: dict[str, Any], out_path: Path, json_path: Path,
+          pages_path: Path | None = DEFAULT_PAGES_PATH) -> list[Path]:
+    """Render the dashboard once and write every destination from that one string.
+
+    Returns the list of HTML paths written. `pages_path` is the GitHub Pages
+    entry point (docs/index.html) -- written from the identical rendered text as
+    `out_path`, so the two are byte-identical by construction and cannot drift.
+    Pass pages_path=None to skip it.
+    """
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -809,9 +823,17 @@ def build(payload: dict[str, Any], out_path: Path, json_path: Path) -> Path:
     # slash is escaped. Nothing here is fetched — the page works under file://.
     embedded = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     html_text = template.render(payload=payload, payload_json=embedded)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html_text, encoding="utf-8")
-    return out_path
+
+    written: list[Path] = []
+    targets = [out_path] if pages_path is None else [out_path, pages_path]
+    for target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(html_text, encoding="utf-8")
+        written.append(target)
+    if pages_path is not None and not PAGES_NOJEKYLL.exists():
+        PAGES_NOJEKYLL.parent.mkdir(parents=True, exist_ok=True)
+        PAGES_NOJEKYLL.write_text("", encoding="utf-8")
+    return written
 
 
 def main() -> int:
@@ -824,11 +846,18 @@ def main() -> int:
                         help="where to write the dashboard (default: report/out/dashboard.html)")
     parser.add_argument("--json-out", type=Path, default=DEFAULT_JSON_PATH,
                         help="where to write the debug payload (default: report/out/dashboard.json)")
+    parser.add_argument("--pages-out", type=Path, default=DEFAULT_PAGES_PATH,
+                        help="GitHub Pages entry point, written identically to --out "
+                             "(default: docs/index.html)")
+    parser.add_argument("--no-pages", action="store_true",
+                        help="do not write the GitHub Pages entry point")
     args = parser.parse_args()
 
     payload = build_payload(args.seed, args.days, args.results)
-    path = build(payload, args.out, args.json_out)
-    print(f"dashboard written to {path}")
+    written = build(payload, args.out, args.json_out,
+                    pages_path=None if args.no_pages else args.pages_out)
+    for path in written:
+        print(f"dashboard written to {path}")
     print(f"payload written to {args.json_out}")
     return 0
 

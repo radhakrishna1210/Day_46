@@ -1,5 +1,11 @@
-# secrets
+# secrets -- .env and every local variant. .env.example (the blank template)
+# is deliberately NOT matched by these patterns and stays tracked.
 .env
+.env.local
+.env.*.local
+.env.dev
+.env.prod
+.env.production
 
 # generated audit logs -- audit/audit_log.jsonl (engine/audit.py) and
 # audit/outcomes.jsonl (engine/outcomes.py). The glob already covers both;

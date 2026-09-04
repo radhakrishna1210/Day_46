@@ -391,11 +391,31 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       winning_layer re-read from results.json on seed 7, all "877 tests" ->
       1032, seed-42/3-arm result figures -> seed 7 / 4 arms. Video not yet
       recorded.
+- [x] 11b - Pre-submission hardening pass: secrets/PII scan of the 5 committed
+      artifacts + history (clean); .gitignore hardened to catch .env.local and
+      other local variants (.env.example still tracked); scripts/build_dashboard.py
+      now writes report/out/dashboard.html AND docs/index.html from one render
+      so they cannot drift; new scripts/regen.py runs the sim -> report ->
+      dashboard in the one order that keeps the non-hermetic audit_log.jsonl
+      consistent, fails loudly, prints what changed, never commits;
+      docs/demo_runbook.md rebased entirely onto seed 7 (no more seed-42/seed-7
+      switch) with real captured main.py --seed 7 output, and its Segment 3
+      corrected -- nothing in the runtime writes a Samadhaan .md file, the draft
+      is built at dashboard-build time (INV-2026-0066, BLOCKED on the Udyam
+      placeholder); dashboard gained a visible synthetic-data disclaimer
+      (masthead banner + buyer-risk caption + footer, not just a footnote);
+      PROJECT_WALKTHROUGH.md S16 now says the audit figures are ROWS over 120
+      days, not distinct invoices (5136 handoff rows <-> 47 real escalations).
+      Artifacts regenerated via scripts/regen.py; 1032 tests still pass.
 - [ ] 12 - Final check + submit
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - P8 through P16 committed as of the demo-build tag; the dashboard + submission
-  packaging (Phase 11) is on main now. Only the demo video and Phase 12
-  (final read-through + submit form) remain.
+  packaging (Phase 11) + the hardening pass (11b) are on main now. Only the
+  demo video and Phase 12 (final read-through + submit form) remain.
+- Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
+  (sim -> report -> dashboard, in order, ~5 min, no commit). Anything else --
+  pytest, main.py -- run against the repo between the sim and the report
+  silently builds the report against the wrong audit_log.jsonl.
 - SHIPS OFF, verified live this freeze: config/rules.yaml's
   learning.enabled: false + brain.ev_mode: off is the shipped default; 1032
   tests pass (scipy now in requirements.txt, so a fresh clone gets the whole

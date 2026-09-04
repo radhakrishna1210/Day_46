@@ -533,12 +533,16 @@ Nothing in this module touches a random number or re-runs the simulation.
 
 `audit/audit_log.jsonl` — append-only, one JSON object per line, non-negotiable #1. Every entry carries a timestamp on the *simulation* clock, the invoice, the buyer, who acted, what happened, the reason in plain English, and `source: "rule"` or `source: "llm"`.
 
-**What's in the trail `sim/run_sim.py --compare --seed 7` leaves on disk**
+**Row counts** in the trail `sim/run_sim.py --compare --seed 7` leaves on disk
 (the plain agent arm, restored after the four arms run; a transient file, so
-these counts move with whatever command last wrote it):
+these move with whatever command last wrote it). **These are audit *rows* over
+the whole 120-day window, not counts of distinct invoices** — `decide()` runs
+once per invoice per simulated day and writes a row every time, so a case that
+was handed off on day 20 contributes ~100 more `handoff` rows over the rest of
+the run:
 
-| Action | Count |
-|---|---|
+| Action | Rows |
+|---|---:|
 | handoff | 5136 |
 | wait | 1618 |
 | stop | 227 |
@@ -553,10 +557,15 @@ these counts move with whatever command last wrote it):
 | promise_broken | 15 |
 | early_warning_raised | 6 |
 
-`handoff` and `wait` dominate because `decide()` re-emits the same terminal
-decision once per simulated day for an invoice already handed off or held —
-`report/build_report.py` and `scripts/build_dashboard.py` both collapse that
-repetition when they render the trail.
+So **5136 `handoff` rows corresponds to 47 invoices actually escalated to a
+human** (18 dispute, 29 rung-4 — the number `results.json` and the report
+carry), each re-emitting its terminal decision on every subsequent day; 1618
+`wait` rows likewise cover far fewer invoices held inside a promise grace or a
+rung pause. `send` / `message_drafted` are ~1:1 with real outbound events
+because a SEND is only re-decided when the invoice is genuinely due another
+message. `report/build_report.py` and `scripts/build_dashboard.py` both
+collapse the terminal-decision repetition when they render the trail, so the
+dashboard's audit section shows tens of handoff lines, not thousands.
 
 **A real entry:**
 

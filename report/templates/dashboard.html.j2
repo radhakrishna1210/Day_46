@@ -149,6 +149,20 @@
   .kpis .kpi .l { font-size: 12px; color: var(--ink-soft); margin-top: 0.15rem; }
   .consol { font-size: 13px; color: var(--ink-soft); margin-top: 0.9rem; }
 
+  /* ---- synthetic-data disclaimer (masthead + inline + footer) ---- */
+  .synthetic {
+    border: 1px solid var(--rule-strong); border-left: 3px solid var(--ink-soft);
+    background: var(--surface-alt); border-radius: 4px;
+    padding: 0.6rem 0.85rem; margin: 0 0 1.4rem; font-size: 12.5px;
+    color: var(--ink); line-height: 1.5; max-width: 78ch;
+  }
+  .synthetic b { color: var(--ink); }
+  .synthetic-note { font-size: 12px; color: var(--ink-soft); margin: 0.35rem 0 0; }
+  footer.synthetic-footer {
+    margin: 3.5rem 0 0; padding: 1.1rem 0 0; border-top: 1px solid var(--rule);
+    font-size: 12px; color: var(--ink-soft); line-height: 1.55; max-width: 80ch;
+  }
+
   /* ---- Section 3: the spine ---- */
   .spine { display: grid; grid-template-columns: 316px minmax(0, 1fr); gap: 1.4rem; align-items: start; }
   .queue { border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); max-height: 620px; overflow-y: auto; }
@@ -326,6 +340,14 @@
     <!-- 1 ==================== PORTFOLIO ==================== -->
     <section id="portfolio">
       <h1>Receivables Command Center</h1>
+      <p class="synthetic">
+        <b>Synthetic data.</b> Every buyer, contact, invoice, amount and the
+        supplier identity on this page are generated from <b>seed {{ m.seed }}</b>
+        by <span class="mono">data/generate.py</span> &mdash; no real business,
+        person, or receivable, and no live connection to any payment system.
+        Legal figures are a simplified snapshot ({{ m.legal.as_of }}, RBI Bank
+        Rate {{ m.legal.bank_rate_pct }}%) and are not legal advice.
+      </p>
       <p class="prov">Two time views of one seeded world. Portfolio, early warning and the decision queue are a live pipeline pass at day&nbsp;0 ({{ m.day0 }}). The recovery benchmark and everything after it is the {{ m.days }}-day simulation. Each block says which it is.</p>
 
       {% if d0.hero %}
@@ -425,7 +447,7 @@
     <!-- 4 ==================== BUYER RISK ==================== -->
     <section id="buyer-risk">
       <h2>Buyer risk</h2>
-      <p class="prov">{{ payload.buyer_risk.provenance }}. Worst first by amount outstanding.</p>
+      <p class="prov">{{ payload.buyer_risk.provenance }}. Worst first by amount outstanding. Every buyer, score and figure in this table is synthetic &mdash; generated from seed {{ m.seed }}, not a real customer.</p>
       <div class="table-scroll">
         <table>
           <thead><tr>
@@ -646,6 +668,21 @@
         </table>
       </div>
     </section>
+
+    <footer class="synthetic-footer">
+      <b>Receivables Command Center</b> &mdash; a demo dashboard for the Razorpay
+      AI Buildathon 2026, Track&nbsp;03. All data is synthetic, generated from
+      seed&nbsp;{{ m.seed }} by <span class="mono">data/generate.py</span>: the
+      {{ d0.portfolio.buyers }} buyers, their contacts, every invoice and
+      amount, and the supplier ("{{ m.supplier.legal_name }}", placeholder
+      Udyam / GSTIN / PAN) are fictional. No real person or business is
+      represented, no real email or payment is sent, and the tool makes no live
+      call to any payment API. MSMED Act and Income-tax figures are simplified,
+      dated {{ m.legal.as_of }} (RBI Bank Rate {{ m.legal.bank_rate_pct }}%),
+      and are not legal advice. Built {{ m.generated[:16] }} from
+      <span class="mono">report/out/results.json</span>
+      (generated {{ m.results_generated[:16] }}).
+    </footer>
 
   </main>
 </div>
