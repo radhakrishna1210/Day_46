@@ -643,9 +643,10 @@
     <!-- 7 ==================== AUDIT TRAIL ==================== -->
     <section id="audit">
       <h2>Audit trail</h2>
-      <p class="prov">{{ payload.audit.provenance }}. {{ payload.audit.total }} entries in all; this table holds {{ payload.audit.shown }} of them &mdash; {{ payload.audit.note }}. Newest first. Full file: <span class="mono">{{ payload.audit.path }}</span>, one JSON object per action.</p>
+      <p class="prov">{{ payload.audit.provenance }}. {{ payload.audit.total }} entries in all; this table holds {{ payload.audit.shown }} of them &mdash; {{ payload.audit.note }}. Newest first. Opens on <b>key activity</b> (everything except the once-per-day <span class="mono">wait</span> / <span class="mono">handoff</span> / <span class="mono">stop</span> repeats on settled cases); <b>all</b> shows every row. Full file: <span class="mono">{{ payload.audit.path }}</span>, one JSON object per action.</p>
       <div class="filters" id="audit-filters">
-        <button data-kind="all" aria-pressed="true">all</button>
+        <button data-kind="activity" aria-pressed="true">key activity</button>
+        <button data-kind="all" aria-pressed="false">all</button>
         {% for k in payload.audit.action_kinds %}
         <button data-kind="{{ k }}" aria-pressed="false">{{ k }}</button>
         {% endfor %}
@@ -655,7 +656,7 @@
           <thead><tr><th>Time</th><th>Invoice</th><th>Actor</th><th>Action</th><th>Source</th><th>Reason</th></tr></thead>
           <tbody id="audit-body">
           {% for e in payload.audit.rows %}
-            <tr data-kind="{{ e.action }}">
+            <tr data-kind="{{ e.action }}"{% if e.action in ('wait', 'handoff', 'stop') %} hidden{% endif %}>
               <td class="a-ts">{{ e.ts[:10] }}</td>
               <td class="a-inv">{{ e.invoice_id }}</td>
               <td>{{ e.actor }}</td>
@@ -842,6 +843,7 @@
   // ---- audit filter ----
   var filterWrap = document.getElementById("audit-filters");
   var auditRows = Array.prototype.slice.call(document.querySelectorAll("#audit-body tr"));
+  var AUDIT_REPEATERS = ["wait", "handoff", "stop"];
   filterWrap.addEventListener("click", function (ev) {
     var b = ev.target.closest("button");
     if (!b) return;
@@ -850,7 +852,10 @@
     });
     var kind = b.getAttribute("data-kind");
     auditRows.forEach(function (tr) {
-      tr.hidden = !(kind === "all" || tr.getAttribute("data-kind") === kind);
+      var k = tr.getAttribute("data-kind");
+      tr.hidden = !(kind === "all"
+        || k === kind
+        || (kind === "activity" && AUDIT_REPEATERS.indexOf(k) === -1));
     });
   });
 

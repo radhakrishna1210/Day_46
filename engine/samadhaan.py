@@ -264,8 +264,9 @@ def build_draft(
         add(f"| Field | Value |")
         add(f"|---|---|")
         add(f"| Written agreement | {'yes' if invoice.get('written_agreement') else 'no'} |")
+        agreed_term = invoice.get("agreed_days")
         add(f"| Term stated in the agreement | "
-            f"{invoice.get('agreed_days') if invoice.get('agreed_days') else 'none stated'} days |")
+            f"{f'{agreed_term} days' if agreed_term else 'none stated'} |")
         add(f"| Statutory term applied | {term} days from acceptance |")
         if agreed_term_is_void(invoice):
             add(f"| Note | {render(wording['void_term_note'], clause_values)} |")
