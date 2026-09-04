@@ -67,7 +67,7 @@ directly from `report/out/results.json`.
   (7, 42, 13, 99, 2024, 555) and on matched-set days-to-pay in **6 of 6**.
 - **The expected-value negotiation layer** (`brain.ev_mode`, off by default)
   adds a further **₹3,53,079** on seed 7 and wins on **5 of 6** seeds — seed
-  2024 loses −₹51,765, reported alongside the five wins.
+  2024 loses −₹51,764, reported alongside the five wins.
 - **The learned layer** (`learning.enabled`, off by default) — a contextual
   bandit fit on simulated data — was wired into a fourth ablation arm and
   **loses** to the hand-typed EV grid on rupees recovered in **0 of 6** seeds:

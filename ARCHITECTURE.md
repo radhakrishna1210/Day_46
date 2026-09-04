@@ -485,8 +485,8 @@ anything downstream reads `audit.entries()` again.
 **The ablation finding — the number Phase 2/3 deferred, reported as it came
 out:** on the same 6 seeds as the existing baseline-vs-agent comparison, at
 120 days, `agent_ev` (ev_mode on) beat plain `agent` (ev_mode off) on rupees
-recovered in **5 of 6 seeds** — seed 2024 shows a small loss (-₹51,765);
-every other seed gains, from +₹45,978 (seed 555) to +₹9,81,368 (seed 42).
+recovered in **5 of 6 seeds** — seed 2024 shows a small loss (-₹51,764);
+every other seed gains, from +₹45,977 (seed 555) to +₹9,81,368 (seed 42).
 Mechanistically, this gain traces almost entirely to `payment_plan`: most of
 what EV changes relative to `ev_mode: off` — `firm` vs `soft_nudge` for a
 `good_customer`, `human_handoff` vs `legal_escalation` for a handoff — maps
@@ -785,7 +785,7 @@ Not recovered (exceptions)    72           58           56             67
 - **Agent vs baseline:** +₹56,42,158 recovered, 196 fewer messages, wins
   6/6 seeds.
 - **Agent+EV vs agent (the EV ablation):** +₹3,53,079 on seed 7, wins 5/6
-  seeds (seed 2024 loses −₹51,765).
+  seeds (seed 2024 loses −₹51,764).
 - **Agent+EV+learned vs agent+EV (the learned ablation):** −₹31,56,911 on
   seed 7, **loses 0/6 seeds**, mean −₹22,53,175 across all 6 (range
   −₹31,56,911 to −₹5,16,048). Reported because it is true — see Block 2f
