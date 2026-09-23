@@ -788,8 +788,8 @@ def test_run_agent_learned_true_actually_uses_the_learned_posteriors() -> None:
     """Not just "the numbers differ" -- a direct check that engine/brain.py's
     learned-decision provenance (config/rules.yaml learning.enabled path) was
     actually exercised, and that at least one decision used a real fitted
-    posterior mean (config/learned_recovery.yaml's good_customer/firm cell,
-    n=748) rather than every cell falling back to the hand-typed grid."""
+    posterior mean (config/learned_recovery.yaml's good_customer/firm cell)
+    rather than every cell falling back to the hand-typed grid."""
     run_sim.run_agent(seed=42, days=DAYS, verbose=False, learned=True)
     brain_entries = [e for e in audit.entries() if e.get("actor") == "brain"]
     methods = {(e.get("detail") or {}).get("learning_method") for e in brain_entries}

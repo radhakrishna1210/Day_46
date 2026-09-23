@@ -581,7 +581,7 @@ decision — `learning_method`, `estimated_probability`, `observations`,
 ran, otherwise which rule overruled it) — so a reader can see, per decision,
 whether the rules or the learner had the final say, without re-deriving it.
 
-**The honest result, not reframed as a partial win.** A fourth experiment
+**The first result (pre-E1/E2), not reframed as a partial win.** A fourth experiment
 arm, `agent+EV+learned` (offline mode, `sim/run_sim.py --compare`), was
 measured the same way the Phase 4 ablation was: against `agent+EV` (the
 hand-typed grid), on the same six benchmark seeds. It **lost on all 6 of 6**
@@ -601,6 +601,35 @@ relationship, not of the exact synthetic persona table. Full mechanism,
 the two "next most-wrong" cells, and the thin-cell explore-vs-commit audit
 are in `docs/learning_findings.md`; `scripts/compare_grids.py` is the
 re-runnable tool behind those numbers.
+
+**Phases E1 + E2 — acting on the two gaps behind that loss.**
+
+- **E1, `brain.ev_sets_rung: true`.** EV's SEND tier is now the rung actually
+  delivered: the walk's rung, or a gentler tier from the pacing band's start
+  rung up that has budget and has cleared its spacing — never a higher one
+  (`engine/brain.py` `ev_send_candidates()`). The label/execution gap goes
+  from 56% of training SENDs to **0 of 3,218**. `false` reproduces the pre-E1
+  agent exactly — checked: all 24 seed × arm recovered figures identical to
+  the pre-E1 `results.json`.
+- **E2, `wait` measured.** `sim/run_sim.py` records an EV-chosen wait as one
+  ledger row per wait episode, judged by the same most-recent-action rule as
+  every send; the fit gets a `recovery.<quadrant>.wait` cell. **Across 1,513
+  training wait episodes, none was followed by a payment** — true by
+  construction here, because this simulator has no unprompted payments
+  (money arrives only after a message or on a promised date). It refutes the
+  untested 60% for *this* world; it is not a claim about real buyers.
+
+**Result after re-fitting (same 30 training seeds, same 6 benchmark seeds):**
+agent+EV+learned now matches or beats agent+EV on **4 of 6** seeds — **3 wins,
+1 exact tie, 2 losses** — mean **+₹2,33,093** (range −₹2,28,344 to +₹6,30,362).
+But E1 also lowered the hand-typed agent+EV arm on 5 of 6 seeds (its win rate
+over the plain agent fell from 5/6 to 3/6): scored honestly as `firm`, a
+`high_risk` rung-2 send now carries the broken-promise penalty that its old
+`legal_facts` label was exempt from, and falls below `wait`'s untested 5% —
+the same flaw as the original loss, one layer down (instrumented on seed 7).
+Against the best arm that existed before E1/E2, the learned arm is net
+**−₹1,45,296 over the six seeds**: a correctness fix, roughly break-even on
+rupees. Full write-up: `docs/learning_findings.md`'s first section.
 
 > **LEARNING-LAYER SCOPE.** Ships off (`learning.enabled: false`,
 > `ev_mode: off`) — a fresh clone reproduces the pre-learning agent exactly
@@ -671,7 +700,7 @@ form.
 | 10 | Today is a weekend | **WAIT** until Monday |
 | 11 | Too soon since the last contact at this rung | **WAIT** until the spacing clears |
 | 12 | Otherwise **SEND** at `chosen` — *unless* this is the one ambiguous case (partial payment + an unclassifiable reply), where the LLM is asked and may only turn the SEND into a WAIT, never the reverse |
-| 13 | *(only if `ev_mode` on AND the caller supplied a two-axis score)* replace the plain SEND with an EV-ranked choice among `wait` / `send` / `payment_plan` / `counter_settle` for this buyer's quadrant. Cannot select a handoff (step 8 already intercepted every case where one is reachable). Behind `learning.enabled` (also off), the `P(recover)` the ranking multiplies can come from the fitted bandit posterior instead of the hand-typed grid — one number, same formula. |
+| 13 | *(only if `ev_mode` on AND the caller supplied a two-axis score)* replace the plain SEND with an EV-ranked choice among `wait` / `send` / `payment_plan` / `counter_settle` for this buyer's quadrant. Cannot select a handoff (step 8 already intercepted every case where one is reachable). With `brain.ev_sets_rung` (Phase E1) a chosen `soft_nudge`/`firm`/`legal_facts` IS the rung sent — the walk's rung or a gentler one with budget and spacing, never higher. Behind `learning.enabled` (also off), the `P(recover)` the ranking multiplies can come from the fitted bandit posterior instead of the hand-typed grid — one number, same formula. |
 
 **Phase 3, behind `config/rules.yaml`'s `brain.ev_mode` (shipped off):** step 13
 above — see Block 2d for the full mechanics. Every hard stop (steps 1-11) runs
@@ -765,31 +794,34 @@ and which personas it applies to.
 - **Baseline:** 3 fixed reminders, same message for everyone (≈ what Razorpay Payment Links reminders do today)
 - **Our agent:** everything above
 - **Our agent + EV** (Phase 4): the same agent with `config/rules.yaml`'s `brain.ev_mode` on — the ablation of whether the negotiation layer adds recovery on top of the agent, not just whether the agent beats the baseline
-- **Our agent + EV + learned** (Block 2f): the same agent+EV, with `learning.enabled` also on — the ablation of whether the fitted bandit posteriors add recovery on top of the hand-typed EV grid. Reported honestly even though the answer is no on this seed set (6/6 loss) — see Block 2f
+- **Our agent + EV + learned** (Block 2f): the same agent+EV, with `learning.enabled` also on — the ablation of whether the fitted bandit posteriors add recovery on top of the hand-typed EV grid. Lost 6/6 before Phases E1/E2; 3 wins, 1 tie, 2 losses after — see Block 2f
 **Report (the star slide of the video).** Real numbers, seed 7, 120-day
 window, read from `report/out/results.json` (`sim/run_sim.py --compare
---seed 7`):
+--seed 7`), with `brain.ev_sets_rung: true` and the post-E2 fit:
 
 ```
                         Baseline      Agent      Agent+EV   Agent+EV+learned
-₹ recovered           ₹88,38,375  ₹1,44,80,534 ₹1,48,33,614   ₹1,16,76,702
-Invoices fully paid           28           42           44             33
-Messages (envelopes)         259           63           59             53
-Avg days to pay (all)       99.7         92.4         91.3           90.3
+₹ recovered           ₹88,38,375  ₹1,44,80,534 ₹1,43,37,457   ₹1,49,67,820
+Invoices fully paid           28           42           42             45
+Messages (envelopes)         259           63           56             56
+Avg days to pay (all)       99.7         92.4         93.5           90.6
 Avg days to pay (matched)   99.4         95.4          —              —      (21 invoices baseline+agent both recovered)
-Escalated to a human           0    47 (18 disp,  46 (18 disp,   43 (15 disp,
-                                     29 rung-4)    28 rung-4)     28 rung-4)
-Not recovered (exceptions)    72           58           56             67
+Escalated to a human           0    47 (18 disp,  50 (18 disp,   46 (18 disp,
+                                     29 rung-4)    32 rung-4)     28 rung-4)
+Not recovered (exceptions)    72           58           58             55
 ```
 
 - **Agent vs baseline:** +₹56,42,158 recovered, 196 fewer messages, wins
   6/6 seeds.
-- **Agent+EV vs agent (the EV ablation):** +₹3,53,079 on seed 7, wins 5/6
-  seeds (seed 2024 loses −₹51,764).
-- **Agent+EV+learned vs agent+EV (the learned ablation):** −₹31,56,911 on
-  seed 7, **loses 0/6 seeds**, mean −₹22,53,175 across all 6 (range
-  −₹31,56,911 to −₹5,16,048). Reported because it is true — see Block 2f
-  and `docs/learning_findings.md`. That arm ships **off**.
+- **Agent+EV vs agent (the EV ablation):** −₹1,43,077 on seed 7, matches or
+  beats the agent on 3/6 seeds (5/6 before Phase E1 — Block 2f explains the
+  drop).
+- **Agent+EV+learned vs agent+EV (the learned ablation):** +₹6,30,362 on
+  seed 7; 3 wins, 1 exact tie, 2 losses across the 6 seeds (reported as
+  4/6, ties counted as wins), mean +₹2,33,093 (range −₹2,28,344 to
+  +₹6,30,362). Before Phases E1/E2: 0/6, mean −₹22,53,175. Against the pre-E1
+  agent+EV arm it is net −₹1,45,296 over the six seeds — see Block 2f and
+  `docs/learning_findings.md`. That arm ships **off**.
 
 The Agent+EV and Agent+EV+learned columns only render when `results.json`
 carries their additive `agent_ev` / `agent_learned` sections.
@@ -942,7 +974,7 @@ revenue-recovery-agent/
 │   ├── learning_data.md       ← GENERATED alongside learned_recovery.yaml: exact training seeds,
 │   │                              row counts, thin-cell flags -- "what did you train on?"
 │   └── learning_findings.md   ← hand-authored analysis: the good_customer/firm finding behind the
-│                                  agent+EV+learned ablation's 6/6 loss, thin-cell/explore-vs-commit
+│                                  agent+EV+learned ablation's pre-E2 6/6 loss and what E1/E2 changed, thin-cell/explore-vs-commit
 │                                  audit, persona-perturbation robustness check
 ├── report/
 │   ├── build_report.py    ← baseline-vs-agent HTML report + exceptions list + buyer panel + multi-seed table
@@ -1021,7 +1053,7 @@ place each to live, rather than being copy-pasted across blocks.
 - **0:00–0:30 — The problem, with numbers.** "Indian SMEs wait 73 days to get paid against a 45-day legal limit. The average SME has ₹3.83 crore stuck over a year. And 40% of India's B2B sales run on credit — that stat is from Razorpay's own blog."
 - **0:30–1:00 — What I built.** The one-liner + the architecture diagram, 20 seconds on the ladder.
 - **1:00–3:30 — Live demo.** Run the batch. Show: the Brain choosing different paths for a 90-score buyer vs a 45-score buyer → one Hinglish message → the Law Engine's interest + tax-cost math on screen → a promise being made, broken, and caught → the REAL email arriving in your inbox → the Samadhaan draft for the deadbeat.
-- **3:30–4:30 — Proof.** The four-arm table (baseline / agent / agent+EV / agent+EV+learned, seed 7): +₹56,42,158 recovered, 196 fewer messages, 6/6 seeds — *and* the learned arm losing 0/6, shown not hidden. Then the exceptions list: every invoice not recovered in the window, with its reason, per invoice. (Honesty is a feature.)
+- **3:30–4:30 — Proof.** The four-arm table (baseline / agent / agent+EV / agent+EV+learned, seed 7): +₹56,42,158 recovered, 196 fewer messages, 6/6 seeds — *and* the learned arm's story told straight: it lost 0/6 until the untested `wait` number was measured, and now draws level (3 wins, 1 tie, 2 losses, roughly break-even against the old best). Then the exceptions list: every invoice not recovered in the window, with its reason, per invoice. (Honesty is a feature.)
 - **4:30–5:00 — Why Razorpay.** "A single vendor can't build the buyer score — Razorpay's network can. Razorpay has the rails and the reminders; this is the brain. Future work: real WhatsApp channel, live RBI rate feed, TReDS integration."
 
 ---

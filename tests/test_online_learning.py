@@ -136,7 +136,7 @@ def test_a_send_tier_update_lands_in_the_nested_cell_not_a_flat_one(online_confi
 def test_update_is_a_noop_for_a_cell_that_was_never_fitted(online_config) -> None:
     learner = learning.OnlineLearner()
     before = learner.snapshot()
-    learner.update("can_pay_but_wont", "soft_nudge", success=True)   # no rung-1 sends there
+    learner.update("high_risk", "payment_plan", success=True)        # never offered, never fitted
     learner.update("good_customer", "human_handoff", success=False)  # no cell at all
     assert learner.snapshot() == before
     assert learner.updates_applied == {"successes": 0, "failures": 0}
@@ -182,7 +182,7 @@ def test_sampling_is_deterministic_for_a_given_rng_seed(online_config) -> None:
 
 def test_sample_returns_none_for_an_absent_cell(online_config) -> None:
     learner = learning.OnlineLearner()
-    assert learner.sample("can_pay_but_wont", "soft_nudge", random.Random("x")) is None
+    assert learner.sample("high_risk", "payment_plan", random.Random("x")) is None
     # human_handoff never gets a cell (post-handoff recovery is unobservable).
     # wait used to be the example here; Phase E2 gave it a fitted cell.
     assert learner.sample("good_customer", "human_handoff", random.Random("x")) is None

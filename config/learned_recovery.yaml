@@ -15,12 +15,15 @@
 #
 # CELL LAYOUT:
 #   recovery.<quadrant>.send.<tier>   -- a buyer-facing message, grouped by the
-#     rung it was DELIVERED at (ladder tier: soft_nudge/firm/legal_facts), NOT
-#     by the soft_nudge/firm/legal_facts label EV nominally selected. The
-#     escalation walk in engine/brain.py overrides that label ~56% of the time
-#     -- see docs/learning_findings.md. Each cell carries delivered_rung.
+#     rung it was DELIVERED at (ladder tier: soft_nudge/firm/legal_facts). With
+#     config/rules.yaml brain.ev_sets_rung: true (Phase E1) the tier EV picked
+#     IS the delivered rung; before it the walk overrode the label ~56% of the
+#     time -- see docs/learning_findings.md. Each cell carries delivered_rung.
 #   recovery.<quadrant>.payment_plan / .counter_settle -- one flat cell; these
 #     map 1:1 from what EV selected to what was executed.
+#   recovery.<quadrant>.wait -- one flat cell (Phase E2): an EV-chosen wait,
+#     one row per wait episode, credited only if no later action claimed the
+#     payment first (the same most-recent rule every other row is judged by).
 #
 # READ BY engine/learning.py, behind config/rules.yaml's learning.enabled
 # switch (ships OFF). recovery_probability(quadrant, "firm") resolves to
@@ -35,7 +38,7 @@
 
 version: 2
 meta:
-  generated: '2026-09-02'
+  generated: '2026-09-23'
   generator: scripts/fit_recovery.py
   arm: agent_ev_explore  (sim/run_sim.py run_agent(explore=True))
   training_seeds: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
@@ -51,140 +54,181 @@ meta:
     2=firm, 3=legal_facts), NOT proposed_action_kind -- see docs/learning_findings.md'
   send_rows_off_ladder: 0
   row_partition:
-    action_rows_seen: 5499
-    excluded_handoff: 1346
+    action_rows_seen: 7299
+    excluded_handoff: 1327
     excluded_right_censored: 0
     excluded_null_quadrant: 0
-    fitted_observations: 4153
+    fitted_observations: 5972
 recovery:
   can_pay_but_wont:
     send:
+      soft_nudge:
+        delivered_rung: 1
+        alpha: 1
+        beta: 19
+        mean: 0.05
+        ci95_width: 0.1751
+        observations: 18
+        successes: 0
+        failures: 18
       firm:
         delivered_rung: 2
-        alpha: 113
-        beta: 294
-        mean: 0.2776
-        ci95_width: 0.0868
-        observations: 405
-        successes: 112
-        failures: 293
+        alpha: 112
+        beta: 274
+        mean: 0.2902
+        ci95_width: 0.0904
+        observations: 384
+        successes: 111
+        failures: 273
       legal_facts:
         delivered_rung: 3
-        alpha: 115
-        beta: 157
-        mean: 0.4228
-        ci95_width: 0.1171
-        observations: 270
-        successes: 114
-        failures: 156
+        alpha: 75
+        beta: 70
+        mean: 0.5172
+        ci95_width: 0.1619
+        observations: 143
+        successes: 74
+        failures: 69
     counter_settle:
-      alpha: 73
-      beta: 165
-      mean: 0.3067
-      ci95_width: 0.1168
-      observations: 236
-      successes: 72
-      failures: 164
+      alpha: 130
+      beta: 298
+      mean: 0.3037
+      ci95_width: 0.087
+      observations: 426
+      successes: 129
+      failures: 297
+    wait:
+      alpha: 1
+      beta: 284
+      mean: 0.0035
+      ci95_width: 0.0128
+      observations: 283
+      successes: 0
+      failures: 283
   cash_flow_problem:
     send:
       soft_nudge:
         delivered_rung: 1
-        alpha: 7
-        beta: 24
-        mean: 0.2258
-        ci95_width: 0.2863
-        observations: 29
-        successes: 6
-        failures: 23
+        alpha: 50
+        beta: 210
+        mean: 0.1923
+        ci95_width: 0.0955
+        observations: 258
+        successes: 49
+        failures: 209
       firm:
         delivered_rung: 2
-        alpha: 202
-        beta: 197
-        mean: 0.5063
-        ci95_width: 0.0979
-        observations: 397
-        successes: 201
-        failures: 196
+        alpha: 160
+        beta: 132
+        mean: 0.5479
+        ci95_width: 0.1139
+        observations: 290
+        successes: 159
+        failures: 131
       legal_facts:
         delivered_rung: 3
-        alpha: 44
-        beta: 13
-        mean: 0.7719
-        ci95_width: 0.2146
-        observations: 55
-        successes: 43
-        failures: 12
+        alpha: 11
+        beta: 8
+        mean: 0.5789
+        ci95_width: 0.4272
+        observations: 17
+        successes: 10
+        failures: 7
     payment_plan:
-      alpha: 167
-      beta: 95
-      mean: 0.6374
-      ci95_width: 0.1161
-      observations: 260
-      successes: 166
-      failures: 94
+      alpha: 209
+      beta: 115
+      mean: 0.6451
+      ci95_width: 0.104
+      observations: 322
+      successes: 208
+      failures: 114
+    wait:
+      alpha: 1
+      beta: 239
+      mean: 0.0042
+      ci95_width: 0.0152
+      observations: 238
+      successes: 0
+      failures: 238
   good_customer:
     send:
       soft_nudge:
         delivered_rung: 1
-        alpha: 31
-        beta: 50
-        mean: 0.3827
-        ci95_width: 0.2098
-        observations: 79
-        successes: 30
-        failures: 49
+        alpha: 215
+        beta: 216
+        mean: 0.4988
+        ci95_width: 0.0943
+        observations: 429
+        successes: 214
+        failures: 215
       firm:
         delivered_rung: 2
-        alpha: 461
-        beta: 289
-        mean: 0.6147
-        ci95_width: 0.0696
-        observations: 748
-        successes: 460
-        failures: 288
+        alpha: 255
+        beta: 186
+        mean: 0.5782
+        ci95_width: 0.092
+        observations: 439
+        successes: 254
+        failures: 185
       legal_facts:
         delivered_rung: 3
-        alpha: 16
-        beta: 20
-        mean: 0.4444
-        ci95_width: 0.3182
-        observations: 34
-        successes: 15
-        failures: 19
+        alpha: 7
+        beta: 17
+        mean: 0.2917
+        ci95_width: 0.3519
+        observations: 22
+        successes: 6
+        failures: 16
     payment_plan:
-      alpha: 251
-      beta: 177
-      mean: 0.5864
-      ci95_width: 0.0932
-      observations: 426
-      successes: 250
-      failures: 176
+      alpha: 282
+      beta: 213
+      mean: 0.5697
+      ci95_width: 0.0871
+      observations: 493
+      successes: 281
+      failures: 212
+    wait:
+      alpha: 1
+      beta: 374
+      mean: 0.0027
+      ci95_width: 0.0097
+      observations: 373
+      successes: 0
+      failures: 373
   high_risk:
     send:
       soft_nudge:
         delivered_rung: 1
-        alpha: 2
-        beta: 9
-        mean: 0.1818
-        ci95_width: 0.4198
-        observations: 9
-        successes: 1
-        failures: 8
+        alpha: 1
+        beta: 7
+        mean: 0.125
+        ci95_width: 0.406
+        observations: 6
+        successes: 0
+        failures: 6
       firm:
         delivered_rung: 2
-        alpha: 115
-        beta: 545
-        mean: 0.1742
-        ci95_width: 0.0578
-        observations: 658
-        successes: 114
-        failures: 544
+        alpha: 111
+        beta: 552
+        mean: 0.1674
+        ci95_width: 0.0568
+        observations: 661
+        successes: 110
+        failures: 551
       legal_facts:
         delivered_rung: 3
         alpha: 119
-        beta: 430
-        mean: 0.2168
-        ci95_width: 0.0688
-        observations: 547
+        beta: 434
+        mean: 0.2152
+        ci95_width: 0.0684
+        observations: 551
         successes: 118
-        failures: 429
+        failures: 433
+    wait:
+      alpha: 1
+      beta: 620
+      mean: 0.0016
+      ci95_width: 0.0059
+      observations: 619
+      successes: 0
+      failures: 619

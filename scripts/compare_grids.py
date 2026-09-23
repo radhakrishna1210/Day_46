@@ -10,8 +10,8 @@ module reads config from -- and reports, per (quadrant, action) cell:
     and a MOST-WRONG SCORE = |delta_points| * (observations / ci95_width)
 
 The score is deliberately not just |delta|: a big swing on a thin, wide-CI
-cell (the rung-1 SEND cells docs/learning_findings.md's "Thin SEND cells at
-rung 1" section already flags -- n=9-79) is noise dressed as a finding, while
+cell (n < THIN_OBS, listed in docs/learning_data.md) is noise dressed as a
+finding, while
 a smaller swing backed by hundreds of observations and a tight interval is the
 one worth paying attention to. Weighting by observations/ci95_width makes a
 well-fitted, large delta rank above a big-but-shaky one without hiding either.
@@ -59,21 +59,19 @@ STRUCTURALLY_UNFITTED: frozenset[str] = frozenset({
     neg.HUMAN_HANDOFF, neg.LEGAL_ESCALATION,
 })
 
-#: (quadrant, action) cells docs/learning_findings.md's "Thin SEND cells at
-#: rung 1" section already names and explains (n=9-79, ci95_width 0.21-0.42).
-#: Excluded from the "most-wrong" ranking below -- restating a delta on a cell
-#: that section already covers would not be a new finding.
-ALREADY_FLAGGED_THIN: frozenset[tuple[str, str]] = frozenset({
-    ("good_customer", neg.SOFT_NUDGE),
-    ("cash_flow_problem", neg.SOFT_NUDGE),
-    ("high_risk", neg.SOFT_NUDGE),
-})
+#: docs/learning_findings.md's headline example since Phase E2: the cell whose
+#: hand-typed value (60%) was never tested until E2 made waits observable, and
+#: which the pre-E2 6/6 agent+EV+learned loss traced back to. It is also the
+#: highest-scoring cell in the grid -- see that file for the full story.
+FEATURED_CELL: tuple[str, str] = ("good_customer", neg.WAIT)
 
-#: docs/learning_findings.md's headline example: the single best-fitted cell
-#: in the file (n=748, the file's narrowest ci95_width) also carries the
-#: largest score of any cell -- see that file for the full story of what this
-#: delta explains.
-FEATURED_CELL: tuple[str, str] = ("good_customer", neg.FIRM)
+
+def is_thin(row: dict[str, Any]) -> bool:
+    """A fitted cell with fewer than THIN_OBS observations. Decided from the
+    data, not a hand-kept list: before Phase E1 the thin cells were the rung-1
+    sends (the walk rarely stopped at rung 1); after it they are different
+    cells, and a hard-coded list would silently go stale on every re-fit."""
+    return row["observations"] is not None and row["observations"] < THIN_OBS
 
 
 def _flatten_learned(recovery: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -125,9 +123,7 @@ def build_rows() -> list[dict[str, Any]]:
                     "score": abs(delta) * (obs / ci if ci else 0.0),
                 })
                 if obs < THIN_OBS:
-                    row["note"] = f"thin (n<{THIN_OBS})"
-                if (quadrant, action_kind) in ALREADY_FLAGGED_THIN:
-                    row["note"] = "thin -- already flagged, docs/learning_findings.md"
+                    row["note"] = f"thin (n<{THIN_OBS}) -- not ranked"
                 if (quadrant, action_kind) == FEATURED_CELL:
                     row["note"] = (row["note"] + "; " if row["note"] else "") + "FEATURED PRIMARY EXAMPLE"
             rows.append(row)
@@ -136,10 +132,9 @@ def build_rows() -> list[dict[str, Any]]:
 
 def ranked_most_wrong(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Every scoreable cell (a learned number exists), best-fitted-and-most-
-    wrong first, EXCLUDING the already-flagged thin cells -- those have their
-    own explanation on file and restating them here would not be a new one."""
-    candidates = [r for r in rows if r["score"] is not None
-                 and (r["quadrant"], r["action_kind"]) not in ALREADY_FLAGGED_THIN]
+    wrong first, EXCLUDING thin cells (n < THIN_OBS) -- a big delta on a thin
+    cell is noise, and docs/learning_data.md already lists them as thin."""
+    candidates = [r for r in rows if r["score"] is not None and not is_thin(r)]
     return sorted(candidates, key=lambda r: -r["score"])
 
 
@@ -178,7 +173,7 @@ def main() -> int:
 
     ranking = ranked_most_wrong(rows)
     print(f"\nMost-wrong cells, ranked by |delta| x (observations / ci95_width), "
-          f"excluding cells docs/learning_findings.md already flags as thin:\n")
+          f"excluding thin cells (n<{THIN_OBS}):\n")
     for i, r in enumerate(ranking[:args.top], start=1):
         featured = " <-- FEATURED PRIMARY EXAMPLE" if (r["quadrant"], r["action_kind"]) == FEATURED_CELL else ""
         print(f"  #{i}  {r['quadrant']:<18} {r['action_kind']:<15} "

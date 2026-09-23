@@ -1,5 +1,13 @@
 # Demo runbook
 
+> **Stale since Phases E1 + E2 (2026-09-23).** The captured output and "the
+> four numbers" below were recorded before `brain.ev_sets_rung` and the `wait`
+> re-fit. Baseline and plain-agent figures are unchanged; the agent+EV and
+> agent+EV+learned figures, and their 5/6 / 0/6 win rates, are not. Current
+> numbers: `report/out/results.json`, README's Headline numbers, and
+> `docs/learning_findings.md`'s first section. Re-capture this runbook's output
+> before recording anything from it.
+
 Exact commands for the live demo/video, the output each one actually
 produces (captured from real runs against this repo on 2026-09-04, not
 guessed), and the four numbers to say out loud. Re-running is

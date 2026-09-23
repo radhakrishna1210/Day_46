@@ -23,9 +23,9 @@ def test_build_rows_covers_every_quadrant_action_pair_exactly_once() -> None:
 
 
 def test_structurally_unfitted_actions_never_score() -> None:
-    """wait / human_handoff / legal_escalation have no learned cell on ANY
-    quadrant, on principle (see the module docstring) -- not an accident of
-    what happened to get observed this fit."""
+    """human_handoff / legal_escalation have no learned cell on ANY quadrant,
+    on principle (see the module docstring) -- not an accident of what
+    happened to get observed this fit."""
     rows = cg.build_rows()
     for r in rows:
         if r["action_kind"] in cg.STRUCTURALLY_UNFITTED:
@@ -34,16 +34,32 @@ def test_structurally_unfitted_actions_never_score() -> None:
             assert "structurally unmeasured" in r["note"]
 
 
-def test_featured_cell_is_good_customer_firm_and_is_the_top_score() -> None:
+def test_wait_is_fitted_on_every_quadrant_since_phase_e2() -> None:
+    """Before E2 wait was structurally unmeasured -- no attributable row, so its
+    hand-typed value was never tested. E2 records an EV-chosen wait, so every
+    quadrant now has a fitted, well-observed wait cell."""
+    from engine import negotiation as neg
+    assert neg.WAIT not in cg.STRUCTURALLY_UNFITTED
+    waits = [r for r in cg.build_rows() if r["action_kind"] == neg.WAIT]
+    assert len(waits) == 4
+    for r in waits:
+        assert r["learned_pct"] is not None and r["observations"] >= cg.THIN_OBS
+
+
+def test_featured_cell_is_good_customer_wait_and_is_the_top_score() -> None:
+    """The cell the pre-E2 6/6 loss traced back to: hand-typed 60%, never
+    tested until E2 -- and, once measured, the single most-wrong cell in the
+    grid. In this simulator no payment ever lands behind a wait (money arrives
+    only after a message or a kept promise), so the fitted mean sits at the
+    Beta(1,1) prior's floor."""
     rows = cg.build_rows()
     featured = next(r for r in rows
                     if (r["quadrant"], r["action_kind"]) == cg.FEATURED_CELL)
-    assert featured["quadrant"] == "good_customer" and featured["action_kind"] == "firm"
+    assert featured["quadrant"] == "good_customer" and featured["action_kind"] == "wait"
     assert "FEATURED PRIMARY EXAMPLE" in featured["note"]
-    assert featured["hand_typed_pct"] == 88.0
-    # n=748, the file's tightest ci95_width -- the best-fitted cell there is.
-    assert featured["observations"] == 748
-    assert featured["ci95_width"] < 0.08
+    assert featured["hand_typed_pct"] == 60.0
+    assert featured["learned_pct"] < 1.0
+    assert featured["observations"] >= cg.THIN_OBS
 
     scored = [r for r in rows if r["score"] is not None]
     assert max(scored, key=lambda r: r["score"]) is featured, (
@@ -52,42 +68,43 @@ def test_featured_cell_is_good_customer_firm_and_is_the_top_score() -> None:
     )
 
 
-def test_already_flagged_thin_cells_are_excluded_from_the_ranking() -> None:
-    ranking = cg.ranked_most_wrong(cg.build_rows())
-    ranked_keys = {(r["quadrant"], r["action_kind"]) for r in ranking}
-    assert ranked_keys.isdisjoint(cg.ALREADY_FLAGGED_THIN)
+def test_thin_cells_are_excluded_from_the_ranking() -> None:
+    rows = cg.build_rows()
+    thin = {(r["quadrant"], r["action_kind"]) for r in rows if cg.is_thin(r)}
+    assert thin, "fixture: the current fit has thin cells (see docs/learning_data.md)"
+    ranked_keys = {(r["quadrant"], r["action_kind"])
+                   for r in cg.ranked_most_wrong(rows)}
+    assert ranked_keys.isdisjoint(thin)
 
 
-def test_the_other_two_most_wrong_cells_after_the_featured_one() -> None:
-    """Locks in the Day 9 finding: after good_customer/firm (the featured
-    cell) and the three already-flagged thin soft_nudge cells, the next two
-    most-wrong cells by |delta| x (observations / ci95_width) are
-    good_customer/payment_plan and can_pay_but_wont/firm -- both well-fitted
-    (n>400, ci95_width<0.1), not thin. Re-run scripts/fit_recovery.py and this
-    may need updating; that is the point of pinning it."""
+def test_the_most_wrong_cells_are_the_four_wait_cells_then_good_customer_firm() -> None:
+    """Locks in the Phase E2 finding: once measured, every quadrant's wait cell
+    is further from its hand-typed value, with more confidence, than any other
+    cell -- and good_customer/firm (the pre-E2 featured cell) is next. Re-run
+    scripts/fit_recovery.py and this may need updating; that is the point of
+    pinning it."""
     ranking = cg.ranked_most_wrong(cg.build_rows())
-    top_three = [(r["quadrant"], r["action_kind"]) for r in ranking[:3]]
-    assert top_three == [
-        ("good_customer", "firm"),
-        ("good_customer", "payment_plan"),
-        ("can_pay_but_wont", "firm"),
-    ]
+    top_five = [(r["quadrant"], r["action_kind"]) for r in ranking[:5]]
+    assert top_five[0] == ("good_customer", "wait")
+    assert {q for q, a in top_five[:4]} == {
+        "good_customer", "cash_flow_problem", "can_pay_but_wont", "high_risk"}
+    assert all(a == "wait" for _q, a in top_five[:4])
+    assert top_five[4] == ("good_customer", "firm")
 
 
 def test_a_missing_learned_cell_has_no_score_and_is_not_ranked() -> None:
-    """can_pay_but_wont has no rung-1 (soft_nudge) sends in training at all
-    (docs/learning_findings.md) -- distinct from a THIN cell, which has some
-    observations but few. This one has none, and must not silently read as a
-    delta of zero."""
+    """high_risk never offers payment_plan, so it is never executed and has no
+    learned cell -- distinct from a THIN cell, which has some observations but
+    few. It must not silently read as a delta of zero."""
     rows = cg.build_rows()
     row = next(r for r in rows
-              if r["quadrant"] == "can_pay_but_wont" and r["action_kind"] == "soft_nudge")
+              if r["quadrant"] == "high_risk" and r["action_kind"] == "payment_plan")
     assert row["score"] is None
     assert row["learned_pct"] is None
     assert "no learned cell" in row["note"]
 
     ranking = cg.ranked_most_wrong(rows)
-    assert ("can_pay_but_wont", "soft_nudge") not in {
+    assert ("high_risk", "payment_plan") not in {
         (r["quadrant"], r["action_kind"]) for r in ranking}
 
 

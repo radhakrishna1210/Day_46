@@ -56,9 +56,10 @@ THE FIT, exactly as specified:
     visibly, honestly uncertain rather than silently absent.
   * mean       = alpha / (alpha + beta)  (the posterior mean)
   * ci95_width = width of the 95% central credible interval of Beta(alpha,
-    beta). Wide == thin cell == do not trust the mean yet. The rung-1
-    (soft_nudge) SEND cells are thin (n = 9-79) because the escalation walk
-    rarely stops at rung 1; their ci95_width is what says so.
+    beta). Wide == thin cell == do not trust the mean yet. Before Phase E1
+    the rung-1 (soft_nudge) SEND cells were the thin ones (n = 9-79, the walk
+    rarely stopped at rung 1); which cells are thin now is listed in
+    docs/learning_data.md.
 
 WHAT IS EXCLUDED BEFORE FITTING, and why:
 
@@ -549,11 +550,10 @@ prior a cell of zero observations reads as mean 0.500, CI width ~0.95.
 
 ### Thin cells (n below {THIN_OBS})
 
-The escalation walk rarely stops at rung 1, so the `soft_nudge` (rung-1
-delivery) SEND cells are thin. Their point estimates sit near the prior; the
-`ci95_width` is what says so. A quadrant with **no** rung-1 sends at all has no
-`soft_nudge` cell -- `engine/learning.py` falls back to the hand-typed grid
-value for it (logged once).
+A thin cell's point estimate sits near the prior; its `ci95_width` is what
+says so. A (quadrant, action) pair never executed in training has no cell at
+all -- `engine/learning.py` falls back to the hand-typed grid value for it
+(logged once).
 
 {chr(10).join(_thin_cell_lines(fitted["recovery"]))}
 

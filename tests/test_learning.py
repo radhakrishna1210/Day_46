@@ -452,13 +452,19 @@ def test_brain_decide_names_the_law_ceiling_when_it_blocks_the_bandit(learning_o
 
 
 def test_audit_method_and_observations_resolve_cells(learning_on: dict) -> None:
-    # good_customer / firm is the workhorse SEND tier: n=748, fitted
+    # good_customer / firm is the workhorse SEND tier -- read the count off the
+    # fitted file rather than pinning it, so a re-fit only moves one place.
+    firm = learned_recovery()["recovery"]["good_customer"]["send"]["firm"]
     assert learning.audit_method("good_customer", "firm") == "posterior_mean"
-    assert learning.observations("good_customer", "firm") == 748
+    assert learning.observations("good_customer", "firm") == firm["observations"] > 0
+    # Phase E2: wait is a fitted cell now, not a hand-typed fallback
+    assert learning.audit_method("good_customer", "wait") == "posterior_mean"
+    assert learning.observations("good_customer", "wait") > 0
     # an action the fit never covers, and the None cases
     assert learning.audit_method("good_customer", "human_handoff") == "hardcoded"
     assert learning.observations("good_customer", None) is None
-    assert learning.observations("can_pay_but_wont", "soft_nudge") is None   # absent tier
+    # high_risk is never offered a payment plan, so it never gets that cell
+    assert learning.observations("high_risk", "payment_plan") is None
 
 
 def test_audit_method_is_hardcoded_when_learning_ships_off() -> None:

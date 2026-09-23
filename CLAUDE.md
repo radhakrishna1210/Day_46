@@ -52,6 +52,8 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
   learning.enabled: false, brain.ev_mode: off); a fresh clone reproduces
   the pre-learning agent exactly (tests/test_run_sim.py's pinned
   pre-Phase-3 snapshot). Full mechanics: ARCHITECTURE.md Block 2f.
+  Since E2 the fit includes a `wait` cell from EV-chosen waits; since E1
+  (brain.ev_sets_rung) EV's chosen SEND tier is the rung actually sent.
 
 ## Code conventions
 - Python 3.11+, type hints on public functions, small modules per
@@ -65,7 +67,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - Log lines: human-readable, one action per line, no emoji.
 
 ## Commands
-- Run the live single-pass agent:  python main.py --seed 42   (seed 42 = the demo_runbook's live-agent seed)
+- Run the live single-pass agent:  python main.py --seed 7   (seed 7 = the demo_runbook's seed for every segment)
 - Run the 4-arm comparison:         python sim/run_sim.py --compare --seed 7 --extra-seeds 42,13,99,2024,555 --days 120
 - Regenerate fake data:             python data/generate.py --seed 7
 - Tests:                            pytest -q   (1032 passed)
@@ -407,28 +409,43 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       PROJECT_WALKTHROUGH.md S16 now says the audit figures are ROWS over 120
       days, not distinct invoices (5136 handoff rows <-> 47 real escalations).
       Artifacts regenerated via scripts/regen.py; 1032 tests still pass.
-- [ ] 12 - Final check + submit
+- [ ] 12 - Final check + submit (the Sept 5 deadline has passed; the project
+      is now in a post-deadline enhancement phase)
+- [x] E1 - EV sets the delivered rung (config/rules.yaml brain.ev_sets_rung:
+      true, only read on the ev_mode path). engine/brain.py
+      ev_send_candidates(): the walk's own tier, or a GENTLER tier from the
+      pacing floor that still has budget and has cleared its spacing -- never
+      higher. Label/execution gap 56% -> 0 of 3,218 training SENDs. false
+      reproduces pre-E1 exactly (verified: all 24 seed x arm recovered figures
+      identical to the pre-E1 results.json).
+- [x] E2 - wait measured. sim/run_sim.py records an EV-chosen wait, one ledger
+      row per wait episode (engine/outcomes.py wait_episode_open()); rule waits
+      are still never recorded. Re-fit on the same 30 training seeds gives a
+      recovery.<quadrant>.wait cell: 0 of 1,513 episodes paid -- true BY
+      CONSTRUCTION (the simulator has no unprompted payments), not a claim
+      about real buyers. scripts/compare_grids.py: wait no longer
+      "structurally unmeasured"; thin cells now decided from the data.
 Notes for next session: (keep 3-5 bullets max, prune old ones)
-- P8 through P16 committed as of the demo-build tag; the dashboard + submission
-  packaging (Phase 11) + the hardening pass (11b) are on main now. Only the
-  demo video and Phase 12 (final read-through + submit form) remain.
 - Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
-  (sim -> report -> dashboard, in order, ~5 min, no commit). Anything else --
-  pytest, main.py -- run against the repo between the sim and the report
-  silently builds the report against the wrong audit_log.jsonl.
-- SHIPS OFF, verified live this freeze: config/rules.yaml's
-  learning.enabled: false + brain.ev_mode: off is the shipped default; 1032
-  tests pass (scipy now in requirements.txt, so a fresh clone gets the whole
-  suite, not a silently-skipped subset). To demo the learning layer live:
-  flip both to true/on (learning.mode: offline = posterior mean, online =
-  Thompson sampling + in-run updates, dumps
-  report/out/learned_posteriors_final.yaml).
-- THE HONEST HEADLINE, all three numbers together, everywhere a judge would
-  look: agent beats baseline 6/6 seeds; agent+EV beats agent 5/6 seeds (seed
-  2024 the one loss); agent+EV+learned LOSES to agent+EV 6/6 seeds, root-
-  caused to one mechanism (good_customer/firm vs wait -- see
-  docs/learning_findings.md) and confirmed robust to a +/-10% persona
-  perturbation (same 6/6 loss, same mechanism). None of the three hidden.
-- Remaining before submission: Phase 11's demo video should show the
-  --compare output including the honest 4-arm result and the report's
-  "Learned decisions" section; Phase 12 is the final read-through + submit.
+  (sim -> report -> dashboard, in order, no commit). Anything else -- pytest,
+  main.py -- run against the repo between the sim and the report silently
+  builds the report against the wrong audit_log.jsonl. On this machine a full
+  --compare or fit_recovery run takes 15-30 min and pytest ~15 min; run them
+  one at a time (a concurrent run was killed for low memory).
+- SHIPS OFF: config/rules.yaml's learning.enabled: false + brain.ev_mode: off
+  is the shipped default, so E1/E2 change nothing a fresh clone does by
+  default. Python on this machine: C:/Users/thete/AppData/Local/Programs/
+  Python/Python312/python.exe (installed 2026-09-23, not on Git Bash's PATH).
+- THE HONEST HEADLINE after E1/E2, all numbers together: agent beats baseline
+  6/6; agent+EV matches or beats agent 3/6 (was 5/6 -- E1 exposed the same
+  untested-wait flaw in the hand-typed grid: high_risk firm, promise-
+  penalised, falls below wait's 5%); agent+EV+learned matches or beats
+  agent+EV 4/6 = 3 wins + 1 exact tie + 2 losses, mean +Rs 2,33,093 (was 0/6).
+  Against the pre-E1 best arm the learned arm is net -Rs 1,45,296 over six
+  seeds: a correctness fix, roughly break-even on rupees. See
+  docs/learning_findings.md's first section.
+- Candidate next steps (none started): organic/unprompted payments in the
+  simulator (without them a measured wait is zero by construction); re-tune
+  the hand-typed wait values toward the measured ones; the demo video, if
+  still wanted, needs its runbook output recaptured (docs/demo_runbook.md
+  predates E1/E2).

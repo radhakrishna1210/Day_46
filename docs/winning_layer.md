@@ -111,7 +111,12 @@ covers; anything not named in this section at all is genuinely untouched.
   confirmed robust to a persona perturbation. Built, fitted, evaluated, and
   reported as it came out -- see `docs/learning_findings.md` and
   `docs/learning_data.md`. A fresh clone reproduces the pre-learning agent
-  exactly (pinned snapshot test).
+  exactly (pinned snapshot test). **Post-deadline (Phases E1 + E2):** EV's
+  chosen SEND tier now sets the rung sent, and `wait` is measured; the learned
+  arm now matches or beats the hand-typed grid on 4/6 seeds (3 wins, 1 tie),
+  while the hand-typed agent+EV arm fell from 5/6 to 3/6 against the plain
+  agent -- roughly break-even overall. See `docs/learning_findings.md`'s
+  first section.
 
 **PARTIALLY BUILT -- Cash-Flow Intelligence (Enhancement 3):** Phase 1 built
 the *reasoning* half and deliberately not the *data* half. What exists: a
@@ -130,8 +135,9 @@ only behind `brain.ev_mode`, off by default). `P(recover)` (Phase 2) started
 as a hand-typed assumption grid; Phases 8-14 later fit a real
 recovery-probability *model* (`engine/learning.py`, a contextual bandit
 trained entirely on simulated exploration data, behind `learning.enabled`,
-off by default) and wired it into a fourth ablation arm -- which honestly
-*loses* to the hand-typed grid on 0/6 benchmark seeds (`docs/learning_findings.md`).
+off by default) and wired it into a fourth ablation arm -- which first
+*lost* to the hand-typed grid on 0/6 benchmark seeds, and after Phases E1/E2
+matches or beats it on 4/6 (`docs/learning_findings.md`).
 Payment Propensity Prediction (Enhancement 4) -- a model trained on *real*
 cross-vendor payment behaviour -- remains unbuilt: that needs data a
 standalone tool cannot see.

@@ -5,9 +5,150 @@ posteriors (`scripts/fit_recovery.py` → `config/learned_recovery.yaml`).
 Provenance -- seeds, counts, dates -- lives in `docs/learning_data.md`; this
 file is the "what should a reader be careful about" companion.
 
+> **Read the first section first.** Phases E1 and E2 (2026-09-23) acted on the
+> two limitations this file used to end on -- the label/execution gap and the
+> unmeasured `wait`. Everything below that first section is the pre-E1/E2
+> analysis, kept as the record of how those two problems were found; where a
+> number in it is superseded, the first section says so.
+
 ---
 
-## The label / execution gap in SEND actions  (known limitation)
+## Phases E1 + E2: EV sets the rung, and `wait` is measured  (current)
+
+### What changed
+
+- **E1 -- `config/rules.yaml` `brain.ev_sets_rung: true`.** On the EV path, the
+  SEND tier EV picks (`soft_nudge` / `firm` / `legal_facts`) is now the rung
+  delivered. The escalation walk's rung is the most EV may send today; EV may
+  pick it or a *gentler* tier (from the pacing band's start rung up) that still
+  has message budget and has cleared its own spacing -- never a higher one
+  (`engine/brain.py` `ev_send_candidates()`). The law ceiling and every stop
+  rule still run first. `false` reproduces the pre-E1 behaviour exactly.
+- **E2 -- an EV-chosen wait is a recorded action.** `sim/run_sim.py` writes it
+  to the outcome ledger once per wait episode (consecutive EV waits with no
+  action or payment between them), judged by the same most-recent-action rule
+  as every send. Rule waits (spacing, weekends, an active promise) are still
+  never recorded. `scripts/fit_recovery.py` fits a flat
+  `recovery.<quadrant>.wait` cell from those rows.
+
+### Checks that it did what it says
+
+- **Legacy reproduction.** With `ev_sets_rung: false` and the pre-E2 fitted
+  file, a full `--compare` over all 6 benchmark seeds reproduced the committed
+  `results.json` to the paisa: 24 of 24 seed-by-arm recovered figures
+  identical, same 6/6, 5/6, 0/6 summary. Recording waits changes no decision.
+- **The label/execution gap is closed in training.** Re-fit on the same 30
+  training seeds: **0 of 3,218** fitted SEND rows were delivered at a rung
+  other than the tier EV picked (was 1,818 of 3,231, 56%).
+- **The thin rung-1 cells filled in**, because EV can now actually choose a
+  rung-1 message: `good_customer`/`soft_nudge` n=429 (was 79),
+  `cash_flow_problem`/`soft_nudge` n=258 (was 29). The thin cells are now
+  different ones (n<100: `can_pay_but_wont`/`soft_nudge` 18,
+  `cash_flow_problem`/`legal_facts` 17, `good_customer`/`legal_facts` 22,
+  `high_risk`/`soft_nudge` 6) -- listed in `docs/learning_data.md`.
+
+### What `wait` measured -- and what that does and does not mean
+
+| Quadrant | Hand-typed `wait` | Measured | Wait episodes |
+| --- | ---: | ---: | ---: |
+| `good_customer` | 60% | 0.27% | 0 paid of 373 |
+| `cash_flow_problem` | 20% | 0.42% | 0 paid of 238 |
+| `can_pay_but_wont` | 10% | 0.35% | 0 paid of 283 |
+| `high_risk` | 5% | 0.16% | 0 paid of 619 |
+
+**Not one of 1,513 wait episodes was followed by a payment it could be
+credited with.** The fitted means are just the Beta(1, 1) prior's floor. Once
+measured, all four `wait` cells are the four most-wrong cells in the grid
+(`scripts/compare_grids.py`), ahead of `good_customer`/`firm`.
+
+This is **true by construction of this simulator, and says nothing about real
+buyers.** In `sim/run_sim.py` money only ever arrives as a persona's same-day
+reaction to a message, or on the date of a promise the buyer made (during
+which a rule wait, not an EV wait, is in force). There is no organic,
+unprompted payment in this world, so an EV wait cannot recover anything here.
+Real good customers do sometimes pay without a reminder; a simulator that
+modelled that would measure a non-zero `wait`, and the right number could
+well sit between 0% and 60%. What E2 establishes is narrower and still worth
+having: the 60% was never grounded in anything, and in the one world this
+project can measure, it is wrong by the whole of its value.
+
+### The benchmark result (6 seeds, 120 days, seed 7 primary)
+
+Baseline and the plain agent are unchanged on every seed -- neither uses EV.
+
+| Seed | agent+EV before → after | agent+EV+learned after | learned − agent+EV (both after) |
+| --- | --- | ---: | ---: |
+| 7 | ₹1,48,33,614 → ₹1,43,37,457 | ₹1,49,67,820 | +₹6,30,362 |
+| 42 | ₹1,69,60,597 → ₹1,65,78,729 | ₹1,69,60,597 | +₹3,81,868 |
+| 13 | ₹1,71,51,487 → ₹1,69,94,831 | ₹1,67,66,487 | −₹2,28,344 |
+| 99 | ₹1,50,04,435 → ₹1,46,52,030 | ₹1,52,72,208 | +₹6,20,177 |
+| 2024 | ₹1,46,89,088 → ₹1,45,32,318 | ₹1,45,26,815 | −₹5,503 |
+| 555 | ₹1,17,22,681 → ₹1,17,22,681 | ₹1,17,22,681 | ₹0 (exact tie) |
+
+- **The learned arm's 6/6 loss is gone.** agent+EV+learned now matches or
+  beats agent+EV on 4 of 6 seeds -- **3 wins, 1 exact tie (seed 555), 2
+  losses** (`multi_seed_summary()` counts a tie as a win, `>=`) -- mean
+  **+₹2,33,093**, range −₹2,28,344 to +₹6,30,362. Before: 0/6, mean
+  −₹22,53,175.
+- **But E1 cost the hand-typed agent+EV arm money** on 5 of 6 seeds (seed 555
+  unchanged), −₹1,56,655 to −₹4,96,156. agent+EV now beats the plain agent on
+  **3/6** seeds, down from 5/6. So part of the learned arm's turnaround is the
+  arm it is compared against getting worse, not only the learned arm getting
+  better.
+- **Against the best configuration that existed before** (pre-E1 agent+EV),
+  the new agent+EV+learned is +₹1,34,205, ₹0, −₹3,85,000, +₹2,67,772,
+  −₹1,62,273 and ₹0 on seeds 7, 42, 13, 99, 2024, 555 -- **net −₹1,45,296
+  across all six**. The honest summary: E1 + E2 fix a real inconsistency and
+  remove the learned-arm loss, and on rupees they come out roughly break-even
+  with the previous best, not ahead of it.
+
+### Why E1 hurt the hand-typed arm -- the same flaw, one layer down
+
+Instrumented replay, seed 7, agent+EV with `ev_sets_rung` off vs on (same
+world, same everything else), counting executed actions by quadrant and rung
+from the outcome ledger:
+
+| Quadrant / rung | Off: sends, recovered | On: sends, recovered |
+| --- | --- | --- |
+| `high_risk` rung 2 | 7 sends, ₹1,68,199 | **0 sends, 5 EV waits**, ₹0 |
+| `can_pay_but_wont` rung 2 | 35 sends, ₹16,60,820 | 28 sends + 4 EV waits, ₹14,66,306 |
+| everything else | identical or near-identical | |
+
+The mechanism, read off those decisions:
+
+- Before E1, a `high_risk` buyer whose walk sat at rung 2 was scored as
+  `legal_facts` (hand-typed 20%) -- a label, because a rung-2 firm message was
+  what actually went out. `legal_facts` is **exempt** from
+  `negotiation.promise_adjustment` (−4 points per broken promise), so that
+  label always beat `wait`'s hand-typed 5%.
+- Under E1 the rung-2 message is scored as what it is: `firm`, hand-typed 15%,
+  **minus 4 points per broken promise**. At 3 broken promises that is 3%,
+  below `wait`'s untested 5% -- so EV stops messaging the buyer.
+- That is the same shape as the pre-E2 learned-arm loss (a promise-penalised
+  send falling below an untested `wait` value), now surfacing in the
+  hand-typed grid because the label no longer hides it. The learned arm does
+  not have the problem, because its `wait` is the measured ~0.2%.
+
+Verified on seed 7 only. The other five seeds move in the same arm and the
+same direction; they were not separately instrumented.
+
+### What this leaves open
+
+- **The hand-typed `wait` values are now known to be wrong in this simulator**
+  but are still what the agent+EV arm uses. Lowering them would be tuning the
+  hand-typed grid toward a measured number -- a reasonable next step, but a
+  policy change, not done here.
+- **The simulator has no unprompted payments**, which is what makes a measured
+  `wait` collapse to zero. Modelling them (e.g. a per-persona base payment
+  rate) would make every `wait` number, and the whole agent-vs-baseline gap,
+  more realistic. That is README's "delayed buyer reactions" / realism item.
+- **Six seeds is a small sample.** The learned-arm result is 3 wins, 1 tie,
+  2 losses with a range crossing zero -- read it as "no longer a systematic
+  loss", not as a demonstrated win.
+
+---
+
+## The label / execution gap in SEND actions  (pre-E1 -- closed by E1, see above)
 
 `engine/negotiation.py`'s action space distinguishes `soft_nudge`, `firm` and
 `legal_facts` as separate SEND actions, and the EV model selects among them.
@@ -67,7 +208,7 @@ recorded here only as a known direction.
 
 ---
 
-## Thin SEND cells at rung 1
+## Thin SEND cells at rung 1  (pre-E1 fit; rung 1 is well-sampled now -- see above)
 
 The escalation walk rarely stops at rung 1, so the `soft_nudge` (rung-1
 delivery) cells are thin: n ranges from 9 (`high_risk`) to 79
@@ -95,7 +236,7 @@ applies to every cell here, and doubly to the small ones.
 
 ---
 
-## The `good_customer`/`firm` cell, and the Day 8 6/6 loss
+## The `good_customer`/`firm` cell, and the Day 8 6/6 loss  (pre-E1/E2 fit; the loss no longer reproduces -- see above)
 
 `scripts/compare_grids.py` ranks every fitted cell by
 `|hand-typed - fitted mean|` weighted by `observations / ci95_width` -- a big
@@ -152,7 +293,7 @@ is -- not reframed, not hedged into a tie.
 
 ---
 
-## `wait` is structurally unmeasured -- a real gap, not a bug
+## `wait` is structurally unmeasured -- a real gap, not a bug  (pre-E2 -- closed by E2, see above)
 
 Every quadrant's `wait` row has no learned cell, ever, and never will under
 the current simulator. This is **not** a data gap `scripts/fit_recovery.py`

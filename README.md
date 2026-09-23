@@ -55,27 +55,32 @@ directly from `report/out/results.json`.
 
 | Metric | Baseline | Agent | Agent + EV | Agent + EV + learned |
 |---|---|---|---|---|
-| Recovered | ₹88,38,375 | **₹1,44,80,534** | ₹1,48,33,614 | ₹1,16,76,702 |
-| Invoices fully paid | 28 | 42 | 44 | 33 |
-| Messages sent (envelopes) | 259 | 63 | 59 | 53 |
+| Recovered | ₹88,38,375 | **₹1,44,80,534** | ₹1,43,37,457 | ₹1,49,67,820 |
+| Invoices fully paid | 28 | 42 | 42 | 45 |
+| Messages sent (envelopes) | 259 | 63 | 56 | 56 |
 | Avg days to pay (matched set — 21 invoices baseline + agent both recovered) | 99.4 | **95.4** | — | — |
-| Escalated to a human | 0 | 47 (18 disputed, 29 rung-4) | 46 | 43 |
-| Not recovered (full exceptions list, each with a reason) | 72 | 58 | 56 | 67 |
+| Escalated to a human | 0 | 47 (18 disputed, 29 rung-4) | 50 | 46 |
+| Not recovered (full exceptions list, each with a reason) | 72 | 58 | 58 | 55 |
 
 - **The agent recovered ₹56,42,158 more than the baseline** while sending **196
   fewer messages** — and wins on rupees recovered in **6 of 6** seeds
   (7, 42, 13, 99, 2024, 555) and on matched-set days-to-pay in **6 of 6**.
 - **The expected-value negotiation layer** (`brain.ev_mode`, off by default)
-  adds a further **₹3,53,079** on seed 7 and wins on **5 of 6** seeds — seed
-  2024 loses −₹51,764, reported alongside the five wins.
+  matches or beats the plain agent on **3 of 6** seeds (seed 7: −₹1,43,077).
+  Before Phase E1 it was 5 of 6 — see the next bullet for why it dropped.
 - **The learned layer** (`learning.enabled`, off by default) — a contextual
-  bandit fit on simulated data — was wired into a fourth ablation arm and
-  **loses** to the hand-typed EV grid on rupees recovered in **0 of 6** seeds:
-  seed 7 −₹31,56,911, mean **−₹22,53,175** across all six (range −₹31,56,911 to
-  −₹5,16,048). This is a disclosed negative result. It is built, fitted,
-  root-caused to one specific mechanism (`docs/learning_findings.md`), and
-  reported exactly as it came out — not smoothed into a partial win. **The
-  arm ships off.**
+  bandit fit on simulated data — matches or beats the hand-typed EV grid on
+  **4 of 6** seeds (**3 wins, 1 exact tie, 2 losses**), mean **+₹2,33,093**,
+  range −₹2,28,344 to +₹6,30,362. Until Phase E2 it **lost 0 of 6** (mean
+  −₹22,53,175), root-caused to `wait`'s hand-typed 60% never having been
+  measured. E2 measured it; in this simulator a chosen wait recovered nothing
+  in 1,513 episodes. **Read both numbers together:** Phase E1 (EV now sets the
+  rung actually sent) cost the hand-typed EV arm money on 5 of 6 seeds — the
+  same untested-`wait` flaw, no longer hidden by a mislabelled send — so part
+  of the turnaround is the comparison arm getting worse. Against the best arm
+  that existed before these phases, the learned arm is net **−₹1,45,296 across
+  all six seeds**: a correctness fix, roughly break-even on rupees. Full
+  write-up: `docs/learning_findings.md`. **Both arms ship off.**
 
 **Per-rung effectiveness (agent, seed 7):** rung 1 (soft nudge) 33.3% · rung 2
 (firm) 50.0% · rung 3 (legal facts) 17.5%. Rung 3 recovers a smaller share than
@@ -134,9 +139,12 @@ seed — not a real transaction ledger. The buyer inflow signals behind the
 ability axis are synthetic too, correlated with the simulator's hidden persona;
 no real cash-flow feed exists.
 
-**The learned bandit underperforms.** Fit entirely on simulated exploration
-data, it loses the four-arm ablation 0/6 (see Headline numbers). It ships off;
-a fresh clone reproduces the pre-learning agent exactly.
+**The learned bandit is fit on a simulator with no unprompted payments.** Fit
+entirely on simulated exploration data, it now matches or beats the hand-typed
+EV grid on 4 of 6 seeds (3 wins, 1 tie), but its measured `wait` of ~0% is
+true of this simulator by construction, not of real buyers (see Headline
+numbers). It ships off; a fresh clone reproduces the pre-learning agent
+exactly.
 
 **Channels are partly stubbed.** Email is real (test inbox only). WhatsApp and
 SMS log `would send` — the WhatsApp Business API needs business verification.

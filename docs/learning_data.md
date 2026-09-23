@@ -5,7 +5,7 @@ This file is the answer to "what did you train on?". It is written by
 cannot drift apart. Analysis notes and known limitations are separate --
 see `docs/learning_findings.md`.
 
-- **Generated:** 2026-09-02
+- **Generated:** 2026-09-23
 - **Generator:** `scripts/fit_recovery.py`
 - **Arm:** `agent_ev_explore` -- `sim/run_sim.py` `run_agent(explore=True)`,
   exploration mode: the brain samples uniformly from the already-gated
@@ -41,14 +41,19 @@ evaluated against.
 `payment_plan` and `counter_settle` each get one flat cell per quadrant --
 they map 1:1 from what EV selected to what was executed.
 
+`wait` gets one flat cell per quadrant too: a wait the EV ranking **chose**
+over contacting the buyer, recorded once per wait episode by `sim/run_sim.py`
+(rule waits -- spacing, weekends, an active promise -- are never recorded).
+It is judged by the same most-recent-action rule as every other row.
+
 A **SEND** is grouped by the rung it was **delivered** at, mapped to a tier
 name through `config/rules.yaml`'s ladder (rung 1 = `soft_nudge`, 2 = `firm`,
 3 = `legal_facts`), and stored nested under `recovery.<quadrant>.send.<tier>`.
-It is **not** grouped by `proposed_action_kind` (the `soft_nudge`/`firm`/
-`legal_facts` label EV nominally selected): the escalation walk in
-`engine/brain.py` sets the delivered rung independently, and the two disagreed
-on 56% of SEND rows in this training set. See `docs/learning_findings.md` for
-the label/execution-gap write-up.
+With `brain.ev_sets_rung: true` the tier EV picked is the rung delivered, so
+this grouping and `proposed_action_kind` agree; the label/execution-gap
+history is in `docs/learning_findings.md`.
+
+**Gate overrides in this training set:** **0** of 3218 fitted SEND rows (0.0%) were delivered at a rung other than the tier EV picked.
 
 `send_rows_off_ladder`: **0** (a SEND recorded at rung 0 or 4 --
 kept in a coarse `send` cell rather than dropped; expected to be 0).
@@ -59,47 +64,50 @@ Exact partition of every action row produced across all training seeds:
 
 | Bucket | Rows |
 | --- | ---: |
-| Action rows seen | 5499 |
-| Excluded -- handoff (unobservable outcome) | 1346 |
+| Action rows seen | 7299 |
+| Excluded -- handoff (unobservable outcome) | 1327 |
 | Excluded -- right-censored | 0 |
 | Excluded -- null quadrant | 0 |
-| **Fitted observations** | **4153** |
+| **Fitted observations** | **5972** |
 
 ## Fitted cells
 
 | Quadrant | Cell | Successes | Failures | Obs | Posterior mean | 95% CI width | Note |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| can_pay_but_wont | send/firm | 112 | 293 | 405 | 0.278 | 0.087 |  |
-| can_pay_but_wont | send/legal_facts | 114 | 156 | 270 | 0.423 | 0.117 |  |
-| can_pay_but_wont | counter_settle | 72 | 164 | 236 | 0.307 | 0.117 |  |
-| cash_flow_problem | send/soft_nudge | 6 | 23 | 29 | 0.226 | 0.286 | thin |
-| cash_flow_problem | send/firm | 201 | 196 | 397 | 0.506 | 0.098 |  |
-| cash_flow_problem | send/legal_facts | 43 | 12 | 55 | 0.772 | 0.215 | thin |
-| cash_flow_problem | payment_plan | 166 | 94 | 260 | 0.637 | 0.116 |  |
-| good_customer | send/soft_nudge | 30 | 49 | 79 | 0.383 | 0.210 | thin |
-| good_customer | send/firm | 460 | 288 | 748 | 0.615 | 0.070 |  |
-| good_customer | send/legal_facts | 15 | 19 | 34 | 0.444 | 0.318 | thin |
-| good_customer | payment_plan | 250 | 176 | 426 | 0.586 | 0.093 |  |
-| high_risk | send/soft_nudge | 1 | 8 | 9 | 0.182 | 0.420 | thin |
-| high_risk | send/firm | 114 | 544 | 658 | 0.174 | 0.058 |  |
-| high_risk | send/legal_facts | 118 | 429 | 547 | 0.217 | 0.069 |  |
+| can_pay_but_wont | send/soft_nudge | 0 | 18 | 18 | 0.050 | 0.175 | thin |
+| can_pay_but_wont | send/firm | 111 | 273 | 384 | 0.290 | 0.090 |  |
+| can_pay_but_wont | send/legal_facts | 74 | 69 | 143 | 0.517 | 0.162 |  |
+| can_pay_but_wont | counter_settle | 129 | 297 | 426 | 0.304 | 0.087 |  |
+| can_pay_but_wont | wait | 0 | 283 | 283 | 0.004 | 0.013 |  |
+| cash_flow_problem | send/soft_nudge | 49 | 209 | 258 | 0.192 | 0.096 |  |
+| cash_flow_problem | send/firm | 159 | 131 | 290 | 0.548 | 0.114 |  |
+| cash_flow_problem | send/legal_facts | 10 | 7 | 17 | 0.579 | 0.427 | thin |
+| cash_flow_problem | payment_plan | 208 | 114 | 322 | 0.645 | 0.104 |  |
+| cash_flow_problem | wait | 0 | 238 | 238 | 0.004 | 0.015 |  |
+| good_customer | send/soft_nudge | 214 | 215 | 429 | 0.499 | 0.094 |  |
+| good_customer | send/firm | 254 | 185 | 439 | 0.578 | 0.092 |  |
+| good_customer | send/legal_facts | 6 | 16 | 22 | 0.292 | 0.352 | thin |
+| good_customer | payment_plan | 281 | 212 | 493 | 0.570 | 0.087 |  |
+| good_customer | wait | 0 | 373 | 373 | 0.003 | 0.010 |  |
+| high_risk | send/soft_nudge | 0 | 6 | 6 | 0.125 | 0.406 | thin |
+| high_risk | send/firm | 110 | 551 | 661 | 0.167 | 0.057 |  |
+| high_risk | send/legal_facts | 118 | 433 | 551 | 0.215 | 0.068 |  |
+| high_risk | wait | 0 | 619 | 619 | 0.002 | 0.006 |  |
 
 A wide CI is the honest signal that a cell is thin -- with the Beta(1,1)
 prior a cell of zero observations reads as mean 0.500, CI width ~0.95.
 
 ### Thin cells (n below 100)
 
-The escalation walk rarely stops at rung 1, so the `soft_nudge` (rung-1
-delivery) SEND cells are thin. Their point estimates sit near the prior; the
-`ci95_width` is what says so. A quadrant with **no** rung-1 sends at all has no
-`soft_nudge` cell -- `engine/learning.py` falls back to the hand-typed grid
-value for it (logged once).
+A thin cell's point estimate sits near the prior; its `ci95_width` is what
+says so. A (quadrant, action) pair never executed in training has no cell at
+all -- `engine/learning.py` falls back to the hand-typed grid value for it
+(logged once).
 
-- `cash_flow_problem` / `send/soft_nudge` -- n=29 (mean 0.226, 95% CI width 0.286)
-- `cash_flow_problem` / `send/legal_facts` -- n=55 (mean 0.772, 95% CI width 0.215)
-- `good_customer` / `send/soft_nudge` -- n=79 (mean 0.383, 95% CI width 0.210)
-- `good_customer` / `send/legal_facts` -- n=34 (mean 0.444, 95% CI width 0.318)
-- `high_risk` / `send/soft_nudge` -- n=9 (mean 0.182, 95% CI width 0.420)
+- `can_pay_but_wont` / `send/soft_nudge` -- n=18 (mean 0.050, 95% CI width 0.175)
+- `cash_flow_problem` / `send/legal_facts` -- n=17 (mean 0.579, 95% CI width 0.427)
+- `good_customer` / `send/legal_facts` -- n=22 (mean 0.292, 95% CI width 0.352)
+- `high_risk` / `send/soft_nudge` -- n=6 (mean 0.125, 95% CI width 0.406)
 
 ## Notes
 
