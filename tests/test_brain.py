@@ -347,9 +347,13 @@ def test_a_broken_promise_cannot_punch_through_the_ceiling() -> None:
 
 def test_the_invariant_holds_across_the_whole_seeded_queue() -> None:
     """chosen == 0 OR 1 <= chosen <= available_rung, swept over real data."""
-    from data import store
+    from data import generate, store
     from engine import watchdog
 
+    # A fresh clone has no data/seed/ (it is gitignored); without this the
+    # test only passed when an earlier test in the session had generated it.
+    if not store.dataset_exists():
+        generate.ensure_dataset(42)
     buyers = {b["buyer_id"]: b for b in store.load_buyers()}
     invoices = store.load_invoices()
     checked = 0

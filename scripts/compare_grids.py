@@ -21,14 +21,17 @@ is hand-authored (see its own header), not generated -- this script is the
 analysis a reader can re-run to check a claim made there, the same relationship
 scripts/fit_recovery.py has to docs/learning_data.md's generated provenance.
 
-Three actions never get a learned cell, structurally, not as a data gap this
-fit could close with more seeds: `wait` produces no attributable action row
-(nothing is sent, so engine/outcomes.py has nothing to credit or fail), and
-`human_handoff` / `legal_escalation` both execute as a rung-4 `handoff` whose
-post-handoff recovery this simulator has no model of (scripts/fit_recovery.py's
-own EXCLUDED_ACTION_KINDS). Their hand-typed values are printed for reference
-but never scored or ranked -- there is no fitted number to compare them against,
-and there structurally never will be under the current simulator.
+Two actions never get a learned cell, structurally, not as a data gap this
+fit could close with more seeds: `human_handoff` / `legal_escalation` both
+execute as a rung-4 `handoff` whose post-handoff recovery this simulator has no
+model of (scripts/fit_recovery.py's own EXCLUDED_ACTION_KINDS). Their
+hand-typed values are printed for reference but never scored or ranked.
+
+`wait` used to be a third. Until Phase E2 a wait produced no attributable
+action row, so its hand-typed value was never checked against anything -- the
+gap docs/learning_findings.md traced the agent+EV+learned 6/6 loss to. Since E2
+sim/run_sim.py records an EV-chosen wait (one row per wait episode), so wait is
+fitted, scored and ranked like any other cell.
 
     python scripts/compare_grids.py
 """
@@ -53,7 +56,7 @@ THIN_OBS = 100
 #: Actions with NO possible learned cell, structurally -- see the module
 #: docstring. Printed for reference, excluded from scoring and ranking.
 STRUCTURALLY_UNFITTED: frozenset[str] = frozenset({
-    neg.WAIT, neg.HUMAN_HANDOFF, neg.LEGAL_ESCALATION,
+    neg.HUMAN_HANDOFF, neg.LEGAL_ESCALATION,
 })
 
 #: (quadrant, action) cells docs/learning_findings.md's "Thin SEND cells at
@@ -107,7 +110,8 @@ def build_rows() -> list[dict[str, Any]]:
                 "note": "",
             }
             if action_kind in STRUCTURALLY_UNFITTED:
-                row["note"] = "structurally unmeasured -- never executed as its own attributable action"
+                row["note"] = ("structurally unmeasured -- executes as a handoff, whose "
+                               "recovery the simulator does not model")
             elif cell is None:
                 row["note"] = "no learned cell (never recorded in training) -- falls back to hand-typed"
             else:
@@ -183,14 +187,13 @@ def main() -> int:
               f"ci95_width={r['ci95_width']:.4f}  score={r['score']:.1f}{featured}")
 
     print(
-        "\nwait is structurally unmeasured, on every quadrant: it produces no "
-        "attributable action row (nothing is sent, so engine/outcomes.py has "
-        "nothing to credit or fail against), so its hand-typed value never gets "
-        "checked against real outcomes and cannot be fit with more training data "
-        "under the current simulator. When a learned cell sits close to wait's "
-        "own untouched number (as good_customer/firm's 61.47% does to wait's "
-        "60%), the comparison is between one number the data corrected and one "
-        "that was never tested at all -- see docs/learning_findings.md."
+        "\nhuman_handoff / legal_escalation are structurally unmeasured: both "
+        "execute as a rung-4 handoff and the simulator has no model of what "
+        "happens after a human takes over. wait IS measured since Phase E2 (an "
+        "EV-chosen wait is a recorded action) -- but in this simulator money only "
+        "ever arrives in reaction to a message or a kept promise, so a measured "
+        "wait says what waiting recovers HERE, not what it recovers from real "
+        "buyers who sometimes pay unprompted. See docs/learning_findings.md."
     )
     return 0
 
