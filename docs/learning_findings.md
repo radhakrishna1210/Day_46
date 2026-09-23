@@ -59,7 +59,9 @@ file is the "what should a reader be careful about" companion.
 **Not one of 1,513 wait episodes was followed by a payment it could be
 credited with.** The fitted means are just the Beta(1, 1) prior's floor. Once
 measured, all four `wait` cells are the four most-wrong cells in the grid
-(`scripts/compare_grids.py`), ahead of `good_customer`/`firm`.
+(`scripts/compare_grids.py`), ahead of every send cell -- next come
+`good_customer`/`soft_nudge` (hand-typed 85%, fitted 49.9%) and
+`good_customer`/`firm` (88% vs 57.8%).
 
 This is **true by construction of this simulator, and says nothing about real
 buyers.** In `sim/run_sim.py` money only ever arrives as a persona's same-day

@@ -77,19 +77,19 @@ def test_thin_cells_are_excluded_from_the_ranking() -> None:
     assert ranked_keys.isdisjoint(thin)
 
 
-def test_the_most_wrong_cells_are_the_four_wait_cells_then_good_customer_firm() -> None:
+def test_the_most_wrong_cells_are_the_four_wait_cells_then_good_customer_sends() -> None:
     """Locks in the Phase E2 finding: once measured, every quadrant's wait cell
     is further from its hand-typed value, with more confidence, than any other
-    cell -- and good_customer/firm (the pre-E2 featured cell) is next. Re-run
-    scripts/fit_recovery.py and this may need updating; that is the point of
-    pinning it."""
+    cell. Next come good_customer's soft_nudge and firm -- the hand-typed grid
+    was 30-35 points overoptimistic about both. Re-run scripts/fit_recovery.py
+    and this may need updating; that is the point of pinning it."""
     ranking = cg.ranked_most_wrong(cg.build_rows())
-    top_five = [(r["quadrant"], r["action_kind"]) for r in ranking[:5]]
-    assert top_five[0] == ("good_customer", "wait")
-    assert {q for q, a in top_five[:4]} == {
+    top = [(r["quadrant"], r["action_kind"]) for r in ranking[:6]]
+    assert top[0] == ("good_customer", "wait")
+    assert {q for q, a in top[:4]} == {
         "good_customer", "cash_flow_problem", "can_pay_but_wont", "high_risk"}
-    assert all(a == "wait" for _q, a in top_five[:4])
-    assert top_five[4] == ("good_customer", "firm")
+    assert all(a == "wait" for _q, a in top[:4])
+    assert top[4:6] == [("good_customer", "soft_nudge"), ("good_customer", "firm")]
 
 
 def test_a_missing_learned_cell_has_no_score_and_is_not_ranked() -> None:
