@@ -183,7 +183,9 @@ def test_sampling_is_deterministic_for_a_given_rng_seed(online_config) -> None:
 def test_sample_returns_none_for_an_absent_cell(online_config) -> None:
     learner = learning.OnlineLearner()
     assert learner.sample("can_pay_but_wont", "soft_nudge", random.Random("x")) is None
-    assert learner.sample("good_customer", "wait", random.Random("x")) is None
+    # human_handoff never gets a cell (post-handoff recovery is unobservable).
+    # wait used to be the example here; Phase E2 gave it a fitted cell.
+    assert learner.sample("good_customer", "human_handoff", random.Random("x")) is None
 
 
 def test_online_context_makes_negotiation_use_a_thompson_sample(online_config) -> None:

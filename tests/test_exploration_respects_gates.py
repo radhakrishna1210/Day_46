@@ -91,9 +91,21 @@ def score_with_quadrant(quadrant: str, *, value: int = 70, broken: int = 0) -> d
     }
 
 
-def ev_config() -> dict:
+def ev_config(*, sets_rung: bool = True) -> dict:
+    """EV on. `sets_rung` is brain.ev_sets_rung (Phase E1): True, the shipped
+    value, makes the SEND tier EV picks the rung delivered; False is the
+    pre-E1 behaviour, where the tier was a label and the walk's rung went out."""
     config = rules()
-    return {**config, "brain": {**config["brain"], "ev_mode": "on"}}
+    return {**config, "brain": {**config["brain"], "ev_mode": "on",
+                                "ev_sets_rung": sets_rung}}
+
+
+def walk_tier(rung: int) -> str | None:
+    """The SEND tier a rung delivers (config/rules.yaml's ladder names), or
+    None for rung 0/4. Under ev_sets_rung the walk's own tier is always on
+    offer, whether or not the quadrant menu names it -- it is exactly what the
+    plain agent sends."""
+    return brain._send_tier(rung) if rung in (1, 2, 3) else None
 
 
 #: The Action.kind each negotiation action must map to once executed. Spelled
@@ -112,7 +124,7 @@ EXPECTED_KIND = {
 }
 
 
-def explored_decisions() -> list[dict]:
+def explored_decisions(*, sets_rung: bool = True) -> list[dict]:
     """The 200 decisions every assertion below is made against.
 
     Rebuilt per calling test rather than shared through a fixture: each one is
@@ -125,7 +137,7 @@ def explored_decisions() -> list[dict]:
     exploration switched off, read off a real call rather than recomputed by
     hand.
     """
-    config = ev_config()
+    config = ev_config(sets_rung=sets_rung)
     out: list[dict] = []
     for quadrant in aw.QUADRANTS:
         for acceptance in ACCEPTANCES:
@@ -149,9 +161,17 @@ def explored_decisions() -> list[dict]:
 
 
 def argmax_action(quadrant: str, chosen_rung: int) -> str:
-    """What the shipped EV policy would have picked for the same case."""
+    """What the shipped EV policy would have picked for the same case.
+
+    Every case in this file is a first contact (no history) for a score-70,
+    high-confidence buyer -- the medium pacing band -- so the ev_sets_rung
+    candidate list is built from that band's start rung with no history."""
     config = ev_config()
     candidates = brain.eligible_negotiation_actions(quadrant, chosen_rung, config)
+    if 1 <= chosen_rung <= 3:
+        floor = int(config["ladder"]["pacing"]["medium"]["start_rung"])
+        candidates = brain.ev_send_candidates(candidates, chosen=chosen_rung, floor=floor,
+                                              history=[], days_since=None)
     return negotiation.rank_actions(
         quadrant, AMOUNT_PAISE, broken_promises=0, candidates=candidates,
     )[0]["action"]
@@ -174,6 +194,12 @@ def test_two_hundred_explored_decisions_stay_inside_eligible_actions() -> None:
       * the Action actually returned is the one that action maps to -- so a
         sample that had slipped through the gates could not quietly execute as
         something else either.
+
+    Under brain.ev_sets_rung (shipped) the one addition to the menu is the
+    walk's OWN tier -- the message the plain agent sends at that rung, which
+    every gate has already cleared. Before E1 that same message went out under
+    whatever menu label EV picked; now it is on offer under its real name.
+    Every OTHER candidate still has to be on the menu.
     """
     config = ev_config()
     decisions = explored_decisions()
@@ -184,7 +210,10 @@ def test_two_hundred_explored_decisions_stay_inside_eligible_actions() -> None:
         chosen = action.detail["negotiation_action"]
         raw = config["negotiation"]["eligible_actions"][quadrant]
         gated = brain.eligible_negotiation_actions(quadrant, case["plain"].rung, config)
+        own = walk_tier(case["plain"].rung)
 
+        if chosen == own:
+            continue
         assert chosen in raw, f"{chosen} is not eligible for a {quadrant} buyer at all"
         assert chosen in gated, f"{chosen} is not reachable for a {quadrant} buyer today"
         assert action.detail["negotiation_selection"] == "explore"
@@ -197,26 +226,46 @@ def test_two_hundred_explored_decisions_never_exceed_the_law_ceiling() -> None:
 
         chosen == 0   OR   1 <= chosen <= available_rung
 
-    Exploration changes WHICH action is taken, never at what rung: the rung is
-    settled by the escalation walk before either EV branch runs. So an
-    explored decision must land on exactly the rung the plain path chose --
-    unless it is a handoff, which is rung 4 by definition and is only ever
-    selectable once the plain path had already reached rung 4 itself.
+    With brain.ev_sets_rung (shipped) a sampled SEND tier IS the rung
+    delivered, so exploration may land BELOW the walk's rung -- a gentler
+    message -- but never above it: the walk's rung is a ceiling on escalation
+    exactly as the law's is a ceiling on the walk. A non-send action (wait,
+    payment_plan, counter_settle) keeps the walk's rung. A handoff is rung 4
+    by definition and is only ever selectable once the plain path had already
+    reached rung 4 itself.
     """
-    for case in explored_decisions():
-        action, ceiling = case["action"], case["ceiling"]
-        assert action.available_rung == ceiling
-        assert action.rung == 0 or 1 <= action.rung <= ceiling, (
-            f"rung {action.rung} is above the law's ceiling of {ceiling}")
+    for sets_rung in (True, False):
+        for case in explored_decisions(sets_rung=sets_rung):
+            action, ceiling = case["action"], case["ceiling"]
+            assert action.available_rung == ceiling
+            assert action.rung == 0 or 1 <= action.rung <= ceiling, (
+                f"rung {action.rung} is above the law's ceiling of {ceiling}")
 
-        if action.kind == brain.HANDOFF:
-            assert case["plain"].kind == brain.HANDOFF, (
-                "exploration made a case reach a human that the ordinary "
-                "escalation walk would not have")
-            assert action.rung == brain.HANDOFF_RUNG <= ceiling
-        else:
-            assert action.rung == case["plain"].rung, (
-                "exploration moved the rung, which only the escalation walk may do")
+            if action.kind == brain.HANDOFF:
+                assert case["plain"].kind == brain.HANDOFF, (
+                    "exploration made a case reach a human that the ordinary "
+                    "escalation walk would not have")
+                assert action.rung == brain.HANDOFF_RUNG <= ceiling
+            elif sets_rung and action.kind == brain.SEND:
+                assert 1 <= action.rung <= case["plain"].rung, (
+                    "exploration escalated past the walk, which EV may never do")
+                assert action.rung == brain.negotiation_rung(
+                    action.detail["negotiation_action"]), (
+                    "the SEND tier EV picked is not the rung that went out")
+            else:
+                assert action.rung == case["plain"].rung, (
+                    "exploration moved the rung of a non-send action")
+
+
+def test_ev_sets_rung_really_sends_gentler_messages() -> None:
+    """Guard against the test above passing vacuously: across the 200
+    decisions, at least one explored SEND really did go out BELOW the walk's
+    rung. Otherwise ev_sets_rung would be indistinguishable from the label-only
+    behaviour it replaced."""
+    gentler = [case for case in explored_decisions()
+               if case["action"].kind == brain.SEND
+               and case["action"].rung < case["plain"].rung]
+    assert gentler, "no explored send ever went out gentler than the walk's rung"
 
 
 # --------------------------------------------------------------------------
@@ -269,9 +318,12 @@ def test_the_gate_override_flag_reports_what_actually_went_out() -> None:
     """When the label and the executed rung disagree, the record says so --
     and the Action itself still carries the EXECUTED rung, never the proposed
     one. This is the field sim/run_sim.py hands the attribution ledger, so a
-    payment is always credited to what the buyer really received."""
+    payment is always credited to what the buyer really received.
+
+    Run against brain.ev_sets_rung: false (the pre-E1 behaviour), the only
+    setting under which a label CAN disagree with the executed rung."""
     seen_override = False
-    for case in explored_decisions():
+    for case in explored_decisions(sets_rung=False):
         action = case["action"]
         proposed = action.detail["negotiation_proposed_rung"]
         override = action.detail["negotiation_gate_override"]
@@ -282,6 +334,18 @@ def test_the_gate_override_flag_reports_what_actually_went_out() -> None:
     assert seen_override, (
         "no explored decision was overridden by a gate, so this test proved "
         "nothing about how overrides are recorded")
+
+
+def test_ev_sets_rung_closes_the_label_execution_gap() -> None:
+    """Phase E1's whole point, over the same 200 decisions: with
+    brain.ev_sets_rung on, no SEND is ever delivered at a rung other than the
+    tier EV picked -- negotiation_gate_override is False on every one."""
+    sends = [case["action"] for case in explored_decisions()
+             if case["action"].kind == brain.SEND]
+    assert sends, "no explored decision was a send, so nothing was tested"
+    for action in sends:
+        assert action.detail["negotiation_gate_override"] is False
+        assert action.detail["negotiation_proposed_rung"] == action.rung
 
 
 # --------------------------------------------------------------------------
@@ -392,18 +456,30 @@ def test_a_real_exploration_run_records_what_was_executed(tmp_path, monkeypatch)
     assert proposed_rows, "no row carried a proposal, so nothing here is being tested"
 
     for row in proposed_rows:
-        assert row["proposed_action_kind"] in \
-            config["negotiation"]["eligible_actions"][row["quadrant"]]
+        # Under brain.ev_sets_rung a SEND row's proposal may be the walk's own
+        # tier, which is on offer whether or not the menu names it; every
+        # other proposal must be on the quadrant's menu.
+        if not (row["action_kind"] == brain.SEND
+                and row["proposed_action_kind"] == walk_tier(row["rung"])):
+            assert row["proposed_action_kind"] in \
+                config["negotiation"]["eligible_actions"][row["quadrant"]]
         assert row["action_kind"] in (brain.SEND, brain.PAYMENT_PLAN,
-                                      brain.COUNTER_SETTLE, brain.HANDOFF)
+                                      brain.COUNTER_SETTLE, brain.HANDOFF, brain.WAIT)
         assert row["gate_override"] == (
             row["proposed_rung"] is not None and row["proposed_rung"] != row["rung"])
 
-    overridden = [row for row in proposed_rows if row["gate_override"]]
-    assert overridden, "no gate override happened, so the executed-vs-proposed split is untested"
-    for row in overridden:
-        # The point of the whole exercise: the row says what went out.
-        assert row["rung"] != row["proposed_rung"]
+    # Phase E1: the tier EV picked is the rung that went out -- no SEND row is
+    # overridden. (The executed-vs-proposed split itself is still exercised,
+    # against the pre-E1 setting, by test_the_gate_override_flag_... above.)
+    send_rows = [row for row in proposed_rows if row["action_kind"] == brain.SEND]
+    assert send_rows, "the run recorded no EV sends"
+    assert not [row for row in send_rows if row["gate_override"]]
+
+    # Phase E2: an EV-chosen wait is recorded -- once per wait episode, with
+    # the wait as its own proposal -- so wait is no longer structurally unmeasured.
+    wait_rows = [row for row in rows if row["action_kind"] == brain.WAIT]
+    assert wait_rows, "exploration sampled no wait that reached the ledger"
+    assert all(row["proposed_action_kind"] == negotiation.WAIT for row in wait_rows)
 
     # The ceiling, over every decision the run made -- not just the ones that
     # produced an outbound contact.

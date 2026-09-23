@@ -698,12 +698,27 @@ def score_with_quadrant(quadrant: str, *, value: int = 70, broken: int = 0) -> d
     }
 
 
-def ev_config(**overrides) -> dict:
-    """config/rules.yaml with brain.ev_mode forced on, for tests that need it."""
+def ev_config(*, sets_rung: bool = True, **overrides) -> dict:
+    """config/rules.yaml with brain.ev_mode forced on, for tests that need it.
+    `sets_rung` is brain.ev_sets_rung (Phase E1; True is the shipped value)."""
     from engine.config import rules
     config = rules()
-    merged = {**config, "brain": {**config["brain"], "ev_mode": "on"}}
+    merged = {**config, "brain": {**config["brain"], "ev_mode": "on",
+                                  "ev_sets_rung": sets_rung}}
     return {**merged, **overrides}
+
+
+def _ev_candidates(quadrant: str, chosen: int, config: dict) -> tuple[str, ...]:
+    """The candidate list decide()'s step 13 ranks for this file's fixtures --
+    a first contact (no history) for a score-70, high-confidence buyer, i.e.
+    the medium pacing band. Rebuilt from the public helpers, so a change to
+    either shows up here as a deliberate edit."""
+    candidates = brain.eligible_negotiation_actions(quadrant, chosen, config)
+    if brain.ev_sets_rung(config) and 1 <= chosen <= 3:
+        floor = int(config["ladder"]["pacing"]["medium"]["start_rung"])
+        candidates = brain.ev_send_candidates(candidates, chosen=chosen, floor=floor,
+                                              history=[], days_since=None)
+    return candidates
 
 
 #: Old enough that the legal ceiling is fully open (rung 4). NOT old enough,
@@ -730,21 +745,24 @@ def _chosen_rung_with_ev_off(record: dict, quadrant: str, **score_kwargs) -> int
     return off.rung
 
 
+@pytest.mark.parametrize("sets_rung", [True, False])
 @pytest.mark.parametrize("quadrant", list(aw.QUADRANTS))
-def test_ev_mode_picks_the_top_ranked_eligible_action_per_quadrant(quadrant: str) -> None:
+def test_ev_mode_picks_the_top_ranked_eligible_action_per_quadrant(
+        quadrant: str, sets_rung: bool) -> None:
     """The chosen action always matches negotiation.rank_actions() over
     exactly the candidates config/rules.yaml's negotiation.eligible_actions
-    allows for this quadrant AND this invoice's actual chosen_rung, mapped to
-    the kind/rung this phase specifies."""
+    allows for this quadrant AND this invoice's actual chosen_rung (rewritten
+    to the deliverable SEND tiers under brain.ev_sets_rung), mapped to the
+    kind/rung this phase specifies."""
     record = invoice(acceptance=OLD_ENOUGH_FOR_CEILING_4)
     position = law.legal_position(record, TODAY)
     chosen = _chosen_rung_with_ev_off(record, quadrant)
 
-    config = ev_config()
+    config = ev_config(sets_rung=sets_rung)
     action = brain.decide(record, buyer(), score_with_quadrant(quadrant), position,
                           [], [], config=config)
 
-    candidates = brain.eligible_negotiation_actions(quadrant, chosen, config)
+    candidates = _ev_candidates(quadrant, chosen, config)
     expected = negotiation.rank_actions(
         quadrant, aw.outstanding_paise(record), broken_promises=0, candidates=candidates,
     )[0]
@@ -764,6 +782,73 @@ def test_ev_mode_picks_the_top_ranked_eligible_action_per_quadrant(quadrant: str
         assert action.skeleton is not None
     else:
         assert action.kind == brain.SEND
+        if sets_rung:
+            # E1: the tier EV picked is the rung delivered, never above the walk.
+            assert action.rung == brain.negotiation_rung(winner) <= chosen
+            assert action.skeleton["rung"] == action.rung
+        else:
+            assert action.rung == chosen
+
+
+def test_ev_sets_rung_sends_the_gentler_tier_ev_picked() -> None:
+    """Phase E1 end to end, with the choice forced: a good_customer on a first
+    contact that the backlog has already pushed to rung 2 is offered soft_nudge
+    (rung 1, their pacing band's start and on their menu) alongside firm. Make
+    soft_nudge the only send tier worth anything and it must go out AT RUNG 1
+    with a rung-1 skeleton -- not as a soft_nudge label on a rung-2 message,
+    which is what brain.ev_sets_rung: false still does."""
+    record = invoice(acceptance=OLD_ENOUGH_FOR_CEILING_4)
+    position = law.legal_position(record, TODAY)
+    chosen = _chosen_rung_with_ev_off(record, aw.GOOD_CUSTOMER)
+    assert chosen == 2, "fixture assumption: the backlog opens this case at rung 2"
+
+    from engine.config import rules
+    grid = rules()["negotiation"]["recovery_probability"]
+    rigged = {**grid, aw.GOOD_CUSTOMER: {**grid[aw.GOOD_CUSTOMER], "soft_nudge": 99,
+                                         "firm": 1, "wait": 0, "payment_plan": 0}}
+
+    import engine.negotiation as neg_module
+    real_rules = neg_module.rules
+
+    def rules_with_grid():
+        base = real_rules()
+        return {**base, "negotiation": {**base["negotiation"], "recovery_probability": rigged}}
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(neg_module, "rules", rules_with_grid)
+        on = brain.decide(record, buyer(), score_with_quadrant(aw.GOOD_CUSTOMER), position,
+                          [], [], config=ev_config(sets_rung=True), log=False)
+        off = brain.decide(record, buyer(), score_with_quadrant(aw.GOOD_CUSTOMER), position,
+                           [], [], config=ev_config(sets_rung=False), log=False)
+
+    assert on.detail["negotiation_action"] == off.detail["negotiation_action"] == "soft_nudge"
+    assert (on.kind, on.rung, on.skeleton["rung"]) == (brain.SEND, 1, 1)
+    assert on.detail["negotiation_gate_override"] is False
+    assert "gentler than the rung 2" in on.reason
+    # The pre-E1 behaviour, kept reproducible: the same label, a rung-2 message.
+    assert (off.kind, off.rung) == (brain.SEND, 2)
+    assert off.detail["negotiation_gate_override"] is True
+
+
+def test_ev_sets_rung_never_offers_a_tier_above_the_walk_or_out_of_budget() -> None:
+    """ev_send_candidates() in isolation: never a tier above `chosen`; a
+    gentler tier only while it has budget and has cleared its own spacing; the
+    walk's own tier always, even off-menu."""
+    menu = ("wait", "soft_nudge", "firm", "legal_facts", "payment_plan")
+    assert brain.ev_send_candidates(menu, chosen=2, floor=1, history=[], days_since=None) \
+        == ("wait", "payment_plan", "soft_nudge", "firm")
+
+    two_rung_one = [{"date": "2026-07-01", "rung": 1}, {"date": "2026-07-10", "rung": 1}]
+    assert "soft_nudge" not in brain.ev_send_candidates(
+        menu, chosen=2, floor=1, history=two_rung_one, days_since=30), "rung 1 is out of budget"
+    assert "soft_nudge" not in brain.ev_send_candidates(
+        menu, chosen=2, floor=1, history=[], days_since=4), "rung 1 needs 5 days of spacing"
+    assert "soft_nudge" not in brain.ev_send_candidates(
+        menu, chosen=2, floor=2, history=[], days_since=None), "below the pacing floor"
+
+    # high_risk's menu has no firm, but a walk at rung 2 has always sent one.
+    assert brain.ev_send_candidates(("wait", "legal_facts"), chosen=2, floor=1,
+                                    history=[], days_since=None) == ("wait", "firm")
 
 
 def test_ev_mode_never_offers_a_good_customer_legal_pressure() -> None:
@@ -800,11 +885,17 @@ def test_eligible_negotiation_actions_only_admits_a_handoff_at_the_handoff_rung(
         assert (negotiation.LEGAL_ESCALATION in at) == (negotiation.LEGAL_ESCALATION in offered)
 
 
-def test_ev_mode_falls_back_when_the_legal_ceiling_alone_is_not_yet_open() -> None:
+@pytest.mark.parametrize("sets_rung", [True, False])
+def test_ev_mode_falls_back_when_the_legal_ceiling_alone_is_not_yet_open(sets_rung: bool) -> None:
     """The plainest case: high_risk's unrestricted top action is
     legal_escalation, but with today's legal ceiling below HANDOFF_RUNG a
     handoff is not yet reachable by any measure -- the Brain must fall back
-    to the next eligible candidate (legal_facts, a plain send)."""
+    to a plain send.
+
+    Which send is the label/execution gap in miniature. Pre-E1 the fallback
+    was LABELLED legal_facts while a rung-1 courtesy nudge went out (the walk's
+    rung for a case four days overdue). Under brain.ev_sets_rung the label is
+    the message: the walk's own soft_nudge, at rung 1."""
     record = invoice(acceptance="2026-08-05")     # a few days overdue, ceiling < 4
     position = law.legal_position(record, TODAY)
     assert position["available_rung"] < brain.HANDOFF_RUNG, "fixture assumption"
@@ -814,14 +905,18 @@ def test_ev_mode_falls_back_when_the_legal_ceiling_alone_is_not_yet_open() -> No
     assert full_ranking[0]["action"] == negotiation.LEGAL_ESCALATION, "fixture assumption"
 
     action = brain.decide(record, buyer(), score_with_quadrant(aw.HIGH_RISK), position,
-                          [], [], config=ev_config())
+                          [], [], config=ev_config(sets_rung=sets_rung))
     assert action.kind != brain.HANDOFF
     assert action.detail["negotiation_action"] != negotiation.LEGAL_ESCALATION
-    assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
     assert 1 <= action.rung <= position["available_rung"]
+    if sets_rung:
+        assert action.detail["negotiation_action"] == brain._send_tier(action.rung)
+    else:
+        assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
 
 
-def test_ev_mode_never_jumps_to_handoff_just_because_the_ceiling_is_open() -> None:
+@pytest.mark.parametrize("sets_rung", [True, False])
+def test_ev_mode_never_jumps_to_handoff_just_because_the_ceiling_is_open(sets_rung: bool) -> None:
     """The sharper case a plain ceiling check would miss: the legal ceiling
     IS wide open (available_rung == 4), but this is a first-ever contact, so
     the ordinary escalation walk's own chosen_rung cannot possibly have
@@ -838,11 +933,16 @@ def test_ev_mode_never_jumps_to_handoff_just_because_the_ceiling_is_open() -> No
     assert chosen < brain.HANDOFF_RUNG, "fixture assumption: a first contact never walks to rung 4"
 
     action = brain.decide(record, buyer(), score_with_quadrant(aw.HIGH_RISK), position,
-                          [], [], config=ev_config())
+                          [], [], config=ev_config(sets_rung=sets_rung))
     assert action.kind != brain.HANDOFF
     assert action.detail["negotiation_action"] not in (
         negotiation.HUMAN_HANDOFF, negotiation.LEGAL_ESCALATION)
-    assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
+    if sets_rung:
+        # The walk's own tier at its own rung -- EV may not escalate past it.
+        assert action.detail["negotiation_action"] == brain._send_tier(chosen)
+        assert action.rung == chosen
+    else:
+        assert action.detail["negotiation_action"] == negotiation.LEGAL_FACTS
 
 
 @pytest.mark.parametrize("ev_mode", ["off", "on"])

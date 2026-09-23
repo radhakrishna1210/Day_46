@@ -51,6 +51,9 @@ lookups and online sample/update:
 
   * payment_plan / counter_settle  -> recovery.<quadrant>.<action_kind>, a
     flat cell. These map 1:1 from what EV selected to what was executed.
+  * wait -> recovery.<quadrant>.wait, a flat cell (Phase E2). Before E2 no
+    wait was ever recorded, so every wait fell back to the hand-typed grid --
+    the untested 60% behind docs/learning_findings.md's 6/6 loss.
   * soft_nudge / firm / legal_facts -> recovery.<quadrant>.send.<tier>, a
     per-DELIVERED-RUNG SEND cell. scripts/fit_recovery.py groups a SEND by the
     rung the escalation walk actually delivered it at, NOT by the label EV
@@ -96,6 +99,7 @@ _PERCENT = 100
 #: engine.negotiation which imports this module, so importing brain back would
 #: be a cycle.
 _KIND_SEND = "send"
+_KIND_WAIT = "wait"
 _KIND_PLANS = frozenset({"payment_plan", "counter_settle"})
 
 #: (quadrant, action_kind) pairs already reported as falling back to the
@@ -222,15 +226,17 @@ def delivered_action_kind(executed_kind: str, rung: int) -> str | None:
     A SEND -> its DELIVERED ladder tier (soft_nudge/firm/legal_facts, via
     engine.rungs): the escalation walk, not the EV label, chose the rung, so
     the payment (or its absence) informs the tier that actually went out.
-    payment_plan / counter_settle -> themselves. handoff / wait / anything
-    else -> None: no cell, excluded exactly as the offline fit excludes
-    handoff rows.
+    payment_plan / counter_settle -> themselves. wait -> "wait" (Phase E2:
+    sim/run_sim.py records an EV-chosen wait as one row per wait episode --
+    rule waits such as spacing or weekends are never recorded). handoff /
+    anything else -> None: no cell, excluded exactly as the offline fit
+    excludes handoff rows.
     """
     if executed_kind == _KIND_SEND:
         return next((entry["name"] for entry in rungs.all_rungs()
                      if entry["id"] == rung and entry["id"] in rungs.BUYER_FACING_RUNGS),
                     None)
-    if executed_kind in _KIND_PLANS:
+    if executed_kind in _KIND_PLANS or executed_kind == _KIND_WAIT:
         return executed_kind
     return None
 
@@ -494,7 +500,7 @@ def audit_method(quadrant: str, action_kind: str | None) -> str:
     formula's base rate for this cell is being produced right now.
 
       hardcoded         learning off, no `action_kind` (an action the fit never
-                        covers -- wait, either handoff flavor), or no learned
+                        covers -- either handoff flavor), or no learned
                         cell for this (quadrant, action_kind): the hand-typed
                         engine.negotiation grid value is used.
       thompson_sampling learning on, learning.mode: online, and an OnlineLearner

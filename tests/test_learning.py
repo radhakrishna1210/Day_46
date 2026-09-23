@@ -160,9 +160,13 @@ def test_the_error_type_is_catchable_as_a_runtime_error() -> None:
 # the enabled path -- posterior means and fallback
 # --------------------------------------------------------------------------
 
-# A (quadrant, negotiation-action) pair with no learned cell: can_pay_but_wont
-# has no rung-1 SENDs in the training data, so it has no soft_nudge tier cell.
-ABSENT_CELL = ("can_pay_but_wont", "soft_nudge")
+# A (quadrant, negotiation-action) pair with no learned cell, by construction
+# rather than by the luck of one training run: the fit excludes every handoff
+# row (post-handoff recovery is unobservable in the simulator), so no
+# human_handoff cell can ever exist. (This used to be can_pay_but_wont /
+# soft_nudge -- absent only because training happened to deliver no rung-1
+# sends to that quadrant, which brain.ev_sets_rung can change.)
+ABSENT_CELL = ("high_risk", "human_handoff")
 
 
 def _iter_cells(recovery: dict) -> list[tuple[str, str, dict]]:
@@ -227,9 +231,9 @@ def test_the_fallback_notice_is_logged_once_per_cell(
 
 
 def test_recovery_probability_never_raises_over_a_missing_cell(learning_on: dict) -> None:
-    # every negotiation action, every quadrant -- send tiers and payment_plan/
-    # counter_settle mostly learned, wait/handoff/escalation always fallback,
-    # none should raise.
+    # every negotiation action, every quadrant -- send tiers, wait and
+    # payment_plan/counter_settle mostly learned, handoff/escalation always
+    # fallback, none should raise.
     from engine import ability_willingness as aw
 
     for quadrant in aw.QUADRANTS:

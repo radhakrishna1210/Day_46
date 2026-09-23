@@ -29,10 +29,20 @@ THE ATTRIBUTION RULE, exactly as specified, and the only one implemented:
     project's non-negotiable #5 is about.
 
 WHAT COUNTS AS "AN ACTION THE SIMULATOR EXECUTED" is the caller's call, not
-this module's -- sim/run_sim.py records outbound contacts and human handoffs
-and deliberately does NOT record waits or stops. See its own comments for why
-(short version: crediting a payment to a decision to stop chasing would
-poison the very signal this file exists to produce).
+this module's -- sim/run_sim.py records outbound contacts and human handoffs,
+and deliberately does NOT record stops or RULE waits (spacing, weekends, an
+active promise, a pending due date). See its own comments for why (short
+version: crediting a payment to a decision to stop chasing would poison the
+very signal this file exists to produce).
+
+Since Phase E2 it DOES record a wait that the EV ranking itself CHOSE over
+contacting the buyer -- one row per wait episode (see wait_episode_open()).
+That wait is a genuine alternative to a send, and without a row it could
+never be scored: its P(recover) stayed a hand-typed 60% that no outcome had
+ever tested (docs/learning_findings.md). It is judged by the SAME rule as
+every other action -- credited only if it is the most recent action before a
+payment inside the horizon -- so a later send that brings the money in takes
+the credit, exactly as a later send already does from an earlier one.
 
 KNOWN, STATED LIMITATION: proximity is not causation. A buyer inside their own
 payment cycle who would have paid anyway still credits whichever message
@@ -87,6 +97,9 @@ OUTCOMES_PATH = ROOT / "audit" / "outcomes.jsonl"
 #: "record_type", so a reader never has to guess from the keys present.
 ACTION_RECORD = "action"
 UNATTRIBUTED_PAYMENT_RECORD = "unattributed_payment"
+
+#: engine.brain.WAIT, by value -- this module imports nothing from the brain.
+WAIT_ACTION_KIND = "wait"
 
 #: Every run_id handed out in this process, so two ledgers built inside the
 #: same clock tick still get distinct ids. Normally never consulted -- see
@@ -206,6 +219,21 @@ class OutcomeLedger:
         self.actions: list[ActionEvent] = []
         self.payments: list[PaymentEvent] = []
         self._seq = 0
+        #: Invoices whose most recent ledger event is a recorded wait -- see
+        #: wait_episode_open(). Kept incrementally so the check is O(1) inside
+        #: the simulator's per-invoice, per-day loop.
+        self._open_wait: set[str] = set()
+
+    def wait_episode_open(self, invoice_id: str) -> bool:
+        """True when this invoice's latest event is a recorded wait, with no
+        action or payment after it.
+
+        sim/run_sim.py records an EV-chosen wait only when this is False: a
+        run of consecutive EV waits with nothing in between is ONE decision to
+        hold off, and recording it once per day would hand the eventual
+        payment to the last day's row and mark every earlier day a failure.
+        """
+        return invoice_id in self._open_wait
 
     def _next_seq(self) -> int:
         self._seq += 1
@@ -251,6 +279,10 @@ class OutcomeLedger:
             seq=self._next_seq(),
         )
         self.actions.append(event)
+        if event.action_kind == WAIT_ACTION_KIND:
+            self._open_wait.add(invoice_id)
+        else:
+            self._open_wait.discard(invoice_id)
         return event
 
     def record_payment(self, *, invoice_id: str, day: date, amount_paise: int) -> PaymentEvent:
@@ -266,6 +298,7 @@ class OutcomeLedger:
             seq=self._next_seq(),
         )
         self.payments.append(event)
+        self._open_wait.discard(invoice_id)
         return event
 
     # ----------------------------------------------------------------------

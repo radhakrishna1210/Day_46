@@ -414,6 +414,19 @@ consolidation:
 #   unconditional send.
 brain:
   ev_mode: off
+  # Phase E1. Only read on the ev_mode: on path, so with ev_mode off (shipped)
+  # nothing changes either way.
+  #
+  # true: EV's choice among the SEND tiers (soft_nudge / firm / legal_facts)
+  #   IS the rung delivered. The escalation walk's rung is the most EV may
+  #   send today; EV may pick that rung or a GENTLER one (from the pacing
+  #   band's start rung up) that still has message budget and has cleared its
+  #   own spacing -- never a higher one. Closes the label/execution gap in
+  #   docs/learning_findings.md: the action EV scored is the message sent.
+  # false: the pre-E1 behaviour -- the tier is only a label on the audit
+  #   entry and the message goes out at the walk's rung whatever EV picked.
+  #   Kept so the before/after is reproducible.
+  ev_sets_rung: true
 
 # --- Recovery probability + expected value (engine/negotiation.py) --------
 # Phase 2 built the ranking; Phase 3 (brain.ev_mode above) is what acts on it

@@ -26,6 +26,16 @@ CELL GRANULARITY -- read this before trusting a SEND cell:
     2 = firm, 3 = legal_facts -- not a new mapping). Those cells live nested
     under recovery.<quadrant>.send.<tier>. See docs/learning_findings.md for
     the full label/execution-gap write-up.
+  * Phase E1 (config/rules.yaml brain.ev_sets_rung: true) closes that gap at
+    the source: the tier EV picks IS the rung delivered, so gate_override is
+    false on every SEND row and grouping by delivered rung and by label now
+    agree. The grouping is kept by delivered rung regardless -- it is the
+    number that describes what the buyer received either way.
+  * Phase E2: a WAIT the EV ranking chose over contacting the buyer is now a
+    recorded action (one row per wait episode, sim/run_sim.py), so it gets a
+    flat recovery.<quadrant>.wait cell like payment_plan. Before E2 wait had
+    no cell at all and its P(recover) was a hand-typed number never tested
+    against a single outcome.
 
 TRAINING vs BENCHMARK, the one rule that matters here:
 
@@ -258,6 +268,11 @@ def fit(rows: list[dict[str, Any]], days: int, horizon: int) -> dict[str, Any]:
         "excluded_null_quadrant": 0,
         "fitted_observations": 0,
         "send_rows_off_ladder": 0,
+        # Subsets of fitted_observations, reported not partitioned: how many
+        # fitted SEND rows the gates overrode (label != delivered rung). With
+        # brain.ev_sets_rung on this is expected to be 0.
+        "fitted_send_rows": 0,
+        "fitted_send_gate_overrides": 0,
     }
     # leaf key: a SEND's delivered tier name, else the action_kind itself.
     buckets: dict[tuple[str, str], list[bool]] = defaultdict(list)
@@ -279,6 +294,9 @@ def fit(rows: list[dict[str, Any]], days: int, horizon: int) -> dict[str, Any]:
         counts["fitted_observations"] += 1
 
         if kind == SEND:
+            counts["fitted_send_rows"] += 1
+            if row.get("gate_override"):
+                counts["fitted_send_gate_overrides"] += 1
             leaf = tier_by_rung.get(row["rung"])
             if leaf is None:
                 # A SEND at rung 0 or 4 -- should never happen (0 in the
@@ -355,12 +373,15 @@ _YAML_HEADER = """\
 #
 # CELL LAYOUT:
 #   recovery.<quadrant>.send.<tier>   -- a buyer-facing message, grouped by the
-#     rung it was DELIVERED at (ladder tier: soft_nudge/firm/legal_facts), NOT
-#     by the soft_nudge/firm/legal_facts label EV nominally selected. The
-#     escalation walk in engine/brain.py overrides that label ~56% of the time
-#     -- see docs/learning_findings.md. Each cell carries delivered_rung.
+#     rung it was DELIVERED at (ladder tier: soft_nudge/firm/legal_facts). With
+#     config/rules.yaml brain.ev_sets_rung: true (Phase E1) the tier EV picked
+#     IS the delivered rung; before it the walk overrode the label ~56% of the
+#     time -- see docs/learning_findings.md. Each cell carries delivered_rung.
 #   recovery.<quadrant>.payment_plan / .counter_settle -- one flat cell; these
 #     map 1:1 from what EV selected to what was executed.
+#   recovery.<quadrant>.wait -- one flat cell (Phase E2): an EV-chosen wait,
+#     one row per wait episode, credited only if no later action claimed the
+#     payment first (the same most-recent rule every other row is judged by).
 #
 # READ BY engine/learning.py, behind config/rules.yaml's learning.enabled
 # switch (ships OFF). recovery_probability(quadrant, "firm") resolves to
@@ -437,6 +458,11 @@ def write_doc(fitted: dict[str, Any], days: int, horizon: int,
     run_end = _run_end(days)
     censor_cutoff = run_end - timedelta(days=horizon)
     off_ladder = counts["send_rows_off_ladder"]
+    sends = counts.get("fitted_send_rows", 0)
+    overrides = counts.get("fitted_send_gate_overrides", 0)
+    gate_line = (f"**{overrides}** of {sends} fitted SEND rows "
+                 f"({(overrides / sends * 100 if sends else 0):.1f}%) were delivered at a "
+                 f"rung other than the tier EV picked.")
 
     doc = f"""\
 # Learning data -- provenance for `config/learned_recovery.yaml`
@@ -483,14 +509,19 @@ evaluated against.
 `payment_plan` and `counter_settle` each get one flat cell per quadrant --
 they map 1:1 from what EV selected to what was executed.
 
+`wait` gets one flat cell per quadrant too: a wait the EV ranking **chose**
+over contacting the buyer, recorded once per wait episode by `sim/run_sim.py`
+(rule waits -- spacing, weekends, an active promise -- are never recorded).
+It is judged by the same most-recent-action rule as every other row.
+
 A **SEND** is grouped by the rung it was **delivered** at, mapped to a tier
 name through `config/rules.yaml`'s ladder (rung 1 = `soft_nudge`, 2 = `firm`,
 3 = `legal_facts`), and stored nested under `recovery.<quadrant>.send.<tier>`.
-It is **not** grouped by `proposed_action_kind` (the `soft_nudge`/`firm`/
-`legal_facts` label EV nominally selected): the escalation walk in
-`engine/brain.py` sets the delivered rung independently, and the two disagreed
-on 56% of SEND rows in this training set. See `docs/learning_findings.md` for
-the label/execution-gap write-up.
+With `brain.ev_sets_rung: true` the tier EV picked is the rung delivered, so
+this grouping and `proposed_action_kind` agree; the label/execution-gap
+history is in `docs/learning_findings.md`.
+
+**Gate overrides in this training set:** {gate_line}
 
 `send_rows_off_ladder`: **{off_ladder}** (a SEND recorded at rung 0 or 4 --
 kept in a coarse `send` cell rather than dropped; expected to be 0).
@@ -608,6 +639,8 @@ def main() -> int:
 
     fitted = fit(rows, args.days, horizon)
     counts = fitted["counts"]
+    print(f"  SEND gate overrides: {counts['fitted_send_gate_overrides']} of "
+          f"{counts['fitted_send_rows']} fitted SEND rows")
     print(f"  action rows: {counts['action_rows_seen']} seen, "
           f"{counts['fitted_observations']} fitted "
           f"({counts['excluded_handoff']} handoff, "

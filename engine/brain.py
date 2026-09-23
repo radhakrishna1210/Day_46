@@ -45,6 +45,14 @@ legal_escalation -- never whether one happens.) With ev_mode off (the
 default) or no quadrant on the score, decide() is byte-for-byte what it
 always was -- see tests/test_brain.py's snapshot test.
 
+PHASE E1 (config/rules.yaml brain.ev_sets_rung, read only on the ev_mode path):
+before it, EV's soft_nudge/firm/legal_facts pick was a LABEL -- the message
+went out at the escalation walk's rung whatever EV chose, and the two disagreed
+on 56% of sends in training. With it on, the chosen tier is the rung delivered,
+chosen from the walk's own rung or a gentler one that has cleared its own
+budget and spacing (ev_send_candidates()). EV can make a case gentler than the
+walk, never faster; the law ceiling holds because chosen already sits under it.
+
 EXPLORATION (simulator only): decide()'s `explore_rng` argument swaps the EV
 branches' argmax for a uniform sample over the SAME already-gated candidate
 list. It is an object, not a config key, precisely so nothing but a caller
@@ -254,6 +262,68 @@ def eligible_negotiation_actions(
     return tuple(allowed)
 
 
+def ev_sets_rung(config: dict[str, Any]) -> bool:
+    """config/rules.yaml's brain.ev_sets_rung -- does EV's choice among the
+    SEND tiers set the rung that is actually delivered?
+
+    Absent reads as False, the pre-existing behaviour (the label rides along,
+    the escalation walk's rung goes out), so a hand-built config dict that
+    predates the key keeps meaning exactly what it meant.
+    """
+    return bool((config.get("brain") or {}).get("ev_sets_rung", False))
+
+
+def _send_tier(rung_id: int) -> str:
+    """The negotiation action a buyer-facing rung delivers: the ladder's own
+    name for it (config/rules.yaml: 1 soft_nudge, 2 firm, 3 legal_facts)."""
+    return str(rungs.rung(rung_id)["name"])
+
+
+def ev_send_candidates(
+    menu: tuple[str, ...],
+    *,
+    chosen: int,
+    floor: int,
+    history: list[dict[str, Any]],
+    days_since: int | None,
+) -> tuple[str, ...]:
+    """Step 13's candidate list when brain.ev_sets_rung is on.
+
+    Under ev_sets_rung a SEND tier is a real rung, not a label, so the tiers on
+    offer are rewritten to the ones that could actually be DELIVERED today:
+
+      * the walk's own tier (`chosen`) -- always. Every gate above (steps 1-11:
+        stop rules, per-rung budget, weekend, spacing, the law ceiling) has
+        already cleared it, and it is exactly what the plain agent would send,
+        so it stays available even when the quadrant menu does not name it
+        (a high_risk menu has no `firm`, but a walk at rung 2 has always
+        delivered a firm message to that buyer -- now it is labelled as one);
+      * any GENTLER tier from `floor` (the pacing band's start rung) up to
+        `chosen` - 1 that the quadrant menu offers, still has message budget
+        left, and has cleared its own min_days_between_contacts.
+
+    Never a tier above `chosen`: the walk sets how far escalation has got, and
+    EV may only choose to be gentler than that, never to escalate faster. The
+    law ceiling therefore holds by construction (chosen <= ceiling already),
+    and engine.rungs.fact_skeleton() re-checks it independently anyway.
+    Non-send menu entries (wait, payment_plan, counter_settle) pass through
+    unchanged.
+    """
+    tiers = {_send_tier(r) for r in rungs.BUYER_FACING_RUNGS}
+    lower = []
+    for r in range(max(floor, min(rungs.BUYER_FACING_RUNGS)), chosen):
+        entry = rungs.rung(r)
+        if _send_tier(r) not in menu:
+            continue
+        if contacts_at_rung(history, r) >= int(entry["max_messages"]):
+            continue
+        if days_since is not None and days_since < int(entry["min_days_between_contacts"]):
+            continue
+        lower.append(_send_tier(r))
+    others = [a for a in menu if a not in tiers]
+    return tuple(others + lower + [_send_tier(chosen)])
+
+
 def negotiation_rung(action: str) -> int | None:
     """The ladder rung a negotiation action names a MESSAGE at, or None.
 
@@ -351,11 +421,12 @@ def _learned_cell_key(negotiation_action: str) -> str | None:
     or None for one the fit never covers.
 
     engine.learning._resolve_cell() maps a SEND tier name to send.<tier>;
-    payment_plan / counter_settle are flat cells; `wait` and both handoff
-    flavors have no learned cell (the fit excludes handoff rows -- post-handoff
+    wait / payment_plan / counter_settle are flat cells (wait since Phase E2,
+    when the simulator began recording EV-chosen waits); both handoff flavors
+    have no learned cell (the fit excludes handoff rows -- post-handoff
     recovery is unobservable in the simulator).
     """
-    if negotiation_action in (negotiation.SOFT_NUDGE, negotiation.FIRM,
+    if negotiation_action in (negotiation.WAIT, negotiation.SOFT_NUDGE, negotiation.FIRM,
                               negotiation.LEGAL_FACTS, negotiation.PAYMENT_PLAN,
                               negotiation.COUNTER_SETTLE):
         return negotiation_action
@@ -386,7 +457,11 @@ def _gate_reason(
                                        a good_customer is never offered legal
                                        pressure).
       escalation_walk_rung_N           same action label, delivered at a
-                                       different rung by the escalation walk.
+                                       different rung by the escalation walk --
+                                       or, with brain.ev_sets_rung on, the
+                                       bandit wanted a tier ABOVE the rung N
+                                       the walk had reached, which EV may
+                                       never jump past.
       exploration_sample               SIMULATOR exploration mode sampled a
                                        non-argmax action -- not a gate, labelled
                                        so it is not read as one.
@@ -406,6 +481,13 @@ def _gate_reason(
         return "eligible_actions_policy"
     if bandit_top not in quadrant_menu:
         return "eligible_actions_policy"
+    wanted_rung = negotiation_rung(bandit_top)
+    if wanted_rung is not None and wanted_rung > chosen_rung:
+        # brain.ev_sets_rung: the tier is a real rung, and EV may never
+        # escalate past the walk. Only reachable with that key on -- with it
+        # off every menu tier is a candidate and argmax would have taken it.
+        return (f"law_ceiling_rung_{ceiling}" if wanted_rung > ceiling
+                else f"escalation_walk_rung_{chosen_rung}")
     if law_capped:
         return f"law_ceiling_rung_{ceiling}"
     return "eligible_actions_policy"
@@ -852,15 +934,33 @@ def decide(
     #     construction -- to pick which flavor of an already-certain handoff
     #     to record; that is a separate call site with its own precondition,
     #     not a contradiction of this one.)
+    #
+    #     brain.ev_sets_rung (Phase E1): with it on, a SEND tier EV picks IS
+    #     the rung delivered -- see ev_send_candidates() for which tiers are on
+    #     offer (the walk's own, or a gentler one that has cleared its own
+    #     budget and spacing; never a higher one). Off, the tier is a label and
+    #     the message goes out at `chosen`, as before this key existed.
     if ev_mode_on:
         promise_count = int((score.get("signals") or {}).get("broken_promises", 0) or 0)
         candidates = eligible_negotiation_actions(quadrant, chosen, config)
+        sets_rung = ev_sets_rung(config)
+        if sets_rung:
+            candidates = ev_send_candidates(candidates, chosen=chosen, floor=base,
+                                            history=history, days_since=days_since)
         winner, selection = _pick_negotiation_action(
             candidates, quadrant=quadrant, outstanding=outstanding_paise(invoice),
             broken_promises=promise_count, explore_rng=explore_rng,
         )
         neg_action = winner["action"]
-        ev_extra = _negotiation_extra(winner, selection, chosen)
+        send_rung = chosen
+        if sets_rung and negotiation_rung(neg_action) in rungs.BUYER_FACING_RUNGS:
+            send_rung = negotiation_rung(neg_action)
+            if send_rung != chosen:
+                skeleton = rungs.fact_skeleton(send_rung, legal_position, invoice, buyer)
+        ev_extra = _negotiation_extra(winner, selection, send_rung)
+        if sets_rung:
+            ev_extra["ev_sets_rung"] = True
+            ev_extra["walk_rung"] = chosen
         if learning.enabled():
             ev_extra.update(_learning_audit(
                 winner, selection, quadrant=quadrant,
@@ -875,6 +975,9 @@ def decide(
                     f"{len(candidates)} eligible action(s)")
         ev_why = (f"{why}; {how} for a {quadrant} buyer "
                   f"({winner['probability']}% recover, EV {winner['ev_paise']} paise)")
+        if send_rung != chosen:
+            ev_why += (f"; sent at rung {send_rung}, gentler than the rung {chosen} the "
+                       f"escalation walk had reached")
 
         if neg_action == negotiation.WAIT:
             return act(WAIT, chosen, ev_why, capped=capped,
@@ -895,7 +998,7 @@ def decide(
 
         kind = {negotiation.PAYMENT_PLAN: PAYMENT_PLAN,
                 negotiation.COUNTER_SETTLE: COUNTER_SETTLE}.get(neg_action, SEND)
-        return act(kind, chosen, ev_why, capped=capped, skeleton=skeleton, extra=ev_extra)
+        return act(kind, send_rung, ev_why, capped=capped, skeleton=skeleton, extra=ev_extra)
 
     return act(SEND, chosen, why, capped=capped, skeleton=skeleton)
 

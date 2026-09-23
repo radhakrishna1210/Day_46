@@ -53,7 +53,7 @@ if __package__ in (None, ""):
 
 from data import generate, store
 from engine import ability_willingness
-from engine import audit, brain, channels, consolidate, law, learning, llm, outcomes, promises, validate, watchdog, writer
+from engine import audit, brain, channels, consolidate, law, learning, llm, negotiation, outcomes, promises, validate, watchdog, writer
 from engine import buyer_panel as buyer_panel_engine
 from engine import score as score_engine
 from engine.config import rules
@@ -145,7 +145,8 @@ def _collapsed_learning_fallbacks(verbose: bool):
     engine/learning.py logs one line the first time config/learned_recovery.yaml
     is missing a (quadrant, action) cell it is asked for. The agent+EV+learned
     arm (run_agent(learned=True)) trips a burst of them -- the fit deliberately
-    has no `wait` / handoff cells, and thin quadrants have no soft_nudge cell --
+    has no handoff cells, and a quadrant the training runs never reached with a
+    given action (e.g. no rung-1 sends) has no cell for it --
     before any headline number prints, which reads as breakage on camera.
 
     Not verbose: swallow those specific lines, forward everything else on stderr
@@ -882,6 +883,25 @@ def run_agent(
                     "kind": action.kind, "rung": action.rung, "reason": action.reason,
                 }
                 day_actions.append(action)
+
+                # Phase E2: a wait the EV ranking CHOSE (negotiation_action
+                # "wait") is a genuine alternative to contacting the buyer, so
+                # it is recorded and scored like one -- once per wait episode
+                # (engine.outcomes.OutcomeLedger.wait_episode_open()). A RULE
+                # wait (spacing, weekend, active promise, not yet due) never
+                # reaches here: it carries no negotiation_action, because it
+                # was never a choice. Only EV/exploration arms produce one; the
+                # plain agent and the baseline record exactly what they did.
+                if (action.kind == brain.WAIT
+                        and action.detail.get("negotiation_action") == negotiation.WAIT
+                        and not ledger.wait_episode_open(inv_id)):
+                    ledger.record_action(
+                        invoice_id=inv_id, buyer_id=buyer["buyer_id"], day=today,
+                        quadrant=quadrant_of.get(inv_id), action_kind=action.kind,
+                        rung=action.rung,
+                        outstanding_paise_at_action=law.outstanding_paise(invoice, today),
+                        **proposal_of.get(inv_id, {}),
+                    )
 
                 if action.kind in (brain.HANDOFF, brain.STOP) and inv_id not in announced:
                     announced.add(inv_id)
