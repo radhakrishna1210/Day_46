@@ -152,6 +152,38 @@ COUNTER_SETTLE_PARTIAL_BIAS: dict[str, float] = {
 _REDUCED_TERMS_VARIANT = "promise_partial_hinglish"
 
 
+#: Phase R1 (delayed reactions): outcome -> (min, max) whole days between the
+#: message going out and the buyer's reaction landing, drawn uniformly per
+#: (invoice, send day) by sim/run_sim.py. ASSUMPTIONS, like every other number
+#: in this module -- no measured reply-latency data sits behind them:
+#:   a reply (a promise or a dispute) is typed and sent within 0-2 days;
+#:   money (full or partial) takes 1-5 days to be approved, released and land,
+#:     never the same day, because a B2B payment run is not instant.
+#: SILENCE has no reaction to deliver. Used only when a run opts in
+#: (run_agent/run_baseline reaction_delays=True, --reaction-delays); with it
+#: off, every reaction lands the day the message went out, exactly as before.
+REACTION_DELAY_DAYS: dict[str, tuple[int, int]] = {
+    PAY_FULL: (1, 5),
+    PAY_PARTIAL: (1, 5),
+    PROMISE: (0, 2),
+    DISPUTE: (0, 2),
+    SILENCE: (0, 0),
+}
+
+
+def reaction_delay(outcome: str, rng: random.Random) -> int:
+    """Whole days until a reaction of this kind lands, per REACTION_DELAY_DAYS.
+
+    `rng` must be the caller's seeded per-(invoice, send day) stream, and a
+    stream of its own -- not the one react() drew from -- so turning delays on
+    never changes WHICH outcome a buyer picks, only when it arrives.
+    """
+    if outcome not in REACTION_DELAY_DAYS:
+        raise ValueError(f"unknown outcome {outcome!r}; expected one of {OUTCOMES}")
+    low, high = REACTION_DELAY_DAYS[outcome]
+    return low if low == high else rng.randint(low, high)
+
+
 def _boost_promise(table: dict[str, float], boost: float) -> dict[str, float]:
     """Shift `boost` points of probability from SILENCE to PROMISE.
 

@@ -99,7 +99,13 @@ def _response_rate(history_entries: list[dict[str, Any]]) -> dict[str, Any]:
     beyond what the day loop already produces.
     """
     sent = len(history_entries)
-    replied = sum(1 for entry in history_entries if entry.get("outcome") != "no_reply")
+    # sim/run_sim.py --reaction-delays only: "awaiting_reply" is a contact whose
+    # delayed reaction had not landed when the run ended; "moot_already_paid"
+    # one that landed after the invoice was settled another way and was
+    # dropped. Neither is counted as a reply to that contact.
+    replied = sum(1 for entry in history_entries
+                  if entry.get("outcome") not in ("no_reply", "awaiting_reply",
+                                                  "moot_already_paid"))
     return {
         "messages_sent": sent,
         "replies": replied,

@@ -270,6 +270,29 @@ def _advance_promises(
         promises.sweep(plist, today, log=log)
 
 
+#: History outcome of a contact whose delayed reaction has not landed yet
+#: (Phase R1, --reaction-delays). engine/buyer_panel.py does not count it as a
+#: reply. Never written with delays off.
+_AWAITING_REPLY = "awaiting_reply"
+#: A delayed reaction that landed after the invoice had already been settled
+#: another way; dropped rather than applied.
+_MOOT_ALREADY_PAID = "moot_already_paid"
+
+
+def _pending_summary(pending: dict[date, list[dict[str, Any]]]) -> dict[str, int]:
+    """Reactions still in flight when the window closed -- they never landed.
+    Reported, never silently dropped: a payment that would have arrived on day
+    121 is money this run did not recover, and the reader should know how
+    much of the gap that is."""
+    items = [item for day_items in pending.values() for item in day_items]
+    return {
+        "reactions_in_flight_at_end": len(items),
+        "payments_in_flight_at_end": sum(
+            1 for item in items
+            if item["reaction"]["outcome"] in (personas.PAY_FULL, personas.PAY_PARTIAL)),
+    }
+
+
 def _apply_reaction(
     invoice: dict[str, Any],
     plist: list[dict[str, Any]],
@@ -660,7 +683,7 @@ def _resolve_online(learner, ledger, horizon: int, today: date, run_end: date,
 def run_agent(
     seed: int, days: int, verbose: bool = False, ev_mode: bool = False,
     explore: bool = False, online: bool = False, learned: bool = False,
-    online_posteriors_out: Path | None = None,
+    online_posteriors_out: Path | None = None, reaction_delays: bool = False,
 ) -> dict[str, Any]:
     """Run the full agent (watchdog -> score -> law -> brain -> writer ->
     channels -> persona reacts -> promises) over `days` simulated days.
@@ -731,6 +754,15 @@ def run_agent(
             both on exit. Never reachable from main.py or any CLI flag; only
             sim/run_sim.py's own --compare ablation and multi_seed_summary()
             construct one.
+        reaction_delays: Phase R1. False (the default) lands every buyer
+            reaction the day its message went out, byte-identical to every
+            run before R1. True rolls the SAME reaction from the same stream
+            but lands it sim.personas.reaction_delay() days later (a reply 0-2
+            days, money 1-5), drawn from a stream of its own per (invoice,
+            send day) -- identical for the baseline, so both arms face the
+            same delays. Reactions still in flight when the window ends never
+            land; the count is reported as "in_flight". The Brain's inputs
+            (history, promises, payments) only ever reflect what has landed.
     """
     ev_mode = ev_mode or explore or online or learned
     decide_config = None
@@ -794,6 +826,36 @@ def run_agent(
     # entry per day for the same warning.
     warned: set[str] = set()
 
+    # Phase R1: reactions still in flight, keyed by the day they land. Always
+    # empty with reaction_delays off -- every reaction then lands the day it
+    # is rolled, via land() below, exactly as before.
+    pending_reactions: dict[date, list[dict[str, Any]]] = {}
+
+    def land(item: dict[str, Any], day: date, day_offset: int) -> None:
+        """Apply one buyer reaction on the day it lands, and record it."""
+        inv_id = item["invoice_id"]
+        invoice = invoices_by_id[inv_id]
+        if item["entry"]["outcome"] != _AWAITING_REPLY:
+            return
+        if invoice.get("status") == "paid" and day != date.fromisoformat(item["entry"]["date"]):
+            # Settled in the meantime (a kept promise, another reaction):
+            # a buyer who has already paid does not also send a promise or a
+            # second payment. Only reachable with delays on.
+            item["entry"]["outcome"] = _MOOT_ALREADY_PAID
+            return
+        plist = promises_by_invoice.setdefault(inv_id, [])
+        outcome = _apply_reaction(invoice, plist, item["reaction"], day, seed, log=True,
+                                  ledger=ledger)
+        item["entry"]["outcome"] = outcome
+        if verbose and (item["narrate"] or outcome in ("paid_full", "disputed")):
+            promise = plist[-1] if outcome == "promise_made" and plist else None
+            narrative.append(_narrate(day_offset + 1, item["buyer"], item["persona"],
+                                      item["rung"], outcome, promise))
+        if outcome == "disputed":
+            disputes.add(inv_id)
+            last_action_by_invoice[inv_id]["reason"] = (
+                f"the buyer disputed the invoice; {item['reason']}")
+
     audit.clear()
     audit.enable()
 
@@ -804,6 +866,11 @@ def run_agent(
 
             _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=True,
                               ledger=ledger)
+
+            # Phase R1: reactions due today land before the Brain decides, so
+            # a payment or a promise that arrived this morning is what it sees.
+            for item in pending_reactions.pop(today, []):
+                land(item, today, offset)
 
             queue = watchdog.overdue_invoices(invoices, today)
             grouped = store.invoices_by_buyer(invoices)
@@ -995,23 +1062,31 @@ def run_agent(
 
                     rng = _rng(seed, inv_id, today, "react")
                     reaction = personas.react(persona, action.rung, rng, action_kind=action.kind)
-                    outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=True,
-                                              ledger=ledger)
-                    hist.append({"date": today.isoformat(), "rung": action.rung,
-                                "channel": target, "outcome": outcome,
-                                "bundle_invoice_ids": bundle_ids})
+                    entry = {"date": today.isoformat(), "rung": action.rung,
+                             "channel": target, "outcome": _AWAITING_REPLY,
+                             "bundle_invoice_ids": bundle_ids}
+                    hist.append(entry)
 
                     seen = seen_rungs.setdefault(inv_id, set())
                     newly_seen_rung = action.rung not in seen
                     seen.add(action.rung)
-                    if verbose and (newly_seen_rung or outcome in ("paid_full", "disputed")):
-                        promise = plist[-1] if outcome == "promise_made" and plist else None
-                        narrative.append(_narrate(offset + 1, buyer, persona, action.rung,
-                                                  outcome, promise))
-                    if outcome == "disputed":
-                        disputes.add(inv_id)
-                        last_action_by_invoice[inv_id]["reason"] = (
-                            f"the buyer disputed the invoice; {action.reason}")
+
+                    # Phase R1: the SAME reaction, rolled today from the same
+                    # stream, lands `delay` days later (its own stream, so the
+                    # outcome itself never changes). delay 0 -- always, with
+                    # reaction_delays off -- lands it right here, today,
+                    # exactly as every run did before R1.
+                    delay = (personas.reaction_delay(
+                                reaction["outcome"], _rng(seed, inv_id, today, "react_delay"))
+                             if reaction_delays else 0)
+                    landing = {"invoice_id": inv_id, "reaction": reaction, "entry": entry,
+                               "rung": action.rung, "reason": action.reason,
+                               "buyer": buyer, "persona": persona,
+                               "narrate": newly_seen_rung}
+                    if delay == 0:
+                        land(landing, today, offset)
+                    else:
+                        pending_reactions.setdefault(today + timedelta(days=delay), []).append(landing)
 
             # End of this simulated day: feed the online learner every action
             # that has newly resolved -- a payment landed inside its horizon,
@@ -1106,6 +1181,10 @@ def run_agent(
         # run's own output and not merely left sitting in a file nobody opens.
         "outcomes": attribution["summary"],
         "narrative": narrative,
+        # Phase R1, additive and opt-in: absent unless reaction_delays=True,
+        # so every pre-R1 report (and results.json) keeps its exact shape.
+        **({"reaction_delays": True, "in_flight": _pending_summary(pending_reactions)}
+           if reaction_delays else {}),
     }
 
 
@@ -1138,7 +1217,8 @@ def _baseline_reason(invoice: dict[str, Any], sent: int) -> str:
     return f"only {sent}/{BASELINE_MAX_MESSAGES} fixed reminders sent before the window ended"
 
 
-def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
+def run_baseline(seed: int, days: int, verbose: bool = False,
+                 reaction_delays: bool = False) -> dict[str, Any]:
     """Three fixed reminders, ten days apart, the same message for everyone.
 
     No score, no law, no rung, no dispute detection -- a dumb bot does not
@@ -1146,6 +1226,11 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     Promises are still tracked and still mature (a buyer's commitment is real
     whether or not this bot is smart enough to reference it), which is what
     makes the comparison against the agent honest rather than stacked.
+
+    reaction_delays: Phase R1, exactly as run_agent() -- same delay table, same
+    per-(invoice, send day) "react_delay" stream, so a buyer who reacts to the
+    baseline's reminder and to the agent's message on the same day lands both
+    reactions after the same delay.
     """
     # The baseline is instrumented exactly like the agent, on purpose: the
     # ablation only means anything if both arms are measured the same way.
@@ -1164,6 +1249,24 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
     messages_sent = 0
     narrative: list[str] = []
     last_day = day0
+    invoices_by_id = {inv["invoice_id"]: inv for inv in invoices}
+    # Phase R1 -- see run_agent()'s pending_reactions. Empty with delays off.
+    pending_reactions: dict[date, list[dict[str, Any]]] = {}
+
+    def land(item: dict[str, Any], day: date, day_offset: int) -> None:
+        inv_id = item["invoice_id"]
+        invoice = invoices_by_id[inv_id]
+        if invoice.get("status") == "paid" and day != item["sent_on"]:
+            return   # settled meanwhile -- same rule as run_agent()'s land()
+        plist = promises_by_invoice.setdefault(inv_id, [])
+        outcome = _apply_reaction(invoice, plist, item["reaction"], day, seed, log=False,
+                                  ledger=ledger)
+        if outcome == "disputed":
+            disputes.add(inv_id)
+        if verbose:
+            narrative.append(
+                f"Day {day_offset + 1}: [baseline] {item['buyer']['name']} "
+                f"({item['persona']}) reminder {item['n']}/{BASELINE_MAX_MESSAGES} -> {outcome}")
 
     with _forced_mock_mode():
         for offset in range(days):
@@ -1172,6 +1275,9 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
 
             _advance_promises(invoices, promises_by_invoice, persona_of, today, seed, log=False,
                               ledger=ledger)
+
+            for item in pending_reactions.pop(today, []):
+                land(item, today, offset)
 
             for invoice in watchdog.overdue_invoices(invoices, today):
                 inv_id = invoice["invoice_id"]
@@ -1201,15 +1307,15 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
 
                 rng = _rng(seed, inv_id, today, "baseline_react")
                 reaction = personas.react(persona, BASELINE_RUNG, rng)
-                plist = promises_by_invoice.setdefault(inv_id, [])
-                outcome = _apply_reaction(invoice, plist, reaction, today, seed, log=False,
-                                          ledger=ledger)
-                if outcome == "disputed":
-                    disputes.add(inv_id)
-                if verbose:
-                    narrative.append(
-                        f"Day {offset + 1}: [baseline] {buyer['name']} ({persona}) "
-                        f"reminder {sent_count[inv_id]}/{BASELINE_MAX_MESSAGES} -> {outcome}")
+                delay = (personas.reaction_delay(
+                            reaction["outcome"], _rng(seed, inv_id, today, "react_delay"))
+                         if reaction_delays else 0)
+                item = {"invoice_id": inv_id, "reaction": reaction, "sent_on": today,
+                        "buyer": buyer, "persona": persona, "n": sent_count[inv_id]}
+                if delay == 0:
+                    land(item, today, offset)
+                else:
+                    pending_reactions.setdefault(today + timedelta(days=delay), []).append(item)
 
     # Checked once here, against the clock at the END of the run -- see the
     # matching comment in run_agent() for why last_day and not day0.
@@ -1240,6 +1346,8 @@ def run_baseline(seed: int, days: int, verbose: bool = False) -> dict[str, Any]:
                                   {inv_id: BASELINE_RUNG for inv_id in sent_count},
                                   last_day, invalid_ids),
         "narrative": narrative,
+        **({"reaction_delays": True, "in_flight": _pending_summary(pending_reactions)}
+           if reaction_delays else {}),
     }
 
 
@@ -1263,15 +1371,24 @@ def _print_summary(label: str, report: dict[str, Any]) -> None:
     print(f"  escalated to human   {report['handoffs']:>16}")
     print(f"  hard-stopped         {report['stops']:>16}")
     print(f"  not recovered        {len(report['exceptions']):>16}")
+    if "in_flight" in report:
+        flight = report["in_flight"]
+        print(f"  still in flight      {flight['reactions_in_flight_at_end']:>16} "
+              f"reaction(s), {flight['payments_in_flight_at_end']} of them payments "
+              f"(landed after the window -- not counted as recovered)")
 
 
 def _write_results(path: Path, seed: int, days: int, baseline: dict[str, Any],
                    agent: dict[str, Any], matched_days: dict[str, Any],
                    multi_seed: dict[str, Any] | None,
                    agent_ev: dict[str, Any] | None = None,
-                   agent_learned: dict[str, Any] | None = None) -> None:
+                   agent_learned: dict[str, Any] | None = None,
+                   reaction_delays: bool = False) -> None:
     payload = {
         "seed": seed, "days": days,
+        # Phase R1, additive: present only when the run landed reactions late,
+        # so a pre-R1 results.json keeps its exact shape.
+        **({"reaction_delays": True} if reaction_delays else {}),
         "generated": datetime.now().isoformat(timespec="seconds"),
         "baseline": baseline, "agent": agent,
         # A comparison-level figure, not something either agent computes about
@@ -1340,6 +1457,7 @@ def multi_seed_summary(
     extra_seeds: tuple[int, ...], days: int,
     *, primary_agent_ev: dict[str, Any] | None = None,
     primary_agent_learned: dict[str, Any] | None = None,
+    reaction_delays: bool = False,
 ) -> dict[str, Any]:
     """Re-run the comparison on more seeds and report who won on each.
 
@@ -1426,10 +1544,15 @@ def multi_seed_summary(
     primary_trail = audit.snapshot()
 
     for seed in extra_seeds:
-        baseline = run_baseline(seed, days, verbose=False)
-        agent = run_agent(seed, days, verbose=False)
-        agent_ev = run_agent(seed, days, verbose=False, ev_mode=True) if primary_agent_ev is not None else None
-        agent_learned = (run_agent(seed, days, verbose=False, learned=True)
+        # reaction_delays (Phase R1) applies to every arm of every seed alike,
+        # or the extra-seed rows would measure a different world from the
+        # primary one they sit beside.
+        rd = reaction_delays
+        baseline = run_baseline(seed, days, verbose=False, reaction_delays=rd)
+        agent = run_agent(seed, days, verbose=False, reaction_delays=rd)
+        agent_ev = (run_agent(seed, days, verbose=False, ev_mode=True, reaction_delays=rd)
+                    if primary_agent_ev is not None else None)
+        agent_learned = (run_agent(seed, days, verbose=False, learned=True, reaction_delays=rd)
                         if primary_agent_learned is not None else None)
         rows.append(row(seed, baseline, agent, agent_ev, agent_learned))
 
@@ -1497,7 +1620,13 @@ def main() -> int:
     parser.add_argument("--scenario", choices=("tc141",), default=None,
                         help="run a scripted end-to-end scenario instead of the seeded simulation "
                              "(docs/edge_cases.md TC-141 -> tc141)")
+    parser.add_argument("--reaction-delays", action="store_true",
+                        help="Phase R1: land each buyer reaction 0-2 days (a reply) or 1-5 days "
+                             "(a payment) after the message instead of the same day, for every "
+                             "arm alike (sim/personas.py REACTION_DELAY_DAYS). Off by default: "
+                             "without it every run is byte-identical to before R1")
     args = parser.parse_args()
+    rd = args.reaction_delays
 
     if args.scenario == "tc141":
         # Imported here, not at module level: sim/scenario_tc141.py imports
@@ -1556,8 +1685,11 @@ def main() -> int:
               f"scripts/fit_recovery.py's training seeds "
               f"{TRAINING_SEED_START}-{TRAINING_SEED_END} (docs/learning_data.md)")
 
-        baseline = run_baseline(args.seed, args.days, verbose=args.verbose)
-        agent = run_agent(args.seed, args.days, verbose=args.verbose)
+        if rd:
+            print("reaction delays ON: replies land 0-2 days, payments 1-5 days after the "
+                  "message (sim/personas.py REACTION_DELAY_DAYS), every arm alike")
+        baseline = run_baseline(args.seed, args.days, verbose=args.verbose, reaction_delays=rd)
+        agent = run_agent(args.seed, args.days, verbose=args.verbose, reaction_delays=rd)
         # agent's own audit trail is what everything downstream of here reads
         # from disk -- the report's audit excerpt, early warnings and trip
         # wires (report/build_report.py) and multi_seed_summary()'s own
@@ -1573,14 +1705,16 @@ def main() -> int:
         # engine/brain.py in Phase 3) adds recovery on TOP of the
         # already-built agent, not just whether the agent beats a naive
         # baseline (which agent vs. baseline above already answers).
-        agent_ev = run_agent(args.seed, args.days, verbose=args.verbose, ev_mode=True)
+        agent_ev = run_agent(args.seed, args.days, verbose=args.verbose, ev_mode=True,
+                             reaction_delays=rd)
         # The fourth arm: the same agent+EV, with config/rules.yaml's
         # learning.enabled forced on (offline mode -- the fitted posterior
         # mean) -- does swapping the hand-typed recovery_probability grid for
         # scripts/fit_recovery.py's learned numbers change what agent+EV
         # alone recovers.
         with _collapsed_learning_fallbacks(args.verbose):
-            agent_learned = run_agent(args.seed, args.days, verbose=args.verbose, learned=True)
+            agent_learned = run_agent(args.seed, args.days, verbose=args.verbose, learned=True,
+                                      reaction_delays=rd)
         audit.restore(agent_trail)
         if args.verbose:
             print()
@@ -1631,13 +1765,14 @@ def main() -> int:
             with _collapsed_learning_fallbacks(args.verbose):
                 multi_seed = multi_seed_summary(args.seed, baseline, agent, extra_seeds, args.days,
                                                 primary_agent_ev=agent_ev,
-                                                primary_agent_learned=agent_learned)
+                                                primary_agent_learned=agent_learned,
+                                                reaction_delays=rd)
             print(f"agent won on rupees recovered in {multi_seed['money_win_rate']} seeds, "
                   f"on avg days-to-pay (fair comparison) in {multi_seed['days_win_rate']} seeds")
-            print(f"agent+EV beat agent (ev off) on rupees recovered in "
+            print(f"agent+EV matched or beat agent (ev off) on rupees recovered in "
                   f"{multi_seed['agent_ev_money_win_rate']} seeds -- the ablation")
             spread = multi_seed["agent_learned_delta_paise"]
-            print(f"agent+EV+learned beat agent+EV on rupees recovered in "
+            print(f"agent+EV+learned matched or beat agent+EV on rupees recovered in "
                   f"{multi_seed['agent_learned_money_win_rate']} seeds -- the learned-posteriors "
                   f"ablation. {spread['n_seeds']} seeds is a small sample: mean delta "
                   f"{format_inr(spread['mean'], 'Rs ')}, range {format_inr(spread['min'], 'Rs ')} to "
@@ -1645,11 +1780,11 @@ def main() -> int:
                   f"the mean, before drawing a conclusion")
 
         _write_results(args.results_out, args.seed, args.days, baseline, agent, matched, multi_seed,
-                       agent_ev=agent_ev, agent_learned=agent_learned)
+                       agent_ev=agent_ev, agent_learned=agent_learned, reaction_delays=rd)
         print(f"results written to {args.results_out}")
         _print_outcomes_file(outcomes_path)
     else:
-        agent = run_agent(args.seed, args.days, verbose=args.verbose)
+        agent = run_agent(args.seed, args.days, verbose=args.verbose, reaction_delays=rd)
         if args.verbose:
             print()
             for line in agent["narrative"]:
