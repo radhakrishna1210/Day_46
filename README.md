@@ -82,6 +82,21 @@ directly from `report/out/results.json`.
   all six seeds**: a correctness fix, roughly break-even on rupees. Full
   write-up: `docs/learning_findings.md`. **Both arms ship off.**
 
+**Realism check — delayed buyer reactions (Phase R1, `--reaction-delays`).**
+The figures above let a buyer's reaction land the same simulated day as the
+message. Re-run with replies landing 0–2 days and payments 1–5 days later
+(stated assumptions, `sim/personas.py`), same six seeds, every arm alike: the
+agent still beats the baseline on **6/6** seeds on rupees and on matched
+days-to-pay (seed 7: +₹59,50,360); agent+EV matches or beats the agent on
+**4/6**; agent+EV+learned matches or beats agent+EV on **6/6** (4 wins, 2
+exact ties, mean +₹3,64,674). Days to pay rise by about 1–3 days, as
+expected — but recovered rupees mostly rose slightly too, most plausibly
+because the agent sometimes re-contacts a buyer whose payment is still in
+transit (seed 7: 63 → 67 messages); that mechanism is not yet instrumented.
+The learned-arm result moving from 4/6 to 6/6 on a simulator timing change
+alone is itself the caution: that comparison is sensitive to the fake
+world's assumptions. Not yet the committed headline.
+
 **Per-rung effectiveness (agent, seed 7):** rung 1 (soft nudge) 33.3% · rung 2
 (firm) 50.0% · rung 3 (legal facts) 17.5%. Rung 3 recovers a smaller share than
 rung 2 only because the invoices that reach it are the ones that already failed
@@ -158,9 +173,11 @@ disclosed.
 with `promises = []`; promise memory only spans a run inside the simulator. A
 real deployment would persist promises across pipeline runs.
 
-**Simulator simplifications** (all would make the numbers *more* conservative,
-not less): a persona's reaction lands the same simulated day the message is
-sent (real buyers take longer, so "days to pay" is optimistic); a guardrail
+**Simulator simplifications:** by default a persona's reaction lands the same
+simulated day the message is sent (real buyers take longer, so "days to pay"
+is optimistic — `--reaction-delays` models the lag, see the realism check
+above, and it did not make recovery more conservative); the simulator has no
+unprompted payments, so waiting never recovers anything here; a guardrail
 fallback message is reacted to identically to a full LLM draft; every partial
 payment is tagged as an ambiguous reply. No ablation isolates "score-aware
 timing" from "the legal argument" as two separately toggleable things.

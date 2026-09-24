@@ -425,6 +425,16 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       CONSTRUCTION (the simulator has no unprompted payments), not a claim
       about real buyers. scripts/compare_grids.py: wait no longer
       "structurally unmeasured"; thin cells now decided from the data.
+- [x] R1 - Delayed buyer reactions, simulator only, OFF by default
+      (run_agent/run_baseline reaction_delays=, --reaction-delays). Same
+      reaction rolled on the send day; lands later per sim/personas.py
+      REACTION_DELAY_DAYS (reply 0-2 d, money 1-5 d, stated assumptions) from
+      its own (seed, invoice, send day, "react_delay") stream -- same delay for
+      both arms. Off reproduces seed 42/120d exactly. 6-seed result with it on:
+      agent vs baseline 6/6 money + 6/6 matched days (seed 7 +Rs 59,50,360);
+      agent+EV vs agent 4/6; learned vs EV 6/6 (4 wins + 2 ties). Recovery
+      mostly ROSE slightly (hypothesis, not instrumented: re-contact while a
+      payment is in transit, seed 7 63 -> 67 msgs). NOT the committed headline.
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
   (sim -> report -> dashboard, in order, no commit). Anything else -- pytest,
@@ -444,8 +454,9 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   Against the pre-E1 best arm the learned arm is net -Rs 1,45,296 over six
   seeds: a correctness fix, roughly break-even on rupees. See
   docs/learning_findings.md's first section.
-- Candidate next steps (none started): organic/unprompted payments in the
-  simulator (without them a measured wait is zero by construction); re-tune
-  the hand-typed wait values toward the measured ones; the demo video, if
-  still wanted, needs its runbook output recaptured (docs/demo_runbook.md
-  predates E1/E2).
+- Candidate next steps (none started): decide whether --reaction-delays
+  becomes the committed headline (then regen); instrument WHY recovery rose
+  with delays on; organic/unprompted payments in the simulator (without them
+  a measured wait is zero by construction); re-tune the hand-typed wait
+  values toward the measured ones. Full pytest has not completed since the
+  E1/E2 refit (killed twice for low memory); subsets pass.
