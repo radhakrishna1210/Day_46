@@ -797,31 +797,40 @@ and which personas it applies to.
 - **Our agent + EV + learned** (Block 2f): the same agent+EV, with `learning.enabled` also on — the ablation of whether the fitted bandit posteriors add recovery on top of the hand-typed EV grid. Lost 6/6 before Phases E1/E2; 3 wins, 1 tie, 2 losses after — see Block 2f
 **Report (the star slide of the video).** Real numbers, seed 7, 120-day
 window, read from `report/out/results.json` (`sim/run_sim.py --compare
---seed 7`), with `brain.ev_sets_rung: true` and the post-E2 fit:
+--seed 7`), with `brain.ev_sets_rung: true`, the post-E2 fit, and buyer
+reactions delayed (Phase R1: a reply lands 0–2 days, a payment 1–5 days after
+the message — `sim/personas.py` `REACTION_DELAY_DAYS`, identical for every
+arm; `--no-reaction-delays` gives the old same-day timing):
 
 ```
                         Baseline      Agent      Agent+EV   Agent+EV+learned
-₹ recovered           ₹88,38,375  ₹1,44,80,534 ₹1,43,37,457   ₹1,49,67,820
+₹ recovered           ₹88,46,422  ₹1,46,64,306 ₹1,48,08,810   ₹1,54,56,949
 Invoices fully paid           28           42           42             45
-Messages (envelopes)         259           63           56             56
-Avg days to pay (all)       99.7         92.4         93.5           90.6
-Avg days to pay (matched)   99.4         95.4          —              —      (21 invoices baseline+agent both recovered)
-Escalated to a human           0    47 (18 disp,  50 (18 disp,   46 (18 disp,
-                                     29 rung-4)    32 rung-4)     28 rung-4)
+Messages (envelopes)         259           67           61             61
+Avg days to pay (all)      101.7         93.1         94.2           91.4
+Avg days to pay (matched)   98.8         95.5          —              —      (21 invoices baseline+agent both recovered)
+Escalated to a human           0    48 (18 disp,  51 (18 disp,   47 (18 disp,
+                                     29 rung-4,    33 rung-4)     29 rung-4)
+                                     1 cap)
 Not recovered (exceptions)    72           58           58             55
 ```
 
-- **Agent vs baseline:** +₹56,42,158 recovered, 196 fewer messages, wins
-  6/6 seeds.
-- **Agent+EV vs agent (the EV ablation):** −₹1,43,077 on seed 7, matches or
-  beats the agent on 3/6 seeds (5/6 before Phase E1 — Block 2f explains the
-  drop).
-- **Agent+EV+learned vs agent+EV (the learned ablation):** +₹6,30,362 on
-  seed 7; 3 wins, 1 exact tie, 2 losses across the 6 seeds (reported as
-  4/6, ties counted as wins), mean +₹2,33,093 (range −₹2,28,344 to
-  +₹6,30,362). Before Phases E1/E2: 0/6, mean −₹22,53,175. Against the pre-E1
-  agent+EV arm it is net −₹1,45,296 over the six seeds — see Block 2f and
+- **Agent vs baseline:** +₹58,17,884 recovered, 192 fewer messages, wins
+  6/6 seeds (money and matched days-to-pay).
+- **Agent+EV vs agent (the EV ablation):** +₹1,44,503 on seed 7; 3 wins,
+  1 exact tie, 2 losses across the 6 seeds (reported as 4/6, ties counted as
+  wins). 5/6 before Phase E1 — Block 2f explains the drop.
+- **Agent+EV+learned vs agent+EV (the learned ablation):** +₹6,48,138 on
+  seed 7; 4 wins and 2 exact ties across the 6 seeds (6/6), mean
+  +₹3,80,496 (range ₹0 to +₹8,24,068). Before Phases E1/E2: 0/6, mean
+  −₹22,53,175. With same-day reactions it is 4/6 — the result is sensitive
+  to the simulator's timing assumption. See Block 2f and
   `docs/learning_findings.md`. That arm ships **off**.
+- **Why delays did not lower recovery** (traced on seed 7): the agent cannot
+  see money still in transit and sometimes messages again, and the buyer pays
+  the rest; a reply landing a day later dates its promise a day later, which
+  re-rolls whether it is kept. Both are effects of the modelled world, not of
+  the agent.
 
 The Agent+EV and Agent+EV+learned columns only render when `results.json`
 carries their additive `agent_ev` / `agent_learned` sections.
@@ -981,7 +990,7 @@ revenue-recovery-agent/
 │   ├── templates/         ← the Jinja2 template(s) build_report.py renders
 │   └── out/                ← generated, gitignored: results.json, report.html
 ├── audit/                 ← generated audit logs land here (append-only JSONL); audit/drafts/ holds Samadhaan drafts
-└── tests/                 ← 30 files, 1032 tests. Beyond the obvious per-module tests, three are
+└── tests/                 ← 31 files, 1053 tests. Beyond the obvious per-module tests, three are
                               structural guards worth naming: test_sim_isolation.py (AST-scans
                               engine/ + main.py to prove the agent never reads sim/hidden_personas.json),
                               test_no_legal_constants.py (AST-scans for hardcoded legal numbers/citations

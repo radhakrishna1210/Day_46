@@ -4,8 +4,9 @@
     "days": 120,
     "day0": "2026-08-24",
     "day120": "2026-12-21",
-    "generated": "2026-09-04T14:08:48",
-    "results_generated": "2026-09-04T14:08:46",
+    "reaction_delays": true,
+    "generated": "2026-09-25T00:40:41",
+    "results_generated": "2026-09-25T00:40:40",
     "supplier": {
       "legal_name": "Example Precision Works Private Limited",
       "state": "Karnataka",
@@ -7162,66 +7163,66 @@
         "key": "baseline",
         "label": "Baseline",
         "sub": "fixed three-reminder schedule, same message for everyone — mirrors how payment-link reminders behave today",
-        "recovered_paise": 883837557,
-        "recovered": "₹88,38,375",
+        "recovered_paise": 884642267,
+        "recovered": "₹88,46,422",
         "messages": 259,
         "handoffs": 0,
         "not_recovered": 72,
-        "avg_days_to_pay": 99.7
+        "avg_days_to_pay": 101.7
       },
       {
         "key": "agent",
         "label": "Agent",
         "sub": "score + statutory position + bounded escalation + stop rules",
-        "recovered_paise": 1448053441,
-        "recovered": "₹1,44,80,534",
-        "messages": 63,
-        "handoffs": 47,
+        "recovered_paise": 1466430693,
+        "recovered": "₹1,46,64,306",
+        "messages": 67,
+        "handoffs": 48,
         "not_recovered": 58,
-        "avg_days_to_pay": 92.4
+        "avg_days_to_pay": 93.1
       },
       {
         "key": "agent_ev",
         "label": "Agent + EV",
         "sub": "the agent, choosing the action at each rung by expected value",
-        "recovered_paise": 1483361422,
-        "recovered": "₹1,48,33,614",
-        "messages": 59,
-        "handoffs": 46,
-        "not_recovered": 56,
-        "avg_days_to_pay": 91.3
+        "recovered_paise": 1480881047,
+        "recovered": "₹1,48,08,810",
+        "messages": 61,
+        "handoffs": 51,
+        "not_recovered": 58,
+        "avg_days_to_pay": 94.2
       },
       {
         "key": "agent_learned",
         "label": "Agent + EV + learned bandit",
         "sub": "expected value using fitted recovery posteriors instead of the hand-typed grid",
-        "recovered_paise": 1167670267,
-        "recovered": "₹1,16,76,702",
-        "messages": 53,
-        "handoffs": 43,
-        "not_recovered": 67,
-        "avg_days_to_pay": 90.3
+        "recovered_paise": 1545694933,
+        "recovered": "₹1,54,56,949",
+        "messages": 61,
+        "handoffs": 47,
+        "not_recovered": 55,
+        "avg_days_to_pay": 91.4
       }
     ],
-    "max_recovered_paise": 1483361422,
-    "agent_messages": 63,
-    "agent_invoice_contacts": 139,
+    "max_recovered_paise": 1545694933,
+    "agent_messages": 67,
+    "agent_invoice_contacts": 145,
     "consolidation_ratio": 2.2,
     "headline": {
-      "gain_paise": 564215884,
-      "gain": "₹56,42,158",
-      "fewer_messages": 196,
+      "gain_paise": 581788426,
+      "gain": "₹58,17,884",
+      "fewer_messages": 192,
       "seed_win_rate": "6/6"
     },
-    "ev_win_rate": "5/6",
+    "ev_win_rate": "4/6",
     "learned": {
-      "win_rate": "0/6",
-      "mean_paise": -225317566,
-      "mean": "-₹22,53,175",
-      "min_paise": -315691155,
-      "min": "-₹31,56,911",
-      "max_paise": -51604815,
-      "max": "-₹5,16,048",
+      "win_rate": "6/6",
+      "mean_paise": 38049560,
+      "mean": "₹3,80,495",
+      "min_paise": 0,
+      "min": "₹0",
+      "max_paise": 82406873,
+      "max": "₹8,24,068",
       "n_seeds": 6
     },
     "per_rung": [
@@ -7234,14 +7235,14 @@
       {
         "rung": "Rung 2 — firm",
         "contacted": 68,
-        "recovered_here": 34,
-        "effectiveness_pct": 50.0
+        "recovered_here": 37,
+        "effectiveness_pct": 54.4
       },
       {
         "rung": "Rung 3 — legal facts",
-        "contacted": 40,
-        "recovered_here": 7,
-        "effectiveness_pct": 17.5
+        "contacted": 37,
+        "recovered_here": 4,
+        "effectiveness_pct": 10.8
       }
     ],
     "baseline_decay": [
@@ -7266,69 +7267,69 @@
     ],
     "matched_days": {
       "n": 21,
-      "baseline": 99.4,
-      "agent": 95.4
+      "baseline": 98.8,
+      "agent": 95.5
     },
     "multi_seed": [
       {
         "seed": 7,
-        "baseline": "₹88,38,375",
-        "agent": "₹1,44,80,534",
-        "agent_ev": "₹1,48,33,614",
-        "agent_learned": "₹1,16,76,702",
+        "baseline": "₹88,46,422",
+        "agent": "₹1,46,64,306",
+        "agent_ev": "₹1,48,08,810",
+        "agent_learned": "₹1,54,56,949",
         "money_win": true,
         "ev_win": true,
-        "learned_win": false
+        "learned_win": true
       },
       {
         "seed": 42,
-        "baseline": "₹1,36,80,472",
-        "agent": "₹1,59,79,229",
-        "agent_ev": "₹1,69,60,597",
-        "agent_learned": "₹1,47,93,097",
+        "baseline": "₹1,36,17,784",
+        "agent": "₹1,61,98,273",
+        "agent_ev": "₹1,67,87,869",
+        "agent_learned": "₹1,71,69,738",
         "money_win": true,
         "ev_win": true,
-        "learned_win": false
+        "learned_win": true
       },
       {
         "seed": 13,
-        "baseline": "₹1,31,72,281",
-        "agent": "₹1,70,12,631",
-        "agent_ev": "₹1,71,51,487",
-        "agent_learned": "₹1,55,37,064",
+        "baseline": "₹1,30,39,181",
+        "agent": "₹1,77,44,919",
+        "agent_ev": "₹1,66,98,132",
+        "agent_learned": "₹1,75,22,201",
         "money_win": true,
-        "ev_win": true,
-        "learned_win": false
+        "ev_win": false,
+        "learned_win": true
       },
       {
         "seed": 99,
         "baseline": "₹1,00,98,475",
-        "agent": "₹1,44,86,263",
-        "agent_ev": "₹1,50,04,435",
-        "agent_learned": "₹1,44,88,387",
+        "agent": "₹1,45,89,976",
+        "agent_ev": "₹1,48,74,795",
+        "agent_learned": "₹1,53,03,693",
         "money_win": true,
         "ev_win": true,
-        "learned_win": false
+        "learned_win": true
       },
       {
         "seed": 2024,
-        "baseline": "₹99,98,703",
-        "agent": "₹1,47,40,853",
-        "agent_ev": "₹1,46,89,088",
-        "agent_learned": "₹1,15,54,703",
+        "baseline": "₹1,00,47,766",
+        "agent": "₹1,50,88,832",
+        "agent_ev": "₹1,48,52,462",
+        "agent_learned": "₹1,48,52,462",
         "money_win": true,
         "ev_win": false,
-        "learned_win": false
+        "learned_win": true
       },
       {
         "seed": 555,
-        "baseline": "₹95,92,280",
-        "agent": "₹1,16,76,703",
-        "agent_ev": "₹1,17,22,681",
-        "agent_learned": "₹87,92,895",
+        "baseline": "₹96,26,084",
+        "agent": "₹1,17,45,399",
+        "agent_ev": "₹1,17,45,399",
+        "agent_learned": "₹1,17,45,399",
         "money_win": true,
         "ev_win": true,
-        "learned_win": false
+        "learned_win": true
       }
     ]
   },
@@ -7370,8 +7371,8 @@
       {
         "buyer_id": "BUY-20",
         "name": "Meridian Logistics India Pvt Ltd",
-        "outstanding_paise": 131498563,
-        "outstanding": "₹13,14,985",
+        "outstanding_paise": 142358350,
+        "outstanding": "₹14,23,583",
         "overdue_count": 5,
         "oldest_days_overdue": 216,
         "score": 0,
@@ -7379,8 +7380,8 @@
         "trend": "steady",
         "broken_promises": 9,
         "disputes": 0,
-        "promise_reliability": "16.7%",
-        "response_rate": "83.3%",
+        "promise_reliability": "0.0%",
+        "response_rate": "72.7%",
         "state": "1 in ladder, 4 handed off"
       },
       {
@@ -7390,7 +7391,7 @@
         "outstanding": "₹8,84,986",
         "overdue_count": 4,
         "oldest_days_overdue": 169,
-        "score": 33,
+        "score": 32,
         "confidence": "medium",
         "trend": "unknown",
         "broken_promises": 0,
@@ -7432,22 +7433,6 @@
         "state": "6 handed off"
       },
       {
-        "buyer_id": "BUY-19",
-        "name": "Om Sai Distributors",
-        "outstanding_paise": 63598845,
-        "outstanding": "₹6,35,988",
-        "overdue_count": 2,
-        "oldest_days_overdue": 147,
-        "score": 64,
-        "confidence": "medium",
-        "trend": "worsening",
-        "broken_promises": 1,
-        "disputes": 0,
-        "promise_reliability": "no promises",
-        "response_rate": "100.0%",
-        "state": "2 in ladder"
-      },
-      {
         "buyer_id": "BUY-04",
         "name": "Jain Packaging Mart",
         "outstanding_paise": 52020000,
@@ -7482,24 +7467,40 @@
       {
         "buyer_id": "BUY-06",
         "name": "Sharma Trading Co",
-        "outstanding_paise": 37584268,
-        "outstanding": "₹3,75,842",
-        "overdue_count": 5,
+        "outstanding_paise": 41642590,
+        "outstanding": "₹4,16,425",
+        "overdue_count": 6,
         "oldest_days_overdue": 255,
-        "score": 49,
+        "score": 51,
         "confidence": "high",
         "trend": "worsening",
         "broken_promises": 3,
         "disputes": 0,
         "promise_reliability": "55.6%",
-        "response_rate": "60.0%",
-        "state": "2 in ladder, 3 handed off"
+        "response_rate": "57.1%",
+        "state": "2 in ladder, 4 handed off"
+      },
+      {
+        "buyer_id": "BUY-11",
+        "name": "Sethi Brothers",
+        "outstanding_paise": 24160000,
+        "outstanding": "₹2,41,600",
+        "overdue_count": 1,
+        "oldest_days_overdue": 173,
+        "score": 35,
+        "confidence": "high",
+        "trend": "worsening",
+        "broken_promises": 3,
+        "disputes": 1,
+        "promise_reliability": "60.0%",
+        "response_rate": "100.0%",
+        "state": "1 handed off"
       },
       {
         "buyer_id": "BUY-12",
         "name": "Sundaram Auto Components Pvt Ltd",
-        "outstanding_paise": 25058371,
-        "outstanding": "₹2,50,583",
+        "outstanding_paise": 23280747,
+        "outstanding": "₹2,32,807",
         "overdue_count": 4,
         "oldest_days_overdue": 198,
         "score": 32,
@@ -7508,7 +7509,7 @@
         "broken_promises": 4,
         "disputes": 1,
         "promise_reliability": "75.0%",
-        "response_rate": "44.4%",
+        "response_rate": "55.6%",
         "state": "4 handed off"
       },
       {
@@ -7544,13 +7545,29 @@
         "state": "2 stopped"
       },
       {
+        "buyer_id": "BUY-19",
+        "name": "Om Sai Distributors",
+        "outstanding_paise": 17188498,
+        "outstanding": "₹1,71,884",
+        "overdue_count": 1,
+        "oldest_days_overdue": 147,
+        "score": 62,
+        "confidence": "medium",
+        "trend": "worsening",
+        "broken_promises": 1,
+        "disputes": 0,
+        "promise_reliability": "no promises",
+        "response_rate": "100.0%",
+        "state": "1 in ladder"
+      },
+      {
         "buyer_id": "BUY-18",
         "name": "Northstar Engineering Pvt Ltd",
         "outstanding_paise": 11190000,
         "outstanding": "₹1,11,900",
         "overdue_count": 1,
         "oldest_days_overdue": 225,
-        "score": 37,
+        "score": 36,
         "confidence": "medium",
         "trend": "unknown",
         "broken_promises": 1,
@@ -7560,29 +7577,13 @@
         "state": "1 handed off"
       },
       {
-        "buyer_id": "BUY-11",
-        "name": "Sethi Brothers",
-        "outstanding_paise": 9267390,
-        "outstanding": "₹92,673",
-        "overdue_count": 1,
-        "oldest_days_overdue": 173,
-        "score": 35,
-        "confidence": "high",
-        "trend": "worsening",
-        "broken_promises": 3,
-        "disputes": 1,
-        "promise_reliability": "80.0%",
-        "response_rate": "100.0%",
-        "state": "1 handed off"
-      },
-      {
         "buyer_id": "BUY-15",
         "name": "Verma Hardware Stores",
         "outstanding_paise": 4610000,
         "outstanding": "₹46,100",
         "overdue_count": 1,
         "oldest_days_overdue": 262,
-        "score": 25,
+        "score": 24,
         "confidence": "medium",
         "trend": "steady",
         "broken_promises": 3,
@@ -7614,13 +7615,13 @@
         "outstanding": "₹5,919",
         "overdue_count": 1,
         "oldest_days_overdue": 191,
-        "score": 67,
+        "score": 66,
         "confidence": "high",
         "trend": "worsening",
         "broken_promises": 0,
         "disputes": 0,
         "promise_reliability": "no promises",
-        "response_rate": "100.0%",
+        "response_rate": "83.3%",
         "state": "1 in ladder"
       }
     ]
@@ -7773,7 +7774,7 @@
         "outstanding_paise": 42264947,
         "outstanding": "₹4,22,649",
         "days_overdue": 168,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0063",
@@ -7794,6 +7795,24 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 185 days overdue; ceiling 4)"
       },
       {
+        "invoice_id": "INV-2026-0122",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "outstanding_paise": 26000000,
+        "outstanding": "₹2,60,000",
+        "days_overdue": 145,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0083",
+        "buyer_name": "Sethi Brothers",
+        "persona": "cash_tight",
+        "outstanding_paise": 24160000,
+        "outstanding": "₹2,41,600",
+        "days_overdue": 173,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
         "invoice_id": "INV-2026-0112",
         "buyer_name": "Meridian Logistics India Pvt Ltd",
         "persona": "habitual_delayer",
@@ -7812,22 +7831,13 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 152 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0122",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "outstanding_paise": 15140213,
-        "outstanding": "₹1,51,402",
-        "days_overdue": 145,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
-      },
-      {
         "invoice_id": "INV-2026-0164",
         "buyer_name": "Ravi Steel Traders",
         "persona": "habitual_delayer",
         "outstanding_paise": 14560000,
         "outstanding": "₹1,45,600",
         "days_overdue": 101,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0073",
@@ -7837,22 +7847,13 @@
         "outstanding": "₹1,38,700",
         "days_overdue": 198,
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 198 days overdue; ceiling 4)"
-      },
-      {
-        "invoice_id": "INV-2026-0052",
-        "buyer_name": "Jain Packaging Mart",
-        "persona": "deadbeat",
-        "outstanding_paise": 13700000,
-        "outstanding": "₹1,37,000",
-        "days_overdue": 201,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 201 days overdue; ceiling 4)"
       }
     ],
     "rung4_more": 17,
     "counts": {
       "dispute": 18,
       "rung4": 29,
-      "total": 47
+      "total": 48
     },
     "samadhaan": {
       "invoice_id": "INV-2026-0066",
@@ -7871,7 +7872,7 @@
   "audit": {
     "provenance": "The append-only log at audit/audit_log.jsonl (120-day agent run, seed 7)",
     "path": "audit/audit_log.jsonl",
-    "total": 7544,
+    "total": 7608,
     "shown": 400,
     "note": "every non-repeating action plus the last 80 each of handoff / wait / stop -- the repeaters fire once per simulated day on a settled case",
     "action_kinds": [
@@ -7916,19 +7917,27 @@
       },
       {
         "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 169 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
         "invoice_id": "INV-2026-0032",
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 255 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0107",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 169 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0096",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -7980,6 +7989,14 @@
       },
       {
         "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0138",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
         "invoice_id": "INV-2026-0160",
         "actor": "brain",
         "action": "handoff",
@@ -7992,7 +8009,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8008,15 +8025,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0138",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8060,27 +8069,11 @@
       },
       {
         "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0150",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 129 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
         "invoice_id": "INV-2026-0149",
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
         "reason": "the invoice is disputed, so it goes to a human immediately"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0083",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8104,7 +8097,15 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "5 contacts already made, reaching the limit of 5 for one invoice"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8136,7 +8137,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8145,14 +8146,6 @@
         "action": "stop",
         "source": "rule",
         "reason": "the buyer has opted out of contact, which stops everything"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8220,6 +8213,22 @@
       },
       {
         "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0083",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-21T00:00:00",
         "invoice_id": "INV-2026-0148",
         "actor": "brain",
         "action": "wait",
@@ -8280,7 +8289,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8289,14 +8298,6 @@
         "action": "handoff",
         "source": "rule",
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 46 (poor band) starts at rung 2; 215 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-21T00:00:00",
-        "invoice_id": "INV-2026-0155",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
       },
       {
         "ts": "2026-12-21T00:00:00",
@@ -8380,19 +8381,27 @@
       },
       {
         "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-20T00:00:00",
         "invoice_id": "INV-2026-0032",
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 254 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 254 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
+        "ts": "2026-12-20T00:00:00",
+        "invoice_id": "INV-2026-0107",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 168 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-20T00:00:00",
+        "invoice_id": "INV-2026-0096",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 162 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8444,6 +8453,14 @@
       },
       {
         "ts": "2026-12-20T00:00:00",
+        "invoice_id": "INV-2026-0138",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 157 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-20T00:00:00",
         "invoice_id": "INV-2026-0160",
         "actor": "brain",
         "action": "handoff",
@@ -8456,7 +8473,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8472,15 +8489,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 261 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0138",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 157 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 261 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8524,27 +8533,11 @@
       },
       {
         "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0150",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 128 days overdue; ceiling 4)"
-      },
-      {
-        "ts": "2026-12-20T00:00:00",
         "invoice_id": "INV-2026-0149",
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
         "reason": "the invoice is disputed, so it goes to a human immediately"
-      },
-      {
-        "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0083",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 172 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8568,7 +8561,15 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 224 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 224 days overdue; ceiling 4)"
+      },
+      {
+        "ts": "2026-12-20T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "brain",
+        "action": "handoff",
+        "source": "rule",
+        "reason": "5 contacts already made, reaching the limit of 5 for one invoice"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8600,7 +8601,7 @@
         "actor": "brain",
         "action": "handoff",
         "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 100 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 100 days overdue; ceiling 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8609,14 +8610,6 @@
         "action": "stop",
         "source": "rule",
         "reason": "the buyer has opted out of contact, which stops everything"
-      },
-      {
-        "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "brain",
-        "action": "handoff",
-        "source": "rule",
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 144 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "ts": "2026-12-20T00:00:00",
@@ -8699,14 +8692,6 @@
         "reason": "no messages are sent at weekends"
       },
       {
-        "ts": "2026-12-20T00:00:00",
-        "invoice_id": "INV-2026-0155",
-        "actor": "brain",
-        "action": "wait",
-        "source": "rule",
-        "reason": "no messages are sent at weekends"
-      },
-      {
         "ts": "2026-12-19T00:00:00",
         "invoice_id": "INV-2026-0102",
         "actor": "brain",
@@ -8781,14 +8766,6 @@
       {
         "ts": "2026-12-19T00:00:00",
         "invoice_id": "INV-2026-0124",
-        "actor": "brain",
-        "action": "wait",
-        "source": "rule",
-        "reason": "no messages are sent at weekends"
-      },
-      {
-        "ts": "2026-12-19T00:00:00",
-        "invoice_id": "INV-2026-0155",
         "actor": "brain",
         "action": "wait",
         "source": "rule",
@@ -8875,14 +8852,6 @@
         "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
       },
       {
-        "ts": "2026-12-18T00:00:00",
-        "invoice_id": "INV-2026-0155",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
-      },
-      {
         "ts": "2026-12-17T00:00:00",
         "invoice_id": "INV-2026-0102",
         "actor": "brain",
@@ -8957,14 +8926,6 @@
       {
         "ts": "2026-12-17T00:00:00",
         "invoice_id": "INV-2026-0124",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
-      },
-      {
-        "ts": "2026-12-17T00:00:00",
-        "invoice_id": "INV-2026-0155",
         "actor": "brain",
         "action": "wait",
         "source": "llm",
@@ -9051,14 +9012,6 @@
         "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
       },
       {
-        "ts": "2026-12-16T00:00:00",
-        "invoice_id": "INV-2026-0155",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
-      },
-      {
         "ts": "2026-12-15T00:00:00",
         "invoice_id": "INV-2026-0102",
         "actor": "brain",
@@ -9139,14 +9092,6 @@
         "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
       },
       {
-        "ts": "2026-12-15T00:00:00",
-        "invoice_id": "INV-2026-0155",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
-      },
-      {
         "ts": "2026-12-14T00:00:00",
         "invoice_id": "INV-2026-0102",
         "actor": "brain",
@@ -9221,14 +9166,6 @@
       {
         "ts": "2026-12-14T00:00:00",
         "invoice_id": "INV-2026-0124",
-        "actor": "brain",
-        "action": "wait",
-        "source": "llm",
-        "reason": "partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate"
-      },
-      {
-        "ts": "2026-12-14T00:00:00",
-        "invoice_id": "INV-2026-0155",
         "actor": "brain",
         "action": "wait",
         "source": "llm",
@@ -9316,6 +9253,30 @@
       },
       {
         "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0102",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0101",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0156",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
         "invoice_id": "INV-2026-0166",
         "actor": "brain",
         "action": "stop",
@@ -9324,11 +9285,51 @@
       },
       {
         "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0147",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
         "invoice_id": "INV-2026-0098",
         "actor": "brain",
         "action": "stop",
         "source": "rule",
         "reason": "the buyer has opted out of contact, which stops everything"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0132",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0151",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0148",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
+      },
+      {
+        "ts": "2026-12-12T00:00:00",
+        "invoice_id": "INV-2026-0124",
+        "actor": "brain",
+        "action": "wait",
+        "source": "rule",
+        "reason": "no messages are sent at weekends"
       },
       {
         "ts": "2026-12-11T00:00:00",
@@ -9928,15 +9929,15 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 33 (poor band) starts at rung 2; 31 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
+        "reason": "score 32 (poor band) starts at rung 2; 31 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
       },
       {
-        "ts": "2026-10-09T00:00:00",
+        "ts": "2026-10-10T00:00:00",
         "invoice_id": "INV-2026-0112",
         "actor": "promises",
         "action": "promise_broken",
         "source": "rule",
-        "reason": "payment was promised by 2026-10-08 and has not arrived"
+        "reason": "payment was promised by 2026-10-09 and has not arrived"
       },
       {
         "ts": "2026-10-06T00:00:00",
@@ -9984,7 +9985,7 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 33 (poor band) starts at rung 2; 25 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "score 32 (poor band) starts at rung 2; 25 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
         "ts": "2026-10-06T00:00:00",
@@ -10011,20 +10012,44 @@
         "reason": "payment arrived, against a promise of 2026-10-05"
       },
       {
-        "ts": "2026-10-01T00:00:00",
+        "ts": "2026-10-02T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "channels",
+        "action": "blocked",
+        "source": "rule",
+        "reason": "sending is off; run with --send-email to deliver"
+      },
+      {
+        "ts": "2026-10-02T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "writer",
+        "action": "message_drafted",
+        "source": "llm",
+        "reason": "rung 3 message drafted in hinglish as part of a 1-invoice consolidated message (INV-2026-0150), and passed the guardrail on attempt 1"
+      },
+      {
+        "ts": "2026-10-02T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "brain",
+        "action": "send",
+        "source": "rule",
+        "reason": "score 51 (medium band) starts at rung 1; 49 days overdue; ceiling 4"
+      },
+      {
+        "ts": "2026-10-02T00:00:00",
         "invoice_id": "INV-2026-0112",
         "actor": "promises",
         "action": "promise_recorded",
         "source": "llm",
-        "reason": "the buyer committed to paying by 2026-10-08: 'aadha abhi bhej raha hoon, baaki agle hafte'"
+        "reason": "the buyer committed to paying by 2026-10-09: 'aadha abhi bhej raha hoon, baaki agle hafte'"
       },
       {
-        "ts": "2026-10-01T00:00:00",
+        "ts": "2026-10-02T00:00:00",
         "invoice_id": "INV-2026-0112",
         "actor": "promises",
         "action": "reply_parsed",
         "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-10-08"
+        "reason": "read the reply as promise, payment offered by 2026-10-09"
       },
       {
         "ts": "2026-10-01T00:00:00",
@@ -10096,23 +10121,31 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 49 (poor band) starts at rung 2; 45 days overdue; ceiling 4"
+        "reason": "score 51 (medium band) starts at rung 1; 45 days overdue; ceiling 4"
       },
       {
-        "ts": "2026-09-22T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "promises",
-        "action": "promise_broken",
-        "source": "rule",
-        "reason": "payment was promised by 2026-09-21 and has not arrived"
-      },
-      {
-        "ts": "2026-09-18T00:00:00",
+        "ts": "2026-09-19T00:00:00",
         "invoice_id": "INV-2026-0150",
         "actor": "promises",
         "action": "promise_kept",
         "source": "rule",
-        "reason": "payment arrived, against a promise of 2026-09-18"
+        "reason": "payment arrived, against a promise of 2026-09-19"
+      },
+      {
+        "ts": "2026-09-16T00:00:00",
+        "invoice_id": "INV-2026-0163",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-10-05: 'we will clear it by 5th September'"
+      },
+      {
+        "ts": "2026-09-16T00:00:00",
+        "invoice_id": "INV-2026-0163",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-10-05"
       },
       {
         "ts": "2026-09-15T00:00:00",
@@ -10129,22 +10162,6 @@
         "action": "message_drafted",
         "source": "llm",
         "reason": "rung 2 message drafted in hinglish as part of a 1-invoice consolidated message (INV-2026-0156), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-15T00:00:00",
-        "invoice_id": "INV-2026-0163",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-10-05: 'we will clear it by 5th September'"
-      },
-      {
-        "ts": "2026-09-15T00:00:00",
-        "invoice_id": "INV-2026-0163",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-10-05"
       },
       {
         "ts": "2026-09-15T00:00:00",
@@ -10176,7 +10193,23 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 22 (poor band) starts at rung 2; 9 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "score 21 (poor band) starts at rung 2; 9 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+      },
+      {
+        "ts": "2026-09-15T00:00:00",
+        "invoice_id": "INV-2026-0164",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-10-05: '5 tarikh tak ho jayega'"
+      },
+      {
+        "ts": "2026-09-15T00:00:00",
+        "invoice_id": "INV-2026-0164",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-10-05"
       },
       {
         "ts": "2026-09-15T00:00:00",
@@ -10221,22 +10254,6 @@
       {
         "ts": "2026-09-14T00:00:00",
         "invoice_id": "INV-2026-0164",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-10-05: '5 tarikh tak ho jayega'"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0164",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-10-05"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0164",
         "actor": "channels",
         "action": "would_send",
         "source": "rule",
@@ -10252,38 +10269,6 @@
       },
       {
         "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-21: 'aadha abhi bhej raha hoon, baaki agle hafte'"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-21"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "channels",
-        "action": "blocked",
-        "source": "rule",
-        "reason": "sending is off; run with --send-email to deliver"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "writer",
-        "action": "message_drafted",
-        "source": "llm",
-        "reason": "rung 3 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0122), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-14T00:00:00",
         "invoice_id": "INV-2026-0158",
         "actor": "brain",
         "action": "send",
@@ -10296,15 +10281,23 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 33 (poor band) starts at rung 2; 3 days overdue; ceiling 2"
+        "reason": "score 32 (poor band) starts at rung 2; 3 days overdue; ceiling 2"
       },
       {
-        "ts": "2026-09-14T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 0 (poor band) starts at rung 2; 47 days overdue; ceiling 4"
+        "ts": "2026-09-12T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-19: 'aadha abhi bhej raha hoon, baaki agle hafte'"
+      },
+      {
+        "ts": "2026-09-12T00:00:00",
+        "invoice_id": "INV-2026-0150",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-19"
       },
       {
         "ts": "2026-09-11T00:00:00",
@@ -10321,22 +10314,6 @@
         "action": "message_drafted",
         "source": "llm",
         "reason": "rung 2 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0163), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-11T00:00:00",
-        "invoice_id": "INV-2026-0150",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-18: 'aadha abhi bhej raha hoon, baaki agle hafte'"
-      },
-      {
-        "ts": "2026-09-11T00:00:00",
-        "invoice_id": "INV-2026-0150",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-18"
       },
       {
         "ts": "2026-09-11T00:00:00",
@@ -10360,7 +10337,7 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 22 (poor band) starts at rung 2; 5 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "score 21 (poor band) starts at rung 2; 5 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
         "ts": "2026-09-11T00:00:00",
@@ -10368,7 +10345,15 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 49 (poor band) starts at rung 2; 28 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
+        "reason": "score 51 (medium band) starts at rung 1; 28 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+      },
+      {
+        "ts": "2026-09-10T00:00:00",
+        "invoice_id": "INV-2026-0032",
+        "actor": "promises",
+        "action": "promise_broken",
+        "source": "rule",
+        "reason": "payment was promised by 2026-09-09 and has not arrived"
       },
       {
         "ts": "2026-09-08T00:00:00",
@@ -10435,14 +10420,6 @@
         "reason": "score 0 (poor band) starts at rung 2; 11 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
-        "ts": "2026-09-08T00:00:00",
-        "invoice_id": "INV-2026-0032",
-        "actor": "promises",
-        "action": "promise_kept",
-        "source": "rule",
-        "reason": "payment arrived, against a promise of 2026-09-08"
-      },
-      {
         "ts": "2026-09-07T00:00:00",
         "invoice_id": "INV-2026-0163",
         "actor": "channels",
@@ -10473,6 +10450,22 @@
         "action": "message_drafted",
         "source": "llm",
         "reason": "rung 1 message drafted in hinglish as part of a 1-invoice consolidated message (INV-2026-0167), and passed the guardrail on attempt 1"
+      },
+      {
+        "ts": "2026-09-07T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "channels",
+        "action": "blocked",
+        "source": "rule",
+        "reason": "sending is off; run with --send-email to deliver"
+      },
+      {
+        "ts": "2026-09-07T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "writer",
+        "action": "message_drafted",
+        "source": "llm",
+        "reason": "rung 2 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0122), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-07T00:00:00",
@@ -10544,7 +10537,7 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 22 (poor band) starts at rung 2; 1 days overdue; ceiling 2"
+        "reason": "score 21 (poor band) starts at rung 2; 1 days overdue; ceiling 2"
       },
       {
         "ts": "2026-09-07T00:00:00",
@@ -10552,7 +10545,7 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 75 (medium band) starts at rung 1; 1 days overdue; ceiling 2"
+        "reason": "score 74 (medium band) starts at rung 1; 1 days overdue; ceiling 2"
       },
       {
         "ts": "2026-09-07T00:00:00",
@@ -10560,7 +10553,15 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 49 (poor band) starts at rung 2; 24 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
+        "reason": "score 51 (medium band) starts at rung 1; 24 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
+      },
+      {
+        "ts": "2026-09-07T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "brain",
+        "action": "send",
+        "source": "rule",
+        "reason": "score 0 (poor band) starts at rung 2; 40 days overdue; ceiling 2; wanted rung 4 but the law supports at most 2"
       },
       {
         "ts": "2026-09-07T00:00:00",
@@ -10576,7 +10577,7 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 49 (poor band) starts at rung 2; 11 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "score 51 (medium band) starts at rung 1; 11 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
         "ts": "2026-09-06T00:00:00",
@@ -10708,22 +10709,6 @@
       },
       {
         "ts": "2026-09-04T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "channels",
-        "action": "blocked",
-        "source": "rule",
-        "reason": "sending is off; run with --send-email to deliver"
-      },
-      {
-        "ts": "2026-09-04T00:00:00",
-        "invoice_id": "INV-2026-0122",
-        "actor": "writer",
-        "action": "message_drafted",
-        "source": "llm",
-        "reason": "rung 2 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0122), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-04T00:00:00",
         "invoice_id": "INV-2026-0160",
         "actor": "brain",
         "action": "send",
@@ -10731,12 +10716,52 @@
         "reason": "score 0 (poor band) starts at rung 2; 7 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
-        "ts": "2026-09-04T00:00:00",
+        "ts": "2026-09-03T00:00:00",
+        "invoice_id": "INV-2026-0162",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-30: 'Will settle at month end'"
+      },
+      {
+        "ts": "2026-09-03T00:00:00",
+        "invoice_id": "INV-2026-0162",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-30"
+      },
+      {
+        "ts": "2026-09-03T00:00:00",
+        "invoice_id": "INV-2026-0107",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-05: 'we will clear it by 5th September'"
+      },
+      {
+        "ts": "2026-09-03T00:00:00",
+        "invoice_id": "INV-2026-0107",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-05"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
         "invoice_id": "INV-2026-0122",
-        "actor": "brain",
-        "action": "send",
+        "actor": "channels",
+        "action": "blocked",
         "source": "rule",
-        "reason": "score 0 (poor band) starts at rung 2; 37 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "sending is off; run with --send-email to deliver"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "writer",
+        "action": "message_drafted",
+        "source": "llm",
+        "reason": "rung 2 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0122), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-02T00:00:00",
@@ -10756,7 +10781,7 @@
       },
       {
         "ts": "2026-09-02T00:00:00",
-        "invoice_id": "INV-2026-0148",
+        "invoice_id": "INV-2026-0096",
         "actor": "channels",
         "action": "blocked",
         "source": "rule",
@@ -10765,10 +10790,42 @@
       {
         "ts": "2026-09-02T00:00:00",
         "invoice_id": "INV-2026-0148",
+        "actor": "channels",
+        "action": "blocked",
+        "source": "rule",
+        "reason": "sending is off; run with --send-email to deliver"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0096",
         "actor": "writer",
         "action": "message_drafted",
         "source": "llm",
-        "reason": "rung 2 message drafted in hinglish as part of a 1-invoice consolidated message (INV-2026-0148), and passed the guardrail on attempt 1"
+        "reason": "rung 3 message drafted in hinglish as part of a 2-invoice consolidated message (INV-2026-0148, INV-2026-0096), and passed the guardrail on attempt 1"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0148",
+        "actor": "writer",
+        "action": "message_drafted",
+        "source": "llm",
+        "reason": "rung 2 message drafted in hinglish as part of a 2-invoice consolidated message (INV-2026-0148, INV-2026-0096), and passed the guardrail on attempt 1"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0096",
+        "actor": "brain",
+        "action": "send",
+        "source": "rule",
+        "reason": "score 58 (medium band) starts at rung 1; 53 days overdue; ceiling 4"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "brain",
+        "action": "send",
+        "source": "rule",
+        "reason": "score 0 (poor band) starts at rung 2; 35 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
       },
       {
         "ts": "2026-09-02T00:00:00",
@@ -10784,23 +10841,111 @@
         "actor": "brain",
         "action": "send",
         "source": "rule",
-        "reason": "score 55 (medium band) starts at rung 1; 6 days overdue; ceiling 2"
+        "reason": "score 58 (medium band) starts at rung 1; 6 days overdue; ceiling 2"
       },
       {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0162",
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0112",
         "actor": "promises",
         "action": "promise_recorded",
         "source": "llm",
         "reason": "the buyer committed to paying by 2026-09-30: 'Will settle at month end'"
       },
       {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0162",
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0112",
         "actor": "promises",
         "action": "reply_parsed",
         "source": "llm",
         "reason": "read the reply as promise, payment offered by 2026-09-30"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0143",
+        "actor": "promises",
+        "action": "dispute_detected",
+        "source": "llm",
+        "reason": "the buyer has disputed this invoice, so chasing stops and it goes to a human: 'Your invoice does not match our PO'"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0143",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as dispute"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0032",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-09: 'aadha abhi bhej raha hoon, baaki agle hafte'"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0032",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-09"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0051",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-05: 'we will clear it by 5th September'"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0051",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-05"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0099",
+        "actor": "promises",
+        "action": "promise_recorded",
+        "source": "llm",
+        "reason": "the buyer committed to paying by 2026-09-05: '5 tarikh tak ho jayega'"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0099",
+        "actor": "promises",
+        "action": "reply_parsed",
+        "source": "llm",
+        "reason": "read the reply as promise, payment offered by 2026-09-05"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0122",
+        "actor": "promises",
+        "action": "promise_broken",
+        "source": "rule",
+        "reason": "payment was promised by 2026-09-01 and has not arrived"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0096",
+        "actor": "promises",
+        "action": "promise_broken",
+        "source": "rule",
+        "reason": "payment was promised by 2026-09-01 and has not arrived"
+      },
+      {
+        "ts": "2026-09-02T00:00:00",
+        "invoice_id": "INV-2026-0083",
+        "actor": "promises",
+        "action": "promise_broken",
+        "source": "rule",
+        "reason": "payment was promised by 2026-09-01 and has not arrived"
       },
       {
         "ts": "2026-09-01T00:00:00",
@@ -10820,19 +10965,19 @@
       },
       {
         "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0112",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-30: 'Will settle at month end'"
+        "invoice_id": "INV-2026-0138",
+        "actor": "channels",
+        "action": "blocked",
+        "source": "rule",
+        "reason": "sending is off; run with --send-email to deliver"
       },
       {
         "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0112",
-        "actor": "promises",
-        "action": "reply_parsed",
+        "invoice_id": "INV-2026-0138",
+        "actor": "writer",
+        "action": "message_drafted",
         "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-30"
+        "reason": "rung 3 message drafted in english as part of a 1-invoice consolidated message (INV-2026-0138), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-01T00:00:00",
@@ -10853,22 +10998,6 @@
       {
         "ts": "2026-09-01T00:00:00",
         "invoice_id": "INV-2026-0143",
-        "actor": "promises",
-        "action": "dispute_detected",
-        "source": "llm",
-        "reason": "the buyer has disputed this invoice, so chasing stops and it goes to a human: 'Your invoice does not match our PO'"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0143",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as dispute"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0143",
         "actor": "channels",
         "action": "would_send",
         "source": "rule",
@@ -10884,55 +11013,7 @@
       },
       {
         "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-05: 'we will clear it by 5th September'"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-05"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
         "invoice_id": "INV-2026-0032",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-08: 'aadha abhi bhej raha hoon, baaki agle hafte'"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0032",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-08"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0051",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-05: 'we will clear it by 5th September'"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0051",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-05"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0107",
         "actor": "channels",
         "action": "blocked",
         "source": "rule",
@@ -10940,15 +11021,7 @@
       },
       {
         "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0096",
-        "actor": "channels",
-        "action": "blocked",
-        "source": "rule",
-        "reason": "sending is off; run with --send-email to deliver"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0032",
+        "invoice_id": "INV-2026-0107",
         "actor": "channels",
         "action": "blocked",
         "source": "rule",
@@ -10964,27 +11037,19 @@
       },
       {
         "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "writer",
-        "action": "message_drafted",
-        "source": "llm",
-        "reason": "rung 2 message drafted in hinglish as part of a 4-invoice consolidated message (INV-2026-0051, INV-2026-0032, INV-2026-0096, INV-2026-0107), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0096",
-        "actor": "writer",
-        "action": "message_drafted",
-        "source": "llm",
-        "reason": "rung 3 message drafted in hinglish as part of a 4-invoice consolidated message (INV-2026-0051, INV-2026-0032, INV-2026-0096, INV-2026-0107), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
         "invoice_id": "INV-2026-0032",
         "actor": "writer",
         "action": "message_drafted",
         "source": "llm",
-        "reason": "rung 3 message drafted in hinglish as part of a 4-invoice consolidated message (INV-2026-0051, INV-2026-0032, INV-2026-0096, INV-2026-0107), and passed the guardrail on attempt 1"
+        "reason": "rung 3 message drafted in hinglish as part of a 3-invoice consolidated message (INV-2026-0051, INV-2026-0107, INV-2026-0032), and passed the guardrail on attempt 1"
+      },
+      {
+        "ts": "2026-09-01T00:00:00",
+        "invoice_id": "INV-2026-0107",
+        "actor": "writer",
+        "action": "message_drafted",
+        "source": "llm",
+        "reason": "rung 2 message drafted in hinglish as part of a 3-invoice consolidated message (INV-2026-0051, INV-2026-0107, INV-2026-0032), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-01T00:00:00",
@@ -10992,23 +11057,7 @@
         "actor": "writer",
         "action": "message_drafted",
         "source": "llm",
-        "reason": "rung 2 message drafted in hinglish as part of a 4-invoice consolidated message (INV-2026-0051, INV-2026-0032, INV-2026-0096, INV-2026-0107), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0099",
-        "actor": "promises",
-        "action": "promise_recorded",
-        "source": "llm",
-        "reason": "the buyer committed to paying by 2026-09-05: '5 tarikh tak ho jayega'"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0099",
-        "actor": "promises",
-        "action": "reply_parsed",
-        "source": "llm",
-        "reason": "read the reply as promise, payment offered by 2026-09-05"
+        "reason": "rung 2 message drafted in hinglish as part of a 3-invoice consolidated message (INV-2026-0051, INV-2026-0107, INV-2026-0032), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-01T00:00:00",
@@ -11032,7 +11081,7 @@
         "actor": "writer",
         "action": "message_drafted",
         "source": "llm",
-        "reason": "rung 3 message drafted in english as part of a 2-invoice consolidated message (INV-2026-0099, INV-2026-0094), and passed the guardrail on attempt 1"
+        "reason": "rung 2 message drafted in english as part of a 2-invoice consolidated message (INV-2026-0099, INV-2026-0094), and passed the guardrail on attempt 1"
       },
       {
         "ts": "2026-09-01T00:00:00",
@@ -11040,55 +11089,7 @@
         "actor": "writer",
         "action": "message_drafted",
         "source": "llm",
-        "reason": "rung 3 message drafted in english as part of a 2-invoice consolidated message (INV-2026-0099, INV-2026-0094), and passed the guardrail on attempt 1"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0107",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 58 (medium band) starts at rung 1; 58 days overdue; ceiling 4"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0096",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 58 (medium band) starts at rung 1; 52 days overdue; ceiling 4"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0032",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 58 (medium band) starts at rung 1; 144 days overdue; ceiling 4"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0162",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 47 (poor band) starts at rung 2; 16 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0094",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 42 (poor band) starts at rung 2; 69 days overdue; ceiling 4"
-      },
-      {
-        "ts": "2026-09-01T00:00:00",
-        "invoice_id": "INV-2026-0112",
-        "actor": "brain",
-        "action": "send",
-        "source": "rule",
-        "reason": "score 0 (poor band) starts at rung 2; 39 days overdue; ceiling 2; wanted rung 3 but the law supports at most 2"
+        "reason": "rung 2 message drafted in english as part of a 2-invoice consolidated message (INV-2026-0099, INV-2026-0094), and passed the guardrail on attempt 1"
       }
     ]
   }

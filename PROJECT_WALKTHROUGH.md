@@ -2,7 +2,7 @@
 
 *Compiled by reading the current repository directly — `engine/`, `sim/`, `report/`, `config/`, `data/`, `tests/`, `main.py`, and the live `audit/` trail — plus CLAUDE.md, ARCHITECTURE.md, README.md, `docs/edge_cases.md` and `docs/winning_layer.md` as they stand today. No files were modified to produce this document. Where the build diverged from the original plan, that is called out explicitly rather than assumed away.*
 
-**Headline numbers (seed 7, the primary benchmark seed; all figures read from `report/out/results.json`):** ₹56,42,158 more recovered than the baseline · 6/6 seeds won on rupees recovered · the expected-value negotiation layer matches or beats the plain agent on 3/6 seeds (5/6 before Phase E1 made EV's chosen tier the rung actually sent) · a fourth arm, agent+EV+learned, lost to agent+EV on 6/6 seeds until Phase E2 measured `wait`, and now matches or beats it on 4/6 (3 wins, 1 tie, 2 losses, mean +₹2,33,093; roughly break-even against the pre-E1 best -- see `docs/learning_findings.md`); both ship **off** by default · 1032 tests passing · 147 edge cases documented (66 tested / 44 handled / 37 out of scope) · 139 invoice-level contacts consolidated into 63 outbound envelopes on seed 7.
+**Headline numbers (seed 7, the primary benchmark seed; all figures read from `report/out/results.json`):** buyer reactions delayed (a reply 0–2 days, a payment 1–5 days, Phase R1) · ₹58,17,884 more recovered than the baseline · 6/6 seeds won on rupees recovered · the expected-value negotiation layer matches or beats the plain agent on 4/6 seeds (3 wins, 1 tie; 5/6 before Phase E1 made EV's chosen tier the rung actually sent) · a fourth arm, agent+EV+learned, lost to agent+EV on 6/6 seeds until Phase E2 measured `wait`, and now matches or beats it on 6/6 (4 wins, 2 ties, mean +₹3,80,496; 4/6 with same-day reactions, so it is sensitive to the simulator's timing assumption -- see `docs/learning_findings.md`); both ship **off** by default · 1053 tests passing · 147 edge cases documented (66 tested / 44 handled / 37 out of scope) · 139 invoice-level contacts consolidated into 63 outbound envelopes on seed 7.
 
 ---
 
@@ -665,7 +665,7 @@ Every fact above is computed by `sim/scenario_tc141.py` calling the exact same `
 | `python sim/run_sim.py --compare --seed 7 --days 120` | Baseline, agent, agent+EV *and* agent+EV+learned, side by side, writing `report/out/results.json`. `--extra-seeds` controls the multi-seed table (the demo runbook uses `--extra-seeds 42,13,99,2024,555` so the six benchmark seeds each run once, seed 7 primary). |
 | `python sim/run_sim.py --scenario tc141` | Runs the scripted TC-141 story from §17, printed day by day. |
 | `python report/build_report.py` | Renders `results.json` into `report/out/report.html`. |
-| `pytest -q` | 1032 tests, including three structural guards: `test_sim_isolation.py`, `test_no_legal_constants.py`, and `test_run_sim.py`'s conservation + audit-entry invariants. |
+| `pytest -q` | 1053 tests, including three structural guards: `test_sim_isolation.py`, `test_no_legal_constants.py`, and `test_run_sim.py`'s conservation + audit-entry invariants. |
 | `python engine/llm.py --calibrate` | With `LLM_MODE=live` and a real key: drafts 3 real messages and parses 3 real replies against Gemini. |
 | `python engine/llm.py --list-models` | Confirms the model ids in `config/rules.yaml` are reachable with the configured key. |
 

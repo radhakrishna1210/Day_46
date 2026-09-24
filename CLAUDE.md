@@ -70,7 +70,7 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
 - Run the live single-pass agent:  python main.py --seed 7   (seed 7 = the demo_runbook's seed for every segment)
 - Run the 4-arm comparison:         python sim/run_sim.py --compare --seed 7 --extra-seeds 42,13,99,2024,555 --days 120
 - Regenerate fake data:             python data/generate.py --seed 7
-- Tests:                            pytest -q   (1032 passed)
+- Tests:                            pytest -q   (1053 passed)
 - Build report:                     python report/build_report.py
 - Build the demo dashboard:         python scripts/build_dashboard.py --seed 7
 
@@ -436,7 +436,19 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       agent vs baseline 6/6 money + 6/6 matched days (seed 7 +Rs 59,50,360);
       agent+EV vs agent 4/6; learned vs EV 6/6 (4 wins + 2 ties). Recovery
       mostly ROSE slightly (hypothesis, not instrumented: re-contact while a
-      payment is in transit, seed 7 63 -> 67 msgs). NOT the committed headline.
+      payment is in transit, seed 7 63 -> 67 msgs).
+- [x] R1b - Traced WHY delays raised recovery (seed 7, every payment tagged by
+      source): an R1 bug re-rolled partial-payment AMOUNTS on the landing day
+      -- fixed (_apply_reaction rolled_on = send day). What remains is real:
+      re-contact while money is in transit (+~Rs 4.8L) vs promises re-dated
+      by a later reply and re-rolled on the new date (-~Rs 3.0L). Delays are
+      now the COMMITTED HEADLINE: run_sim CLI --reaction-delays defaults ON
+      (--no-reaction-delays = pre-R1), scripts/regen.py passes it explicitly,
+      report/dashboard say which timing was used. run_agent()/run_baseline()
+      still default off (tests + pinned snapshot unchanged). Headline, seed 7:
+      agent +Rs 58,17,884 vs baseline, 192 fewer msgs, 6/6 money + 6/6 matched
+      days; agent+EV vs agent 4/6 (3W 1T 2L); learned vs EV 6/6 (4W 2T, mean
+      +Rs 3,80,496). 1053 tests pass.
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
   (sim -> report -> dashboard, in order, no commit). Anything else -- pytest,
@@ -448,17 +460,20 @@ Notes for next session: (keep 3-5 bullets max, prune old ones)
   is the shipped default, so E1/E2 change nothing a fresh clone does by
   default. Python on this machine: C:/Users/thete/AppData/Local/Programs/
   Python/Python312/python.exe (installed 2026-09-23, not on Git Bash's PATH).
-- THE HONEST HEADLINE after E1/E2, all numbers together: agent beats baseline
-  6/6; agent+EV matches or beats agent 3/6 (was 5/6 -- E1 exposed the same
-  untested-wait flaw in the hand-typed grid: high_risk firm, promise-
-  penalised, falls below wait's 5%); agent+EV+learned matches or beats
-  agent+EV 4/6 = 3 wins + 1 exact tie + 2 losses, mean +Rs 2,33,093 (was 0/6).
-  Against the pre-E1 best arm the learned arm is net -Rs 1,45,296 over six
-  seeds: a correctness fix, roughly break-even on rupees. See
-  docs/learning_findings.md's first section.
-- Candidate next steps (none started): decide whether --reaction-delays
-  becomes the committed headline (then regen); instrument WHY recovery rose
-  with delays on; organic/unprompted payments in the simulator (without them
-  a measured wait is zero by construction); re-tune the hand-typed wait
-  values toward the measured ones. Full pytest has not completed since the
-  E1/E2 refit (killed twice for low memory); subsets pass.
+- THE HONEST HEADLINE (E1 + E2 + R1, reactions delayed), all numbers
+  together: agent beats baseline 6/6 (seed 7 +Rs 58,17,884); agent+EV matches
+  or beats agent 4/6 = 3W 1T 2L (5/6 before E1 -- E1 exposed the untested-wait
+  flaw in the hand-typed grid: high_risk firm, promise-penalised, falls below
+  wait's 5%); agent+EV+learned matches or beats agent+EV 6/6 = 4W 2T, mean
+  +Rs 3,80,496 (0/6 before E2). Same-day reactions give 3/6 and 4/6 instead
+  -- the learned-vs-EV result is sensitive to the simulator's timing, and six
+  seeds is a small sample. See docs/learning_findings.md's first section
+  (measured with same-day reactions) and README.
+- Candidate next steps (none started): merge worktree-ev-sets-rung into main
+  (draft PR); live data -- persisted promise/history state + a CSV import,
+  then a small local web app over the same dashboard template (the static
+  HTML is a snapshot with data embedded; see README); organic/unprompted
+  payments in the simulator (without them a measured wait is zero by
+  construction); re-tune the hand-typed wait values toward the measured ones.
+  On this machine close Chrome before long runs -- with it open, background
+  runs were killed for low memory.

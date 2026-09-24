@@ -76,6 +76,14 @@ project can measure, it is wrong by the whole of its value.
 
 ### The benchmark result (6 seeds, 120 days, seed 7 primary)
 
+> Measured with **same-day** buyer reactions, the only timing that existed
+> when E1/E2 landed. Since Phase R1 the committed headline delays reactions
+> (a reply 0–2 days, a payment 1–5 days); under that timing agent+EV matches
+> or beats agent on 4/6 (3 wins, 1 tie) and agent+EV+learned matches or beats
+> agent+EV on **6/6** (4 wins, 2 ties, mean +₹3,80,496). That the learned-arm
+> comparison moves from 4/6 to 6/6 on a timing assumption alone is a reason to
+> hold it loosely. The analysis below is unchanged either way.
+
 Baseline and the plain agent are unchanged on every seed -- neither uses EV.
 
 | Seed | agent+EV before → after | agent+EV+learned after | learned − agent+EV (both after) |

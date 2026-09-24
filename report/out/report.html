@@ -61,14 +61,15 @@
 
   <h1>Revenue Recovery Agent -- Baseline vs Agent</h1>
   <div class="meta">
-    seed 7 &middot; 120 simulated days &middot; generated 2026-09-04T14:08:46
+    seed 7 &middot; 120 simulated days &middot; generated 2026-09-25T00:40:40
+    &middot; buyer reactions delayed (replies 0&ndash;2 days, payments 1&ndash;5 days)
   </div>
 
   <p class="pitch">
     Same seeded invoices, same buyer world, two agents. The baseline is a
     dumb 3-fixed-reminder bot (mirrors how Razorpay Payment Links reminders
-    behave today). Our agent recovered <strong class="gain">₹56,42,158 more</strong>
-    with 196 fewer messages.
+    behave today). Our agent recovered <strong class="gain">₹58,17,884 more</strong>
+    with 192 fewer messages.
   </p>
 
   <h2>Headline</h2>
@@ -84,24 +85,24 @@
       
       <tr>
         <td>₹ recovered</td>
-        <td class="num">₹88,38,375</td>
-        <td class="num agent">₹1,44,80,534</td>
-        <td class="num agent-ev">₹1,48,33,614</td>
-        <td class="num agent-learned">₹1,16,76,702</td>
+        <td class="num">₹88,46,422</td>
+        <td class="num agent">₹1,46,64,306</td>
+        <td class="num agent-ev">₹1,48,08,810</td>
+        <td class="num agent-learned">₹1,54,56,949</td>
       </tr>
       
       <tr>
         <td>Avg days to pay (each run's own recovered invoices)</td>
-        <td class="num">99.7</td>
-        <td class="num agent">92.4</td>
-        <td class="num agent-ev">91.3</td>
-        <td class="num agent-learned">90.3</td>
+        <td class="num">101.7</td>
+        <td class="num agent">93.1</td>
+        <td class="num agent-ev">94.2</td>
+        <td class="num agent-learned">91.4</td>
       </tr>
       
       <tr>
         <td>Avg days to pay (21 invoices BOTH recovered -- the fair comparison)</td>
-        <td class="num">99.4</td>
-        <td class="num agent">95.4</td>
+        <td class="num">98.8</td>
+        <td class="num agent">95.5</td>
         <td class="num agent-ev">n/a</td>
         <td class="num agent-learned">n/a</td>
       </tr>
@@ -109,43 +110,43 @@
       <tr>
         <td>Messages sent (envelopes -- W3 consolidates several invoices for one buyer into one message where the rung tier allows it)</td>
         <td class="num">259</td>
-        <td class="num agent">63</td>
-        <td class="num agent-ev">59</td>
-        <td class="num agent-learned">53</td>
+        <td class="num agent">67</td>
+        <td class="num agent-ev">61</td>
+        <td class="num agent-learned">61</td>
       </tr>
       
       <tr>
         <td>Invoice-contacts (each invoice touched, before bundling -- proves chasing itself did not shrink, only the envelope count did)</td>
         <td class="num">259</td>
-        <td class="num agent">139</td>
-        <td class="num agent-ev">131</td>
-        <td class="num agent-learned">113</td>
+        <td class="num agent">145</td>
+        <td class="num agent-ev">129</td>
+        <td class="num agent-learned">132</td>
       </tr>
       
       <tr>
         <td>Escalated to a human</td>
         <td class="num">0</td>
-        <td class="num agent">47</td>
-        <td class="num agent-ev">46</td>
-        <td class="num agent-learned">43</td>
+        <td class="num agent">48</td>
+        <td class="num agent-ev">51</td>
+        <td class="num agent-learned">47</td>
       </tr>
       
       <tr>
         <td>Not recovered</td>
         <td class="num">72</td>
         <td class="num agent">58</td>
-        <td class="num agent-ev">56</td>
-        <td class="num agent-learned">67</td>
+        <td class="num agent-ev">58</td>
+        <td class="num agent-learned">55</td>
       </tr>
       
     </tbody>
   </table>
   
   
-  <p class="reasons">With config/rules.yaml's brain.ev_mode switched on, the SAME agent recovered ₹3,53,079 more than it did with ev_mode off on this seed -- see "Is this just one lucky seed?" below for whether that holds across seeds too.</p>
+  <p class="reasons">With config/rules.yaml's brain.ev_mode switched on, the SAME agent recovered ₹1,44,503 more than it did with ev_mode off on this seed -- see "Is this just one lucky seed?" below for whether that holds across seeds too.</p>
   
   
-  <p class="reasons">Swapping in the learned posteriors (config/learned_recovery.yaml) for the hand-typed EV grid recovered ₹31,56,911 less than agent+EV alone on this seed -- see "Is this just one lucky seed?" below for the same comparison across all six benchmark seeds, and the spread across them, not just the mean or the win count.</p>
+  <p class="reasons">Swapping in the learned posteriors (config/learned_recovery.yaml) for the hand-typed EV grid recovered ₹6,48,138 more than agent+EV alone on this seed -- see "Is this just one lucky seed?" below for the same comparison across all six benchmark seeds, and the spread across them, not just the mean or the win count.</p>
   
 
   <h2>Buyer panel -- who needs attention right now</h2>
@@ -213,18 +214,18 @@
       
       <tr>
         <td>Meridian Logistics India Pvt Ltd</td>
-        <td class="num">₹13,14,985</td>
+        <td class="num">₹14,23,583</td>
         <td class="num">5</td>
         <td class="num">216d</td>
         <td class="num">0</td>
         <td>high</td>
         <td>steady</td>
-        <td>16.7%</td>
-        <td class="num">6</td>
+        <td>0.0%</td>
+        <td class="num">5</td>
         <td class="num">0</td>
         <td>no resolved-late data</td>
-        <td class="num">12</td>
-        <td>83.3%</td>
+        <td class="num">11</td>
+        <td>72.7%</td>
         <td class="reasons">
           1 in ladder, 4 handed off,
           0 stopped
@@ -236,7 +237,7 @@
         <td class="num">₹8,84,986</td>
         <td class="num">4</td>
         <td class="num">169d</td>
-        <td class="num">33</td>
+        <td class="num">32</td>
         <td>medium</td>
         <td>unknown</td>
         <td>33.3%</td>
@@ -292,26 +293,6 @@
       </tr>
       
       <tr>
-        <td>Om Sai Distributors</td>
-        <td class="num">₹6,35,988</td>
-        <td class="num">2</td>
-        <td class="num">147d</td>
-        <td class="num">64</td>
-        <td>medium</td>
-        <td>worsening</td>
-        <td>no promise history</td>
-        <td class="num">0</td>
-        <td class="num">0</td>
-        <td>-</td>
-        <td class="num">6</td>
-        <td>100.0%</td>
-        <td class="reasons">
-          2 in ladder, 0 handed off,
-          0 stopped
-        </td>
-      </tr>
-      
-      <tr>
         <td>Jain Packaging Mart</td>
         <td class="num">₹5,20,200</td>
         <td class="num">3</td>
@@ -353,27 +334,47 @@
       
       <tr>
         <td>Sharma Trading Co</td>
-        <td class="num">₹3,75,842</td>
-        <td class="num">5</td>
+        <td class="num">₹4,16,425</td>
+        <td class="num">6</td>
         <td class="num">255d</td>
-        <td class="num">49</td>
+        <td class="num">51</td>
         <td>high</td>
         <td>worsening</td>
         <td>55.6%</td>
         <td class="num">9</td>
         <td class="num">0</td>
-        <td>1.0d</td>
-        <td class="num">20</td>
-        <td>60.0%</td>
+        <td>no resolved-late data</td>
+        <td class="num">21</td>
+        <td>57.1%</td>
         <td class="reasons">
-          2 in ladder, 3 handed off,
+          2 in ladder, 4 handed off,
+          0 stopped
+        </td>
+      </tr>
+      
+      <tr>
+        <td>Sethi Brothers</td>
+        <td class="num">₹2,41,600</td>
+        <td class="num">1</td>
+        <td class="num">173d</td>
+        <td class="num">35</td>
+        <td>high</td>
+        <td>worsening</td>
+        <td>60.0%</td>
+        <td class="num">5</td>
+        <td class="num">0</td>
+        <td>30.0d</td>
+        <td class="num">6</td>
+        <td>100.0%</td>
+        <td class="reasons">
+          0 in ladder, 1 handed off,
           0 stopped
         </td>
       </tr>
       
       <tr>
         <td>Sundaram Auto Components Pvt Ltd</td>
-        <td class="num">₹2,50,583</td>
+        <td class="num">₹2,32,807</td>
         <td class="num">4</td>
         <td class="num">198d</td>
         <td class="num">32</td>
@@ -384,7 +385,7 @@
         <td class="num">0</td>
         <td>no resolved-late data</td>
         <td class="num">9</td>
-        <td>44.4%</td>
+        <td>55.6%</td>
         <td class="reasons">
           0 in ladder, 4 handed off,
           0 stopped
@@ -432,11 +433,31 @@
       </tr>
       
       <tr>
+        <td>Om Sai Distributors</td>
+        <td class="num">₹1,71,884</td>
+        <td class="num">1</td>
+        <td class="num">147d</td>
+        <td class="num">62</td>
+        <td>medium</td>
+        <td>worsening</td>
+        <td>no promise history</td>
+        <td class="num">0</td>
+        <td class="num">0</td>
+        <td>-</td>
+        <td class="num">7</td>
+        <td>100.0%</td>
+        <td class="reasons">
+          1 in ladder, 0 handed off,
+          0 stopped
+        </td>
+      </tr>
+      
+      <tr>
         <td>Northstar Engineering Pvt Ltd</td>
         <td class="num">₹1,11,900</td>
         <td class="num">1</td>
         <td class="num">225d</td>
-        <td class="num">37</td>
+        <td class="num">36</td>
         <td>medium</td>
         <td>unknown</td>
         <td>75.0%</td>
@@ -452,31 +473,11 @@
       </tr>
       
       <tr>
-        <td>Sethi Brothers</td>
-        <td class="num">₹92,673</td>
-        <td class="num">1</td>
-        <td class="num">173d</td>
-        <td class="num">35</td>
-        <td>high</td>
-        <td>worsening</td>
-        <td>80.0%</td>
-        <td class="num">5</td>
-        <td class="num">0</td>
-        <td>30.0d</td>
-        <td class="num">6</td>
-        <td>100.0%</td>
-        <td class="reasons">
-          0 in ladder, 1 handed off,
-          0 stopped
-        </td>
-      </tr>
-      
-      <tr>
         <td>Verma Hardware Stores</td>
         <td class="num">₹46,100</td>
         <td class="num">1</td>
         <td class="num">262d</td>
-        <td class="num">25</td>
+        <td class="num">24</td>
         <td>medium</td>
         <td>steady</td>
         <td>100.0%</td>
@@ -516,15 +517,15 @@
         <td class="num">₹5,919</td>
         <td class="num">1</td>
         <td class="num">191d</td>
-        <td class="num">67</td>
+        <td class="num">66</td>
         <td>high</td>
         <td>worsening</td>
         <td>no promise history</td>
         <td class="num">0</td>
         <td class="num">0</td>
         <td>-</td>
-        <td class="num">5</td>
-        <td>100.0%</td>
+        <td class="num">6</td>
+        <td>83.3%</td>
         <td class="reasons">
           1 in ladder, 0 handed off,
           0 stopped
@@ -555,42 +556,42 @@
       
       <tr>
         <td>7 (detailed above)</td>
-        <td class="num">₹88,38,375</td>
-        <td class="num">₹1,44,80,534</td>
+        <td class="num">₹88,46,422</td>
+        <td class="num">₹1,46,64,306</td>
         <td class="win">✓</td>
         
-        <td class="num">₹1,48,33,614</td>
+        <td class="num">₹1,48,08,810</td>
         <td class="win">✓</td>
         
         
-        <td class="num">₹1,16,76,702</td>
-        <td class="lose">✗</td>
+        <td class="num">₹1,54,56,949</td>
+        <td class="win">✓</td>
         
         
-        <td class="num">99.4</td>
-        <td class="num">95.4</td>
+        <td class="num">98.8</td>
+        <td class="num">95.5</td>
         <td class="win">✓</td>
         
         <td class="num">0</td>
-        <td class="num">6</td>
+        <td class="num">5</td>
       </tr>
       
       <tr>
         <td>42</td>
-        <td class="num">₹1,36,80,472</td>
-        <td class="num">₹1,59,79,229</td>
+        <td class="num">₹1,36,17,784</td>
+        <td class="num">₹1,61,98,273</td>
         <td class="win">✓</td>
         
-        <td class="num">₹1,69,60,597</td>
+        <td class="num">₹1,67,87,869</td>
         <td class="win">✓</td>
         
         
-        <td class="num">₹1,47,93,097</td>
-        <td class="lose">✗</td>
+        <td class="num">₹1,71,69,738</td>
+        <td class="win">✓</td>
         
         
-        <td class="num">101.2</td>
-        <td class="num">97.7</td>
+        <td class="num">103.6</td>
+        <td class="num">100.2</td>
         <td class="win">✓</td>
         
         <td class="num">0</td>
@@ -599,64 +600,42 @@
       
       <tr>
         <td>13</td>
-        <td class="num">₹1,31,72,281</td>
-        <td class="num">₹1,70,12,631</td>
+        <td class="num">₹1,30,39,181</td>
+        <td class="num">₹1,77,44,919</td>
         <td class="win">✓</td>
         
-        <td class="num">₹1,71,51,487</td>
-        <td class="win">✓</td>
-        
-        
-        <td class="num">₹1,55,37,064</td>
+        <td class="num">₹1,66,98,132</td>
         <td class="lose">✗</td>
         
         
-        <td class="num">91.5</td>
-        <td class="num">87.2</td>
+        <td class="num">₹1,75,22,201</td>
+        <td class="win">✓</td>
+        
+        
+        <td class="num">95.8</td>
+        <td class="num">88.4</td>
         <td class="win">✓</td>
         
         <td class="num">2</td>
-        <td class="num">2</td>
+        <td class="num">1</td>
       </tr>
       
       <tr>
         <td>99</td>
         <td class="num">₹1,00,98,475</td>
-        <td class="num">₹1,44,86,263</td>
+        <td class="num">₹1,45,89,976</td>
         <td class="win">✓</td>
         
-        <td class="num">₹1,50,04,435</td>
+        <td class="num">₹1,48,74,795</td>
         <td class="win">✓</td>
         
         
-        <td class="num">₹1,44,88,387</td>
-        <td class="lose">✗</td>
-        
-        
-        <td class="num">101.5</td>
-        <td class="num">98.3</td>
+        <td class="num">₹1,53,03,693</td>
         <td class="win">✓</td>
         
-        <td class="num">0</td>
-        <td class="num">5</td>
-      </tr>
-      
-      <tr>
-        <td>2024</td>
-        <td class="num">₹99,98,703</td>
-        <td class="num">₹1,47,40,853</td>
-        <td class="win">✓</td>
         
-        <td class="num">₹1,46,89,088</td>
-        <td class="lose">✗</td>
-        
-        
-        <td class="num">₹1,15,54,703</td>
-        <td class="lose">✗</td>
-        
-        
-        <td class="num">89.1</td>
-        <td class="num">83.4</td>
+        <td class="num">104.1</td>
+        <td class="num">100.8</td>
         <td class="win">✓</td>
         
         <td class="num">0</td>
@@ -664,25 +643,47 @@
       </tr>
       
       <tr>
-        <td>555</td>
-        <td class="num">₹95,92,280</td>
-        <td class="num">₹1,16,76,703</td>
+        <td>2024</td>
+        <td class="num">₹1,00,47,766</td>
+        <td class="num">₹1,50,88,832</td>
         <td class="win">✓</td>
         
-        <td class="num">₹1,17,22,681</td>
-        <td class="win">✓</td>
-        
-        
-        <td class="num">₹87,92,895</td>
+        <td class="num">₹1,48,52,462</td>
         <td class="lose">✗</td>
         
         
-        <td class="num">96.7</td>
-        <td class="num">95.0</td>
+        <td class="num">₹1,48,52,462</td>
+        <td class="win">✓</td>
+        
+        
+        <td class="num">92.0</td>
+        <td class="num">87.3</td>
+        <td class="win">✓</td>
+        
+        <td class="num">0</td>
+        <td class="num">2</td>
+      </tr>
+      
+      <tr>
+        <td>555</td>
+        <td class="num">₹96,26,084</td>
+        <td class="num">₹1,17,45,399</td>
+        <td class="win">✓</td>
+        
+        <td class="num">₹1,17,45,399</td>
+        <td class="win">✓</td>
+        
+        
+        <td class="num">₹1,17,45,399</td>
+        <td class="win">✓</td>
+        
+        
+        <td class="num">99.8</td>
+        <td class="num">97.7</td>
         <td class="win">✓</td>
         
         <td class="num">1</td>
-        <td class="num">5</td>
+        <td class="num">8</td>
       </tr>
       
     </tbody>
@@ -695,7 +696,7 @@
   
   <p class="win-rate">
     The Phase 4 ablation: agent+EV (ev_mode on) beat the SAME agent with ev_mode
-    off on ₹ recovered in <strong>5/6</strong> seeds --
+    off on ₹ recovered in <strong>4/6</strong> seeds --
     reported as it came out, not tuned toward a clean win.
   </p>
   
@@ -703,17 +704,17 @@
   <p class="win-rate">
     The learned-posteriors ablation: agent+EV+learned (config/learned_recovery.yaml's
     fitted posteriors in place of the hand-typed EV grid) beat agent+EV on ₹
-    recovered in <strong>0/6</strong> seeds --
+    recovered in <strong>6/6</strong> seeds --
     reported as it came out, losses included, no asterisks. 6
     seeds is a small sample, so the win rate alone is not the whole picture: across
-    those seeds the mean change was <strong>-₹22,53,175</strong>,
-    ranging from <strong>-₹31,56,911</strong> to
-    <strong>-₹5,16,048</strong> -- read that range, not just
+    those seeds the mean change was <strong>₹3,80,495</strong>,
+    ranging from <strong>₹0</strong> to
+    <strong>₹8,24,068</strong> -- read that range, not just
     the average or the win count, before drawing a conclusion.
   </p>
   
   
-  <p class="win-rate">2 of 6 seeds contain a malformed invoice (3 total) that E2's validation excludes from the queue; 5 of 6 (22 total invoices) contain a promise a buyer renegotiated before it fell due, the scenario E1's TC-014 fix stops from double-counting as a broken promise. Both fixes are verified directly by their own regression tests (docs/edge_cases.md), independently of whether they move the rupee total on any particular seed above -- see CLAUDE.md's W4 note for the seed-by-seed investigation into why, on these six seeds, they mostly don't.</p>
+  <p class="win-rate">2 of 6 seeds contain a malformed invoice (3 total) that E2's validation excludes from the queue; 5 of 6 (20 total invoices) contain a promise a buyer renegotiated before it fell due, the scenario E1's TC-014 fix stops from double-counting as a broken promise. Both fixes are verified directly by their own regression tests (docs/edge_cases.md), independently of whether they move the rupee total on any particular seed above -- see CLAUDE.md's W4 note for the seed-by-seed investigation into why, on these six seeds, they mostly don't.</p>
   
   
 
@@ -734,15 +735,15 @@
       <tr>
         <td>2 -- firm</td>
         <td class="num">68</td>
-        <td class="num">34</td>
-        <td class="num">50.0%</td>
+        <td class="num">37</td>
+        <td class="num">54.4%</td>
       </tr>
       
       <tr>
         <td>3 -- legal facts</td>
-        <td class="num">40</td>
-        <td class="num">7</td>
-        <td class="num">17.5%</td>
+        <td class="num">37</td>
+        <td class="num">4</td>
+        <td class="num">10.8%</td>
       </tr>
       
     </tbody>
@@ -750,7 +751,7 @@
   <p class="reasons">
     Escalated to a human, by reason:
     
-      disputed (18), rung4_escalation (29)
+      disputed (18), max_contacts_reached (1), rung4_escalation (29)
     
     &nbsp;&middot;&nbsp; Hard-stopped, by reason:
     
@@ -851,7 +852,7 @@
         <td><span class="badge partially_paid">watch</span></td>
         <td class="num">14d</td>
         <td class="num">₹1,45,600</td>
-        <td class="reason">due in 14 day(s); buyer score 29 (poor); 7 prior invoices went overdue</td>
+        <td class="reason">due in 14 day(s); buyer score 28 (poor); 7 prior invoices went overdue</td>
       </tr>
       
       <tr>
@@ -949,16 +950,6 @@
       </tr>
       
       <tr>
-        <td>INV-2026-0155</td>
-        <td>Om Sai Distributors</td>
-        <td class="persona">forgetful</td>
-        <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹4,64,103</td>
-        <td class="num">137</td>
-        <td class="reason">partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate</td>
-      </tr>
-      
-      <tr>
         <td>INV-2026-0067</td>
         <td>Bharat Polymers Ltd</td>
         <td class="persona">disputer</td>
@@ -975,7 +966,7 @@
         <td><span class="badge partially_paid">partially_paid</span></td>
         <td class="num">₹4,22,649</td>
         <td class="num">168</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1046,6 +1037,26 @@
         <td class="num">₹2,70,188</td>
         <td class="num">116</td>
         <td class="reason">partial payment and an unclear reply; holding off. deterministic mock-LLM judgment: insufficient signal to escalate</td>
+      </tr>
+      
+      <tr>
+        <td>INV-2026-0122</td>
+        <td>Meridian Logistics India Pvt Ltd</td>
+        <td class="persona">habitual_delayer</td>
+        <td><span class="badge open">open</span></td>
+        <td class="num">₹2,60,000</td>
+        <td class="num">145</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)</td>
+      </tr>
+      
+      <tr>
+        <td>INV-2026-0083</td>
+        <td>Sethi Brothers</td>
+        <td class="persona">cash_tight</td>
+        <td><span class="badge open">open</span></td>
+        <td class="num">₹2,41,600</td>
+        <td class="num">173</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
       </tr>
       
       <tr>
@@ -1129,16 +1140,6 @@
       </tr>
       
       <tr>
-        <td>INV-2026-0122</td>
-        <td>Meridian Logistics India Pvt Ltd</td>
-        <td class="persona">habitual_delayer</td>
-        <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹1,51,402</td>
-        <td class="num">145</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
-      </tr>
-      
-      <tr>
         <td>INV-2026-0098</td>
         <td>Krishna Electricals</td>
         <td class="persona">cash_tight</td>
@@ -1155,7 +1156,7 @@
         <td><span class="badge open">open</span></td>
         <td class="num">₹1,45,600</td>
         <td class="num">101</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1189,13 +1190,23 @@
       </tr>
       
       <tr>
+        <td>INV-2026-0150</td>
+        <td>Sharma Trading Co</td>
+        <td class="persona">cash_tight</td>
+        <td><span class="badge partially_paid">partially_paid</span></td>
+        <td class="num">₹1,14,354</td>
+        <td class="num">129</td>
+        <td class="reason">5 contacts already made, reaching the limit of 5 for one invoice</td>
+      </tr>
+      
+      <tr>
         <td>INV-2026-0033</td>
         <td>Northstar Engineering Pvt Ltd</td>
         <td class="persona">habitual_delayer</td>
         <td><span class="badge open">open</span></td>
         <td class="num">₹1,11,900</td>
         <td class="num">225</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 225 days overdue; ceiling 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 225 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1219,16 +1230,6 @@
       </tr>
       
       <tr>
-        <td>INV-2026-0083</td>
-        <td>Sethi Brothers</td>
-        <td class="persona">cash_tight</td>
-        <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹92,673</td>
-        <td class="num">173</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4)</td>
-      </tr>
-      
-      <tr>
         <td>INV-2026-0149</td>
         <td>Deccan Electricals Ltd</td>
         <td class="persona">disputer</td>
@@ -1236,16 +1237,6 @@
         <td class="num">₹83,600</td>
         <td class="num">146</td>
         <td class="reason">the invoice is disputed, so it goes to a human immediately</td>
-      </tr>
-      
-      <tr>
-        <td>INV-2026-0150</td>
-        <td>Sharma Trading Co</td>
-        <td class="persona">cash_tight</td>
-        <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹82,890</td>
-        <td class="num">129</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 129 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1299,23 +1290,13 @@
       </tr>
       
       <tr>
-        <td>INV-2026-0138</td>
-        <td>Sundaram Auto Components Pvt Ltd</td>
-        <td class="persona">cash_tight</td>
-        <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹52,926</td>
-        <td class="num">158</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)</td>
-      </tr>
-      
-      <tr>
         <td>INV-2026-0016</td>
         <td>Verma Hardware Stores</td>
         <td class="persona">habitual_delayer</td>
         <td><span class="badge open">open</span></td>
         <td class="num">₹46,100</td>
         <td class="num">262</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1335,7 +1316,7 @@
         <td><span class="badge open">open</span></td>
         <td class="num">₹42,100</td>
         <td class="num">169</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
       </tr>
       
       <tr>
@@ -1346,6 +1327,16 @@
         <td class="num">₹41,700</td>
         <td class="num">115</td>
         <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 115 days overdue; ceiling 4)</td>
+      </tr>
+      
+      <tr>
+        <td>INV-2026-0138</td>
+        <td>Sundaram Auto Components Pvt Ltd</td>
+        <td class="persona">cash_tight</td>
+        <td><span class="badge partially_paid">partially_paid</span></td>
+        <td class="num">₹35,150</td>
+        <td class="num">158</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)</td>
       </tr>
       
       <tr>
@@ -1409,13 +1400,13 @@
       </tr>
       
       <tr>
-        <td>INV-2026-0032</td>
+        <td>INV-2026-0096</td>
         <td>Sharma Trading Co</td>
         <td class="persona">cash_tight</td>
         <td><span class="badge partially_paid">partially_paid</span></td>
-        <td class="num">₹9,214</td>
-        <td class="num">255</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 255 days overdue; ceiling 4)</td>
+        <td class="num">₹9,913</td>
+        <td class="num">163</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
       </tr>
       
       <tr>
@@ -1425,7 +1416,17 @@
         <td><span class="badge open">open</span></td>
         <td class="num">₹8,600</td>
         <td class="num">169</td>
-        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 169 days overdue; ceiling 4)</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 169 days overdue; ceiling 4)</td>
+      </tr>
+      
+      <tr>
+        <td>INV-2026-0032</td>
+        <td>Sharma Trading Co</td>
+        <td class="persona">cash_tight</td>
+        <td><span class="badge partially_paid">partially_paid</span></td>
+        <td class="num">₹8,420</td>
+        <td class="num">255</td>
+        <td class="reason">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
       </tr>
       
       <tr>
@@ -1486,15 +1487,6 @@
         
         <tr>
           <td>2026-12-21T00:00:00</td>
-          <td>INV-2026-0056</td>
-          <td>brain</td>
-          <td>handoff</td>
-          <td>rule</td>
-          <td class="reason-cell">the invoice is disputed, so it goes to a human immediately</td>
-        </tr>
-        
-        <tr>
-          <td>2026-12-21T00:00:00</td>
           <td>INV-2026-0095</td>
           <td>brain</td>
           <td>handoff</td>
@@ -1522,20 +1514,11 @@
         
         <tr>
           <td>2026-12-21T00:00:00</td>
-          <td>INV-2026-0138</td>
-          <td>brain</td>
-          <td>handoff</td>
-          <td>rule</td>
-          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)</td>
-        </tr>
-        
-        <tr>
-          <td>2026-12-21T00:00:00</td>
           <td>INV-2026-0016</td>
           <td>brain</td>
           <td>handoff</td>
           <td>rule</td>
-          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)</td>
         </tr>
         
         <tr>
@@ -1553,7 +1536,7 @@
           <td>brain</td>
           <td>handoff</td>
           <td>rule</td>
-          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
         </tr>
         
         <tr>
@@ -1563,6 +1546,15 @@
           <td>handoff</td>
           <td>rule</td>
           <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 115 days overdue; ceiling 4)</td>
+        </tr>
+        
+        <tr>
+          <td>2026-12-21T00:00:00</td>
+          <td>INV-2026-0138</td>
+          <td>brain</td>
+          <td>handoff</td>
+          <td>rule</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)</td>
         </tr>
         
         <tr>
@@ -1621,11 +1613,11 @@
         
         <tr>
           <td>2026-12-21T00:00:00</td>
-          <td>INV-2026-0032</td>
+          <td>INV-2026-0096</td>
           <td>brain</td>
           <td>handoff</td>
           <td>rule</td>
-          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 255 days overdue; ceiling 4)</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
         </tr>
         
         <tr>
@@ -1634,7 +1626,16 @@
           <td>brain</td>
           <td>handoff</td>
           <td>rule</td>
-          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 169 days overdue; ceiling 4)</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 169 days overdue; ceiling 4)</td>
+        </tr>
+        
+        <tr>
+          <td>2026-12-21T00:00:00</td>
+          <td>INV-2026-0032</td>
+          <td>brain</td>
+          <td>handoff</td>
+          <td>rule</td>
+          <td class="reason-cell">escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)</td>
         </tr>
         
         <tr>

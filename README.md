@@ -50,60 +50,58 @@ plug in): **[ARCHITECTURE.md](ARCHITECTURE.md)**. Module-by-module walkthrough:
 
 ## Headline numbers
 
-Seed 7 (the primary benchmark seed), 120-day window. Every figure below is read
-directly from `report/out/results.json`.
+Seed 7 (the primary benchmark seed), 120-day window, **buyer reactions
+delayed** — a reply lands 0–2 days and a payment 1–5 days after the message
+(Phase R1; stated assumptions in `sim/personas.py`, identical for every arm).
+Every figure below is read directly from `report/out/results.json`.
 
 | Metric | Baseline | Agent | Agent + EV | Agent + EV + learned |
 |---|---|---|---|---|
-| Recovered | ₹88,38,375 | **₹1,44,80,534** | ₹1,43,37,457 | ₹1,49,67,820 |
+| Recovered | ₹88,46,422 | **₹1,46,64,306** | ₹1,48,08,810 | ₹1,54,56,949 |
 | Invoices fully paid | 28 | 42 | 42 | 45 |
-| Messages sent (envelopes) | 259 | 63 | 56 | 56 |
-| Avg days to pay (matched set — 21 invoices baseline + agent both recovered) | 99.4 | **95.4** | — | — |
-| Escalated to a human | 0 | 47 (18 disputed, 29 rung-4) | 50 | 46 |
+| Messages sent (envelopes) | 259 | 67 | 61 | 61 |
+| Avg days to pay (matched set — 21 invoices baseline + agent both recovered) | 98.8 | **95.5** | — | — |
+| Escalated to a human | 0 | 48 (18 disputed, 29 rung-4, 1 contact cap) | 51 | 47 |
 | Not recovered (full exceptions list, each with a reason) | 72 | 58 | 58 | 55 |
 
-- **The agent recovered ₹56,42,158 more than the baseline** while sending **196
+- **The agent recovered ₹58,17,884 more than the baseline** while sending **192
   fewer messages** — and wins on rupees recovered in **6 of 6** seeds
   (7, 42, 13, 99, 2024, 555) and on matched-set days-to-pay in **6 of 6**.
 - **The expected-value negotiation layer** (`brain.ev_mode`, off by default)
-  matches or beats the plain agent on **3 of 6** seeds (seed 7: −₹1,43,077).
-  Before Phase E1 it was 5 of 6 — see the next bullet for why it dropped.
+  matches or beats the plain agent on **4 of 6** seeds — **3 wins, 1 exact
+  tie, 2 losses** (seed 13 −₹10,46,786, seed 2024 −₹2,36,370). It was 5 of 6
+  before Phase E1 made EV's chosen tier the rung actually sent (see below).
 - **The learned layer** (`learning.enabled`, off by default) — a contextual
   bandit fit on simulated data — matches or beats the hand-typed EV grid on
-  **4 of 6** seeds (**3 wins, 1 exact tie, 2 losses**), mean **+₹2,33,093**,
-  range −₹2,28,344 to +₹6,30,362. Until Phase E2 it **lost 0 of 6** (mean
-  −₹22,53,175), root-caused to `wait`'s hand-typed 60% never having been
-  measured. E2 measured it; in this simulator a chosen wait recovered nothing
-  in 1,513 episodes. **Read both numbers together:** Phase E1 (EV now sets the
-  rung actually sent) cost the hand-typed EV arm money on 5 of 6 seeds — the
-  same untested-`wait` flaw, no longer hidden by a mislabelled send — so part
-  of the turnaround is the comparison arm getting worse. Against the best arm
-  that existed before these phases, the learned arm is net **−₹1,45,296 across
-  all six seeds**: a correctness fix, roughly break-even on rupees. Full
-  write-up: `docs/learning_findings.md`. **Both arms ship off.**
+  **6 of 6** seeds — **4 wins, 2 exact ties** — mean **+₹3,80,496**, range
+  ₹0 to +₹8,24,068. Until Phase E2 it **lost 0 of 6** (mean −₹22,53,175),
+  root-caused to `wait`'s hand-typed 60% never having been measured; E2
+  measured it, and in this simulator a chosen wait recovered nothing in 1,513
+  episodes. **Read it with its caveats:** part of that turnaround is Phase E1
+  lowering the hand-typed EV arm (the same untested-`wait` flaw, no longer
+  hidden by a mislabelled send); the learned-vs-EV result moved from 4/6 to
+  6/6 on the reaction-delay timing change alone, so it is sensitive to the
+  fake world's assumptions; and six seeds is a small sample. Full write-up:
+  `docs/learning_findings.md`. **Both arms ship off.**
 
-**Realism check — delayed buyer reactions (Phase R1, `--reaction-delays`).**
-The figures above let a buyer's reaction land the same simulated day as the
-message. Re-run with replies landing 0–2 days and payments 1–5 days later
-(stated assumptions, `sim/personas.py`), same six seeds, every arm alike: the
-agent still beats the baseline on **6/6** seeds on rupees and on matched
-days-to-pay (seed 7: +₹59,50,360); agent+EV matches or beats the agent on
-**4/6**; agent+EV+learned matches or beats agent+EV on **6/6** (4 wins, 2
-exact ties, mean +₹3,64,674). Days to pay rise by about 1–3 days, as
-expected — but recovered rupees mostly rose slightly too, most plausibly
-because the agent sometimes re-contacts a buyer whose payment is still in
-transit (seed 7: 63 → 67 messages); that mechanism is not yet instrumented.
-The learned-arm result moving from 4/6 to 6/6 on a simulator timing change
-alone is itself the caution: that comparison is sensitive to the fake
-world's assumptions. Not yet the committed headline.
+**Same-day reactions, for comparison** (`--no-reaction-delays`, how every
+figure was measured before Phase R1): agent vs baseline is still **6/6** on
+rupees and on matched days (seed 7: +₹56,42,158); agent+EV vs agent **3/6**;
+learned vs EV **4/6** (3 wins, 1 tie). With delays, days to pay rise about 1–3
+days, as expected, but recovered rupees rose slightly in most arms. Traced on
+seed 7: the agent cannot see a payment still in transit and sometimes messages
+again, and the buyer pays the rest (+~₹4.8 lakh); a reply arriving a day later
+dates its promise a day later, which re-rolls whether it is kept (−~₹3.0
+lakh). An earlier version of R1 also re-rolled partial-payment *amounts* on
+the landing day — a modelling bug, fixed before these numbers were produced.
 
 **Per-rung effectiveness (agent, seed 7):** rung 1 (soft nudge) 33.3% · rung 2
-(firm) 50.0% · rung 3 (legal facts) 17.5%. Rung 3 recovers a smaller share than
+(firm) 54.4% · rung 3 (legal facts) 10.8%. Rung 3 recovers a smaller share than
 rung 2 only because the invoices that reach it are the ones that already failed
 rungs 1–2 — the baseline's three identical reminders decay the same way (16.0%
 → 10.7% → 4.0%), which is the control that isolates that selection effect.
 
-**1032 tests passing.** `docs/edge_cases.md` triages 147 edge cases: 66 with a
+**1053 tests passing.** `docs/edge_cases.md` triages 147 edge cases: 66 with a
 named passing test, 44 correct-in-code, 37 explicitly out of scope with the
 specific data or integration each would need named.
 
@@ -122,7 +120,7 @@ python data/generate.py --seed 7                                                
 python sim/run_sim.py --compare --seed 7 --extra-seeds 42,13,99,2024,555 --days 120  # -> report/out/results.json  (~3.5 min)
 python report/build_report.py                                                     # -> report/out/report.html
 python scripts/build_dashboard.py --seed 7                                        # -> report/out/dashboard.html  (single self-contained file)
-pytest -q                                                                         # 1032 passed
+pytest -q                                                                         # 1053 passed
 ```
 
 The built `report/out/results.json`, `report.html`, `dashboard.html` and
@@ -156,7 +154,8 @@ no real cash-flow feed exists.
 
 **The learned bandit is fit on a simulator with no unprompted payments.** Fit
 entirely on simulated exploration data, it now matches or beats the hand-typed
-EV grid on 4 of 6 seeds (3 wins, 1 tie), but its measured `wait` of ~0% is
+EV grid on 6 of 6 seeds (4 wins, 2 ties; 4 of 6 with same-day reactions), but
+its measured `wait` of ~0% is
 true of this simulator by construction, not of real buyers (see Headline
 numbers). It ships off; a fresh clone reproduces the pre-learning agent
 exactly.
@@ -173,10 +172,9 @@ disclosed.
 with `promises = []`; promise memory only spans a run inside the simulator. A
 real deployment would persist promises across pipeline runs.
 
-**Simulator simplifications:** by default a persona's reaction lands the same
-simulated day the message is sent (real buyers take longer, so "days to pay"
-is optimistic — `--reaction-delays` models the lag, see the realism check
-above, and it did not make recovery more conservative); the simulator has no
+**Simulator simplifications:** reply and payment delays are fixed, stated
+ranges (0–2 and 1–5 days), not measured from real buyers, and modelling them
+did not make recovery more conservative (see Headline numbers); the simulator has no
 unprompted payments, so waiting never recovers anything here; a guardrail
 fallback message is reacted to identically to a full LLM draft; every partial
 payment is tagged as an ambiguous reply. No ablation isolates "score-aware

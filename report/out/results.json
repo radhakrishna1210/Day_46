@@ -1,15 +1,16 @@
 {
   "seed": 7,
   "days": 120,
-  "generated": "2026-09-04T14:08:46",
+  "reaction_delays": true,
+  "generated": "2026-09-25T00:40:40",
   "baseline": {
     "mode": "baseline",
     "seed": 7,
     "days": 120,
     "final": {
       "day": "2026-12-21",
-      "recovered_paise": 883837557,
-      "outstanding_paise": 1833902443,
+      "recovered_paise": 884642267,
+      "outstanding_paise": 1833097733,
       "disputed_paise": 672960000,
       "disputed_count": 20
     },
@@ -19,36 +20,36 @@
     "disputes": 20,
     "handoff_reasons": {},
     "stop_reasons": {},
-    "avg_days_to_pay": 99.7,
+    "avg_days_to_pay": 101.7,
     "paid_invoices": {
-      "INV-2026-0024": 184,
-      "INV-2026-0029": 154,
+      "INV-2026-0024": 185,
+      "INV-2026-0029": 156,
       "INV-2026-0032": 168,
-      "INV-2026-0037": 147,
-      "INV-2026-0046": 145,
-      "INV-2026-0048": 136,
-      "INV-2026-0051": 139,
-      "INV-2026-0057": 127,
-      "INV-2026-0059": 124,
-      "INV-2026-0078": 114,
+      "INV-2026-0037": 150,
+      "INV-2026-0046": 147,
+      "INV-2026-0048": 138,
+      "INV-2026-0051": 140,
+      "INV-2026-0057": 128,
+      "INV-2026-0059": 126,
+      "INV-2026-0078": 115,
       "INV-2026-0080": 118,
-      "INV-2026-0081": 113,
-      "INV-2026-0096": 99,
-      "INV-2026-0097": 105,
-      "INV-2026-0101": 109,
-      "INV-2026-0107": 83,
-      "INV-2026-0115": 76,
-      "INV-2026-0116": 78,
-      "INV-2026-0119": 82,
-      "INV-2026-0120": 94,
-      "INV-2026-0127": 69,
-      "INV-2026-0132": 64,
-      "INV-2026-0137": 58,
-      "INV-2026-0146": 47,
+      "INV-2026-0081": 118,
+      "INV-2026-0096": 102,
+      "INV-2026-0097": 108,
+      "INV-2026-0101": 111,
+      "INV-2026-0107": 84,
+      "INV-2026-0115": 80,
+      "INV-2026-0116": 79,
+      "INV-2026-0119": 83,
+      "INV-2026-0120": 97,
+      "INV-2026-0127": 74,
+      "INV-2026-0132": 68,
+      "INV-2026-0137": 59,
+      "INV-2026-0146": 51,
       "INV-2026-0151": 54,
       "INV-2026-0154": 46,
       "INV-2026-0155": 43,
-      "INV-2026-0167": 16
+      "INV-2026-0167": 19
     },
     "per_attempt": {
       "1": {
@@ -76,7 +77,7 @@
       "payments_recorded": 36,
       "payments_attributed": 36,
       "payments_unattributed": 0,
-      "paise_attributed": 693077557,
+      "paise_attributed": 693882267,
       "paise_unattributed": 0
     },
     "exceptions": [
@@ -585,18 +586,6 @@
         "reason": "all 3 fixed reminders sent, no payment received"
       },
       {
-        "invoice_id": "INV-2026-0150",
-        "buyer_id": "BUY-06",
-        "buyer_name": "Sharma Trading Co",
-        "persona": "cash_tight",
-        "status": "partially_paid",
-        "outstanding_paise": 11487326,
-        "days_overdue": 129,
-        "disputed": false,
-        "last_rung": 1,
-        "reason": "all 3 fixed reminders sent, no payment received"
-      },
-      {
         "invoice_id": "INV-2026-0033",
         "buyer_id": "BUY-18",
         "buyer_name": "Northstar Engineering Pvt Ltd",
@@ -619,6 +608,18 @@
         "disputed": true,
         "last_rung": 1,
         "reason": "the buyer disputed the invoice, but the baseline has no dispute detection and kept its fixed schedule (3/3 sent)"
+      },
+      {
+        "invoice_id": "INV-2026-0150",
+        "buyer_id": "BUY-06",
+        "buyer_name": "Sharma Trading Co",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 10296428,
+        "days_overdue": 129,
+        "disputed": false,
+        "last_rung": 1,
+        "reason": "all 3 fixed reminders sent, no payment received"
       },
       {
         "invoice_id": "INV-2026-0125",
@@ -873,6 +874,18 @@
         "reason": "all 3 fixed reminders sent, no payment received"
       },
       {
+        "invoice_id": "INV-2026-0054",
+        "buyer_id": "BUY-16",
+        "buyer_name": "Fatima Traders",
+        "persona": "forgetful",
+        "status": "partially_paid",
+        "outstanding_paise": 2031857,
+        "days_overdue": 200,
+        "disputed": false,
+        "last_rung": 1,
+        "reason": "all 3 fixed reminders sent, no payment received"
+      },
+      {
         "invoice_id": "INV-2026-0162",
         "buyer_id": "BUY-11",
         "buyer_name": "Sethi Brothers",
@@ -892,18 +905,6 @@
         "status": "open",
         "outstanding_paise": 1680000,
         "days_overdue": 160,
-        "disputed": false,
-        "last_rung": 1,
-        "reason": "all 3 fixed reminders sent, no payment received"
-      },
-      {
-        "invoice_id": "INV-2026-0054",
-        "buyer_id": "BUY-16",
-        "buyer_name": "Fatima Traders",
-        "persona": "forgetful",
-        "status": "partially_paid",
-        "outstanding_paise": 1645669,
-        "days_overdue": 200,
         "disputed": false,
         "last_rung": 1,
         "reason": "all 3 fixed reminders sent, no payment received"
@@ -945,7 +946,12 @@
         "reason": "all 3 fixed reminders sent, no payment received"
       }
     ],
-    "narrative": []
+    "narrative": [],
+    "reaction_delays": true,
+    "in_flight": {
+      "reactions_in_flight_at_end": 0,
+      "payments_in_flight_at_end": 0
+    }
   },
   "agent": {
     "mode": "agent",
@@ -960,71 +966,72 @@
     "online_updates": null,
     "final": {
       "day": "2026-12-21",
-      "recovered_paise": 1448053441,
-      "outstanding_paise": 1269686559,
+      "recovered_paise": 1466430693,
+      "outstanding_paise": 1251309307,
       "disputed_paise": 624020000,
       "disputed_count": 18
     },
-    "messages_sent": 63,
-    "invoice_contacts": 139,
+    "messages_sent": 67,
+    "invoice_contacts": 145,
     "edge_case_counts": {
       "malformed_invoices": 0,
-      "superseded_promise_invoices": 6
+      "superseded_promise_invoices": 5
     },
-    "handoffs": 47,
+    "handoffs": 48,
     "stops": 2,
     "disputes": 17,
     "handoff_reasons": {
       "disputed": 18,
-      "rung4_escalation": 29
+      "rung4_escalation": 29,
+      "max_contacts_reached": 1
     },
     "stop_reasons": {
       "opted_out": 2
     },
-    "avg_days_to_pay": 92.4,
+    "avg_days_to_pay": 93.1,
     "paid_invoices": {
       "INV-2026-0017": 196,
-      "INV-2026-0027": 159,
-      "INV-2026-0029": 154,
-      "INV-2026-0037": 147,
-      "INV-2026-0046": 135,
-      "INV-2026-0048": 136,
+      "INV-2026-0027": 162,
+      "INV-2026-0029": 156,
+      "INV-2026-0037": 150,
+      "INV-2026-0046": 139,
+      "INV-2026-0048": 138,
       "INV-2026-0051": 141,
-      "INV-2026-0054": 126,
-      "INV-2026-0057": 127,
-      "INV-2026-0059": 124,
-      "INV-2026-0078": 114,
-      "INV-2026-0079": 108,
-      "INV-2026-0080": 106,
-      "INV-2026-0081": 103,
-      "INV-2026-0088": 99,
-      "INV-2026-0091": 97,
-      "INV-2026-0094": 104,
-      "INV-2026-0096": 97,
-      "INV-2026-0097": 95,
+      "INV-2026-0054": 131,
+      "INV-2026-0057": 128,
+      "INV-2026-0059": 126,
+      "INV-2026-0078": 115,
+      "INV-2026-0079": 111,
+      "INV-2026-0080": 111,
+      "INV-2026-0081": 104,
+      "INV-2026-0088": 100,
+      "INV-2026-0091": 100,
+      "INV-2026-0094": 107,
+      "INV-2026-0097": 100,
       "INV-2026-0099": 103,
       "INV-2026-0106": 92,
-      "INV-2026-0108": 82,
+      "INV-2026-0108": 85,
       "INV-2026-0109": 91,
-      "INV-2026-0115": 76,
-      "INV-2026-0116": 78,
-      "INV-2026-0119": 72,
-      "INV-2026-0120": 74,
-      "INV-2026-0121": 80,
+      "INV-2026-0115": 80,
+      "INV-2026-0116": 79,
+      "INV-2026-0119": 77,
+      "INV-2026-0120": 78,
+      "INV-2026-0121": 84,
       "INV-2026-0123": 82,
-      "INV-2026-0127": 69,
-      "INV-2026-0134": 60,
+      "INV-2026-0127": 74,
+      "INV-2026-0134": 64,
       "INV-2026-0135": 74,
-      "INV-2026-0137": 58,
+      "INV-2026-0137": 59,
       "INV-2026-0139": 61,
-      "INV-2026-0146": 47,
+      "INV-2026-0146": 51,
       "INV-2026-0152": 50,
-      "INV-2026-0154": 34,
+      "INV-2026-0154": 37,
+      "INV-2026-0155": 44,
       "INV-2026-0157": 47,
       "INV-2026-0162": 64,
       "INV-2026-0163": 59,
       "INV-2026-0165": 43,
-      "INV-2026-0167": 16
+      "INV-2026-0167": 19
     },
     "per_rung": {
       "1": {
@@ -1034,13 +1041,13 @@
       },
       "2": {
         "invoices_contacted": 68,
-        "recovered_here": 34,
-        "effectiveness_pct": 50.0
+        "recovered_here": 37,
+        "effectiveness_pct": 54.4
       },
       "3": {
-        "invoices_contacted": 40,
-        "recovered_here": 7,
-        "effectiveness_pct": 17.5
+        "invoices_contacted": 37,
+        "recovered_here": 4,
+        "effectiveness_pct": 10.8
       }
     },
     "exceptions": [
@@ -1129,18 +1136,6 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 166 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0155",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "partially_paid",
-        "outstanding_paise": 46410347,
-        "days_overdue": 137,
-        "disputed": false,
-        "last_rung": 3,
-        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
-      },
-      {
         "invoice_id": "INV-2026-0067",
         "buyer_id": "BUY-02",
         "buyer_name": "Bharat Polymers Ltd",
@@ -1162,7 +1157,7 @@
         "days_overdue": 168,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0043",
@@ -1249,6 +1244,30 @@
         "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
       },
       {
+        "invoice_id": "INV-2026-0122",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "status": "open",
+        "outstanding_paise": 26000000,
+        "days_overdue": 145,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0083",
+        "buyer_id": "BUY-11",
+        "buyer_name": "Sethi Brothers",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 24160000,
+        "days_overdue": 173,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
         "invoice_id": "INV-2026-0151",
         "buyer_id": "BUY-17",
         "buyer_name": "Anand Precision Works Pvt Ltd",
@@ -1345,18 +1364,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0122",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 15140213,
-        "days_overdue": 145,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
-      },
-      {
         "invoice_id": "INV-2026-0098",
         "buyer_id": "BUY-14",
         "buyer_name": "Krishna Electricals",
@@ -1378,7 +1385,7 @@
         "days_overdue": 101,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0073",
@@ -1417,6 +1424,18 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 224 days overdue; ceiling 4)"
       },
       {
+        "invoice_id": "INV-2026-0150",
+        "buyer_id": "BUY-06",
+        "buyer_name": "Sharma Trading Co",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 11435475,
+        "days_overdue": 129,
+        "disputed": false,
+        "last_rung": 3,
+        "reason": "5 contacts already made, reaching the limit of 5 for one invoice"
+      },
+      {
         "invoice_id": "INV-2026-0033",
         "buyer_id": "BUY-18",
         "buyer_name": "Northstar Engineering Pvt Ltd",
@@ -1426,7 +1445,7 @@
         "days_overdue": 225,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0061",
@@ -1453,18 +1472,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0083",
-        "buyer_id": "BUY-11",
-        "buyer_name": "Sethi Brothers",
-        "persona": "cash_tight",
-        "status": "partially_paid",
-        "outstanding_paise": 9267390,
-        "days_overdue": 173,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4)"
-      },
-      {
         "invoice_id": "INV-2026-0149",
         "buyer_id": "BUY-13",
         "buyer_name": "Deccan Electricals Ltd",
@@ -1475,18 +1482,6 @@
         "disputed": true,
         "last_rung": 0,
         "reason": "the invoice is disputed, so it goes to a human immediately"
-      },
-      {
-        "invoice_id": "INV-2026-0150",
-        "buyer_id": "BUY-06",
-        "buyer_name": "Sharma Trading Co",
-        "persona": "cash_tight",
-        "status": "partially_paid",
-        "outstanding_paise": 8289091,
-        "days_overdue": 129,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 129 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0053",
@@ -1549,18 +1544,6 @@
         "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
       },
       {
-        "invoice_id": "INV-2026-0138",
-        "buyer_id": "BUY-12",
-        "buyer_name": "Sundaram Auto Components Pvt Ltd",
-        "persona": "cash_tight",
-        "status": "partially_paid",
-        "outstanding_paise": 5292635,
-        "days_overdue": 158,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
-      },
-      {
         "invoice_id": "INV-2026-0016",
         "buyer_id": "BUY-15",
         "buyer_name": "Verma Hardware Stores",
@@ -1570,7 +1553,7 @@
         "days_overdue": 262,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0064",
@@ -1594,7 +1577,7 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0160",
@@ -1607,6 +1590,18 @@
         "disputed": false,
         "last_rung": 4,
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 115 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0138",
+        "buyer_id": "BUY-12",
+        "buyer_name": "Sundaram Auto Components Pvt Ltd",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 3515011,
+        "days_overdue": 158,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0042",
@@ -1681,16 +1676,16 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 43 (poor band) starts at rung 2; 234 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0032",
+        "invoice_id": "INV-2026-0096",
         "buyer_id": "BUY-06",
         "buyer_name": "Sharma Trading Co",
         "persona": "cash_tight",
         "status": "partially_paid",
-        "outstanding_paise": 921454,
-        "days_overdue": 255,
+        "outstanding_paise": 991345,
+        "days_overdue": 163,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 255 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0107",
@@ -1702,7 +1697,19 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 49 (poor band) starts at rung 2; 169 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 169 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0032",
+        "buyer_id": "BUY-06",
+        "buyer_name": "Sharma Trading Co",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 842047,
+        "days_overdue": 255,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 51 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0156",
@@ -1895,7 +1902,7 @@
       {
         "buyer_id": "BUY-20",
         "name": "Meridian Logistics India Pvt Ltd",
-        "outstanding_paise": 131498563,
+        "outstanding_paise": 142358350,
         "overdue_count": 5,
         "oldest_days_overdue": 216,
         "score": {
@@ -1905,8 +1912,8 @@
           "confidence": "high",
           "history_count": 15,
           "signals": {
-            "average_delay_days": 42.5,
-            "worst_delay_days": 64,
+            "average_delay_days": 42.8,
+            "worst_delay_days": 65,
             "broken_promises": 9,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -1919,8 +1926,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.5 days late on average",
-              "points": -51.0
+              "detail": "42.8 days late on average",
+              "points": -51.4
             },
             {
               "factor": "broken promises",
@@ -1939,8 +1946,8 @@
             },
             {
               "factor": "clamped",
-              "detail": "raw score -23.0 pulled inside 0-100",
-              "points": 23.0
+              "detail": "raw score -23.4 pulled inside 0-100",
+              "points": 23.4
             }
           ],
           "trend": {
@@ -1953,17 +1960,17 @@
           "as_of": "2026-12-21"
         },
         "promises": {
-          "made": 6,
-          "kept": 1,
+          "made": 5,
+          "kept": 0,
           "broken": 5,
           "in_flight": 0,
-          "reliability_pct": 16.7,
+          "reliability_pct": 0.0,
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 12,
-          "replies": 10,
-          "response_rate_pct": 83.3
+          "messages_sent": 11,
+          "replies": 8,
+          "response_rate_pct": 72.7
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -1981,12 +1988,12 @@
         "score": {
           "buyer_id": "BUY-03",
           "name": "Ravi Steel Traders",
-          "score": 33,
+          "score": 32,
           "confidence": "medium",
           "history_count": 4,
           "signals": {
-            "average_delay_days": 56.0,
-            "worst_delay_days": 76,
+            "average_delay_days": 56.8,
+            "worst_delay_days": 79,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -1999,8 +2006,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "56.0 days late on average",
-              "points": -67.2
+              "detail": "56.8 days late on average",
+              "points": -68.2
             },
             {
               "factor": "broken promises",
@@ -2203,81 +2210,6 @@
         }
       },
       {
-        "buyer_id": "BUY-19",
-        "name": "Om Sai Distributors",
-        "outstanding_paise": 63598845,
-        "overdue_count": 2,
-        "oldest_days_overdue": 147,
-        "score": {
-          "buyer_id": "BUY-19",
-          "name": "Om Sai Distributors",
-          "score": 64,
-          "confidence": "medium",
-          "history_count": 8,
-          "signals": {
-            "average_delay_days": 23.5,
-            "worst_delay_days": 88,
-            "broken_promises": 1,
-            "disputes_raised": 0,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "23.5 days late on average",
-              "points": -28.2
-            },
-            {
-              "factor": "broken promises",
-              "detail": "1 promise(s) not kept",
-              "points": -8.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "0 dispute(s) on past invoices",
-              "points": 0.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 100,
-            "delta": -36,
-            "window_days": 182,
-            "detail": "100 six months ago, 64 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 0,
-          "kept": 0,
-          "broken": 0,
-          "in_flight": 0,
-          "reliability_pct": null,
-          "avg_days_late": null
-        },
-        "response": {
-          "messages_sent": 6,
-          "replies": 6,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 2,
-          "handed_off": 0,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-04",
         "name": "Jain Packaging Mart",
         "outstanding_paise": 52020000,
@@ -2440,17 +2372,17 @@
       {
         "buyer_id": "BUY-06",
         "name": "Sharma Trading Co",
-        "outstanding_paise": 37584268,
-        "overdue_count": 5,
+        "outstanding_paise": 41642590,
+        "overdue_count": 6,
         "oldest_days_overdue": 255,
         "score": {
           "buyer_id": "BUY-06",
           "name": "Sharma Trading Co",
-          "score": 49,
+          "score": 51,
           "confidence": "high",
-          "history_count": 15,
+          "history_count": 14,
           "signals": {
-            "average_delay_days": 22.7,
+            "average_delay_days": 20.6,
             "worst_delay_days": 95,
             "broken_promises": 3,
             "disputes_raised": 0,
@@ -2464,8 +2396,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "22.7 days late on average",
-              "points": -27.2
+              "detail": "20.6 days late on average",
+              "points": -24.7
             },
             {
               "factor": "broken promises",
@@ -2486,9 +2418,9 @@
           "trend": {
             "direction": "worsening",
             "earlier_score": 70,
-            "delta": -21,
+            "delta": -19,
             "window_days": 182,
-            "detail": "70 six months ago, 49 now"
+            "detail": "70 six months ago, 51 now"
           },
           "as_of": "2026-12-21"
         },
@@ -2498,24 +2430,99 @@
           "broken": 4,
           "in_flight": 0,
           "reliability_pct": 55.6,
-          "avg_days_late": 1.0
+          "avg_days_late": null
         },
         "response": {
-          "messages_sent": 20,
+          "messages_sent": 21,
           "replies": 12,
-          "response_rate_pct": 60.0
+          "response_rate_pct": 57.1
         },
         "recovery_state": {
           "not_yet_due": 0,
           "in_ladder": 2,
-          "handed_off": 3,
+          "handed_off": 4,
+          "stopped": 0
+        }
+      },
+      {
+        "buyer_id": "BUY-11",
+        "name": "Sethi Brothers",
+        "outstanding_paise": 24160000,
+        "overdue_count": 1,
+        "oldest_days_overdue": 173,
+        "score": {
+          "buyer_id": "BUY-11",
+          "name": "Sethi Brothers",
+          "score": 35,
+          "confidence": "high",
+          "history_count": 18,
+          "signals": {
+            "average_delay_days": 29.8,
+            "worst_delay_days": 160,
+            "broken_promises": 3,
+            "disputes_raised": 1,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "29.8 days late on average",
+              "points": -35.8
+            },
+            {
+              "factor": "broken promises",
+              "detail": "3 promise(s) not kept",
+              "points": -24.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "1 dispute(s) on past invoices",
+              "points": -5.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 57,
+            "delta": -22,
+            "window_days": 182,
+            "detail": "57 six months ago, 35 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 5,
+          "kept": 3,
+          "broken": 2,
+          "in_flight": 0,
+          "reliability_pct": 60.0,
+          "avg_days_late": 30.0
+        },
+        "response": {
+          "messages_sent": 6,
+          "replies": 6,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 0,
+          "handed_off": 1,
           "stopped": 0
         }
       },
       {
         "buyer_id": "BUY-12",
         "name": "Sundaram Auto Components Pvt Ltd",
-        "outstanding_paise": 25058371,
+        "outstanding_paise": 23280747,
         "overdue_count": 4,
         "oldest_days_overdue": 198,
         "score": {
@@ -2577,8 +2584,8 @@
         },
         "response": {
           "messages_sent": 9,
-          "replies": 4,
-          "response_rate_pct": 44.4
+          "replies": 5,
+          "response_rate_pct": 55.6
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -2600,8 +2607,8 @@
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 9.0,
-            "worst_delay_days": 75,
+            "average_delay_days": 9.3,
+            "worst_delay_days": 77,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -2614,8 +2621,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "9.0 days late on average",
-              "points": -10.8
+              "detail": "9.3 days late on average",
+              "points": -11.2
             },
             {
               "factor": "broken promises",
@@ -2738,20 +2745,20 @@
         }
       },
       {
-        "buyer_id": "BUY-18",
-        "name": "Northstar Engineering Pvt Ltd",
-        "outstanding_paise": 11190000,
+        "buyer_id": "BUY-19",
+        "name": "Om Sai Distributors",
+        "outstanding_paise": 17188498,
         "overdue_count": 1,
-        "oldest_days_overdue": 225,
+        "oldest_days_overdue": 147,
         "score": {
-          "buyer_id": "BUY-18",
-          "name": "Northstar Engineering Pvt Ltd",
-          "score": 37,
+          "buyer_id": "BUY-19",
+          "name": "Om Sai Distributors",
+          "score": 62,
           "confidence": "medium",
-          "history_count": 6,
+          "history_count": 9,
           "signals": {
-            "average_delay_days": 45.7,
-            "worst_delay_days": 69,
+            "average_delay_days": 25.2,
+            "worst_delay_days": 92,
             "broken_promises": 1,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -2764,8 +2771,83 @@
             },
             {
               "factor": "average delay",
-              "detail": "45.7 days late on average",
-              "points": -54.8
+              "detail": "25.2 days late on average",
+              "points": -30.2
+            },
+            {
+              "factor": "broken promises",
+              "detail": "1 promise(s) not kept",
+              "points": -8.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "0 dispute(s) on past invoices",
+              "points": 0.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 100,
+            "delta": -38,
+            "window_days": 182,
+            "detail": "100 six months ago, 62 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 0,
+          "kept": 0,
+          "broken": 0,
+          "in_flight": 0,
+          "reliability_pct": null,
+          "avg_days_late": null
+        },
+        "response": {
+          "messages_sent": 7,
+          "replies": 7,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 1,
+          "handed_off": 0,
+          "stopped": 0
+        }
+      },
+      {
+        "buyer_id": "BUY-18",
+        "name": "Northstar Engineering Pvt Ltd",
+        "outstanding_paise": 11190000,
+        "overdue_count": 1,
+        "oldest_days_overdue": 225,
+        "score": {
+          "buyer_id": "BUY-18",
+          "name": "Northstar Engineering Pvt Ltd",
+          "score": 36,
+          "confidence": "medium",
+          "history_count": 6,
+          "signals": {
+            "average_delay_days": 46.8,
+            "worst_delay_days": 72,
+            "broken_promises": 1,
+            "disputes_raised": 0,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "46.8 days late on average",
+              "points": -56.2
             },
             {
               "factor": "broken promises",
@@ -2813,81 +2895,6 @@
         }
       },
       {
-        "buyer_id": "BUY-11",
-        "name": "Sethi Brothers",
-        "outstanding_paise": 9267390,
-        "overdue_count": 1,
-        "oldest_days_overdue": 173,
-        "score": {
-          "buyer_id": "BUY-11",
-          "name": "Sethi Brothers",
-          "score": 35,
-          "confidence": "high",
-          "history_count": 18,
-          "signals": {
-            "average_delay_days": 29.7,
-            "worst_delay_days": 160,
-            "broken_promises": 3,
-            "disputes_raised": 1,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "29.7 days late on average",
-              "points": -35.6
-            },
-            {
-              "factor": "broken promises",
-              "detail": "3 promise(s) not kept",
-              "points": -24.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "1 dispute(s) on past invoices",
-              "points": -5.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 57,
-            "delta": -22,
-            "window_days": 182,
-            "detail": "57 six months ago, 35 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 5,
-          "kept": 4,
-          "broken": 1,
-          "in_flight": 0,
-          "reliability_pct": 80.0,
-          "avg_days_late": 30.0
-        },
-        "response": {
-          "messages_sent": 6,
-          "replies": 6,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 0,
-          "handed_off": 1,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-15",
         "name": "Verma Hardware Stores",
         "outstanding_paise": 4610000,
@@ -2896,11 +2903,11 @@
         "score": {
           "buyer_id": "BUY-15",
           "name": "Verma Hardware Stores",
-          "score": 25,
+          "score": 24,
           "confidence": "medium",
           "history_count": 7,
           "signals": {
-            "average_delay_days": 42.7,
+            "average_delay_days": 43.3,
             "worst_delay_days": 54,
             "broken_promises": 3,
             "disputes_raised": 0,
@@ -2914,8 +2921,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.7 days late on average",
-              "points": -51.2
+              "detail": "43.3 days late on average",
+              "points": -52.0
             },
             {
               "factor": "broken promises",
@@ -2936,9 +2943,9 @@
           "trend": {
             "direction": "steady",
             "earlier_score": 21,
-            "delta": 4,
+            "delta": 3,
             "window_days": 182,
-            "detail": "21 six months ago, 25 now"
+            "detail": "21 six months ago, 24 now"
           },
           "as_of": "2026-12-21"
         },
@@ -3046,12 +3053,12 @@
         "score": {
           "buyer_id": "BUY-16",
           "name": "Fatima Traders",
-          "score": 67,
+          "score": 66,
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 27.5,
-            "worst_delay_days": 99,
+            "average_delay_days": 28.5,
+            "worst_delay_days": 102,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -3064,8 +3071,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "27.5 days late on average",
-              "points": -33.0
+              "detail": "28.5 days late on average",
+              "points": -34.2
             },
             {
               "factor": "broken promises",
@@ -3086,9 +3093,9 @@
           "trend": {
             "direction": "worsening",
             "earlier_score": 99,
-            "delta": -32,
+            "delta": -33,
             "window_days": 182,
-            "detail": "99 six months ago, 67 now"
+            "detail": "99 six months ago, 66 now"
           },
           "as_of": "2026-12-21"
         },
@@ -3101,9 +3108,9 @@
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 5,
+          "messages_sent": 6,
           "replies": 5,
-          "response_rate_pct": 100.0
+          "response_rate_pct": 83.3
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -3117,129 +3124,134 @@
       "mode": "agent",
       "seed": 7,
       "attribution_horizon_days": 14,
-      "actions_recorded": 186,
-      "actions_paid_within_horizon": 56,
+      "actions_recorded": 193,
+      "actions_paid_within_horizon": 55,
       "payments_recorded": 59,
       "payments_attributed": 56,
       "payments_unattributed": 3,
-      "paise_attributed": 1208283441,
+      "paise_attributed": 1226660693,
       "paise_unattributed": 49010000
     },
-    "narrative": []
+    "narrative": [],
+    "reaction_delays": true,
+    "in_flight": {
+      "reactions_in_flight_at_end": 0,
+      "payments_in_flight_at_end": 0
+    }
   },
   "matched_avg_days_to_pay": {
     "n": 21,
-    "baseline": 99.4,
-    "agent": 95.4
+    "baseline": 98.8,
+    "agent": 95.5
   },
   "multi_seed": {
     "rows": [
       {
         "seed": 7,
-        "baseline_recovered_paise": 883837557,
-        "agent_recovered_paise": 1448053441,
+        "baseline_recovered_paise": 884642267,
+        "agent_recovered_paise": 1466430693,
         "money_win": true,
         "matched_n": 21,
-        "matched_baseline_days": 99.4,
-        "matched_agent_days": 95.4,
+        "matched_baseline_days": 98.8,
+        "matched_agent_days": 95.5,
         "days_win": true,
         "malformed_invoices": 0,
-        "superseded_promise_invoices": 6,
-        "agent_ev_recovered_paise": 1483361422,
+        "superseded_promise_invoices": 5,
+        "agent_ev_recovered_paise": 1480881047,
         "agent_ev_money_win": true,
-        "agent_learned_recovered_paise": 1167670267,
-        "agent_learned_money_win": false
+        "agent_learned_recovered_paise": 1545694933,
+        "agent_learned_money_win": true
       },
       {
         "seed": 42,
-        "baseline_recovered_paise": 1368047240,
-        "agent_recovered_paise": 1597922941,
+        "baseline_recovered_paise": 1361778469,
+        "agent_recovered_paise": 1619827362,
         "money_win": true,
-        "matched_n": 25,
-        "matched_baseline_days": 101.2,
-        "matched_agent_days": 97.7,
+        "matched_n": 24,
+        "matched_baseline_days": 103.6,
+        "matched_agent_days": 100.2,
         "days_win": true,
         "malformed_invoices": 0,
         "superseded_promise_invoices": 0,
-        "agent_ev_recovered_paise": 1696059790,
+        "agent_ev_recovered_paise": 1678786964,
         "agent_ev_money_win": true,
-        "agent_learned_recovered_paise": 1479309790,
-        "agent_learned_money_win": false
+        "agent_learned_recovered_paise": 1716973811,
+        "agent_learned_money_win": true
       },
       {
         "seed": 13,
-        "baseline_recovered_paise": 1317228186,
-        "agent_recovered_paise": 1701263124,
+        "baseline_recovered_paise": 1303918186,
+        "agent_recovered_paise": 1774491914,
         "money_win": true,
-        "matched_n": 25,
-        "matched_baseline_days": 91.5,
-        "matched_agent_days": 87.2,
+        "matched_n": 28,
+        "matched_baseline_days": 95.8,
+        "matched_agent_days": 88.4,
         "days_win": true,
         "malformed_invoices": 2,
-        "superseded_promise_invoices": 2,
-        "agent_ev_recovered_paise": 1715148720,
-        "agent_ev_money_win": true,
-        "agent_learned_recovered_paise": 1553706442,
-        "agent_learned_money_win": false
+        "superseded_promise_invoices": 1,
+        "agent_ev_recovered_paise": 1669813238,
+        "agent_ev_money_win": false,
+        "agent_learned_recovered_paise": 1752220111,
+        "agent_learned_money_win": true
       },
       {
         "seed": 99,
         "baseline_recovered_paise": 1009847520,
-        "agent_recovered_paise": 1448626345,
+        "agent_recovered_paise": 1458997690,
         "money_win": true,
         "matched_n": 23,
-        "matched_baseline_days": 101.5,
-        "matched_agent_days": 98.3,
-        "days_win": true,
-        "malformed_invoices": 0,
-        "superseded_promise_invoices": 5,
-        "agent_ev_recovered_paise": 1500443529,
-        "agent_ev_money_win": true,
-        "agent_learned_recovered_paise": 1448838714,
-        "agent_learned_money_win": false
-      },
-      {
-        "seed": 2024,
-        "baseline_recovered_paise": 999870315,
-        "agent_recovered_paise": 1474085339,
-        "money_win": true,
-        "matched_n": 26,
-        "matched_baseline_days": 89.1,
-        "matched_agent_days": 83.4,
+        "matched_baseline_days": 104.1,
+        "matched_agent_days": 100.8,
         "days_win": true,
         "malformed_invoices": 0,
         "superseded_promise_invoices": 4,
-        "agent_ev_recovered_paise": 1468908887,
+        "agent_ev_recovered_paise": 1487479585,
+        "agent_ev_money_win": true,
+        "agent_learned_recovered_paise": 1530369338,
+        "agent_learned_money_win": true
+      },
+      {
+        "seed": 2024,
+        "baseline_recovered_paise": 1004776666,
+        "agent_recovered_paise": 1508883282,
+        "money_win": true,
+        "matched_n": 27,
+        "matched_baseline_days": 92.0,
+        "matched_agent_days": 87.3,
+        "days_win": true,
+        "malformed_invoices": 0,
+        "superseded_promise_invoices": 2,
+        "agent_ev_recovered_paise": 1485246220,
         "agent_ev_money_win": false,
-        "agent_learned_recovered_paise": 1155470300,
-        "agent_learned_money_win": false
+        "agent_learned_recovered_paise": 1485246220,
+        "agent_learned_money_win": true
       },
       {
         "seed": 555,
-        "baseline_recovered_paise": 959228052,
-        "agent_recovered_paise": 1167670329,
+        "baseline_recovered_paise": 962608455,
+        "agent_recovered_paise": 1174539939,
         "money_win": true,
         "matched_n": 28,
-        "matched_baseline_days": 96.7,
-        "matched_agent_days": 95.0,
+        "matched_baseline_days": 99.8,
+        "matched_agent_days": 97.7,
         "days_win": true,
         "malformed_invoices": 1,
-        "superseded_promise_invoices": 5,
-        "agent_ev_recovered_paise": 1172268111,
+        "superseded_promise_invoices": 8,
+        "agent_ev_recovered_paise": 1174539939,
         "agent_ev_money_win": true,
-        "agent_learned_recovered_paise": 879289549,
-        "agent_learned_money_win": false
+        "agent_learned_recovered_paise": 1174539939,
+        "agent_learned_money_win": true
       }
     ],
     "money_win_rate": "6/6",
     "days_win_rate": "6/6",
     "days_excluded": 0,
-    "agent_ev_money_win_rate": "5/6",
-    "agent_learned_money_win_rate": "0/6",
+    "agent_ev_money_win_rate": "4/6",
+    "agent_learned_money_win_rate": "6/6",
     "agent_learned_delta_paise": {
-      "mean": -225317566,
-      "min": -315691155,
-      "max": -51604815,
+      "mean": 38049560,
+      "min": 0,
+      "max": 82406873,
       "n_seeds": 6
     }
   },
@@ -3256,73 +3268,71 @@
     "online_updates": null,
     "final": {
       "day": "2026-12-21",
-      "recovered_paise": 1483361422,
-      "outstanding_paise": 1234378578,
+      "recovered_paise": 1480881047,
+      "outstanding_paise": 1236858953,
       "disputed_paise": 624020000,
       "disputed_count": 18
     },
-    "messages_sent": 59,
-    "invoice_contacts": 131,
+    "messages_sent": 61,
+    "invoice_contacts": 129,
     "edge_case_counts": {
       "malformed_invoices": 0,
-      "superseded_promise_invoices": 6
+      "superseded_promise_invoices": 3
     },
-    "handoffs": 46,
+    "handoffs": 51,
     "stops": 2,
     "disputes": 17,
     "handoff_reasons": {
       "disputed": 18,
-      "rung4_escalation": 28
+      "rung4_escalation": 33
     },
     "stop_reasons": {
       "opted_out": 2
     },
-    "avg_days_to_pay": 91.3,
+    "avg_days_to_pay": 94.2,
     "paid_invoices": {
       "INV-2026-0017": 196,
-      "INV-2026-0027": 159,
-      "INV-2026-0029": 154,
-      "INV-2026-0037": 147,
-      "INV-2026-0046": 135,
-      "INV-2026-0048": 136,
+      "INV-2026-0027": 162,
+      "INV-2026-0029": 156,
+      "INV-2026-0037": 150,
+      "INV-2026-0046": 139,
+      "INV-2026-0048": 138,
       "INV-2026-0051": 141,
-      "INV-2026-0054": 126,
-      "INV-2026-0057": 127,
-      "INV-2026-0059": 124,
-      "INV-2026-0078": 114,
-      "INV-2026-0079": 108,
-      "INV-2026-0080": 106,
-      "INV-2026-0081": 103,
-      "INV-2026-0088": 99,
-      "INV-2026-0091": 97,
-      "INV-2026-0094": 104,
-      "INV-2026-0096": 97,
-      "INV-2026-0097": 95,
+      "INV-2026-0054": 131,
+      "INV-2026-0057": 128,
+      "INV-2026-0059": 126,
+      "INV-2026-0078": 115,
+      "INV-2026-0079": 111,
+      "INV-2026-0080": 111,
+      "INV-2026-0081": 104,
+      "INV-2026-0088": 100,
+      "INV-2026-0091": 100,
+      "INV-2026-0094": 107,
+      "INV-2026-0097": 100,
       "INV-2026-0099": 103,
       "INV-2026-0106": 92,
-      "INV-2026-0108": 82,
+      "INV-2026-0108": 85,
       "INV-2026-0109": 91,
-      "INV-2026-0115": 76,
-      "INV-2026-0116": 78,
-      "INV-2026-0119": 72,
-      "INV-2026-0120": 74,
-      "INV-2026-0121": 80,
+      "INV-2026-0115": 80,
+      "INV-2026-0116": 79,
+      "INV-2026-0119": 77,
+      "INV-2026-0120": 78,
+      "INV-2026-0121": 84,
       "INV-2026-0123": 82,
-      "INV-2026-0127": 69,
-      "INV-2026-0134": 60,
+      "INV-2026-0127": 74,
+      "INV-2026-0134": 64,
       "INV-2026-0135": 74,
-      "INV-2026-0137": 58,
+      "INV-2026-0137": 59,
       "INV-2026-0139": 61,
-      "INV-2026-0146": 47,
+      "INV-2026-0146": 51,
+      "INV-2026-0147": 64,
       "INV-2026-0148": 54,
       "INV-2026-0150": 82,
       "INV-2026-0152": 50,
-      "INV-2026-0154": 34,
-      "INV-2026-0157": 47,
-      "INV-2026-0162": 64,
+      "INV-2026-0154": 37,
+      "INV-2026-0155": 44,
       "INV-2026-0163": 59,
-      "INV-2026-0165": 43,
-      "INV-2026-0167": 16
+      "INV-2026-0167": 19
     },
     "per_rung": {
       "1": {
@@ -3331,14 +3341,14 @@
         "effectiveness_pct": 66.7
       },
       "2": {
-        "invoices_contacted": 67,
+        "invoices_contacted": 58,
         "recovered_here": 35,
-        "effectiveness_pct": 52.2
+        "effectiveness_pct": 60.3
       },
       "3": {
-        "invoices_contacted": 39,
-        "recovered_here": 7,
-        "effectiveness_pct": 17.9
+        "invoices_contacted": 43,
+        "recovered_here": 5,
+        "effectiveness_pct": 11.6
       }
     },
     "exceptions": [
@@ -3427,18 +3437,6 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 166 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0155",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "partially_paid",
-        "outstanding_paise": 46410347,
-        "days_overdue": 137,
-        "disputed": false,
-        "last_rung": 3,
-        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
-      },
-      {
         "invoice_id": "INV-2026-0067",
         "buyer_id": "BUY-02",
         "buyer_name": "Bharat Polymers Ltd",
@@ -3451,6 +3449,18 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 46 (poor band) starts at rung 2; 215 days overdue; ceiling 4)"
       },
       {
+        "invoice_id": "INV-2026-0165",
+        "buyer_id": "BUY-12",
+        "buyer_name": "Sundaram Auto Components Pvt Ltd",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 44640000,
+        "days_overdue": 108,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 108 days overdue; ceiling 4)"
+      },
+      {
         "invoice_id": "INV-2026-0087",
         "buyer_id": "BUY-03",
         "buyer_name": "Ravi Steel Traders",
@@ -3460,7 +3470,7 @@
         "days_overdue": 168,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0043",
@@ -3535,6 +3545,18 @@
         "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
       },
       {
+        "invoice_id": "INV-2026-0083",
+        "buyer_id": "BUY-11",
+        "buyer_name": "Sethi Brothers",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 24160000,
+        "days_overdue": 173,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
         "invoice_id": "INV-2026-0151",
         "buyer_id": "BUY-17",
         "buyer_name": "Anand Precision Works Pvt Ltd",
@@ -3569,30 +3591,6 @@
         "disputed": true,
         "last_rung": 0,
         "reason": "the invoice is disputed, so it goes to a human immediately"
-      },
-      {
-        "invoice_id": "INV-2026-0112",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 19520000,
-        "days_overdue": 150,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 150 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
-      },
-      {
-        "invoice_id": "INV-2026-0129",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "open",
-        "outstanding_paise": 19290000,
-        "days_overdue": 152,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 152 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0038",
@@ -3631,18 +3629,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0122",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 15140213,
-        "days_overdue": 145,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
-      },
-      {
         "invoice_id": "INV-2026-0098",
         "buyer_id": "BUY-14",
         "buyer_name": "Krishna Electricals",
@@ -3664,7 +3650,19 @@
         "days_overdue": 101,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0138",
+        "buyer_id": "BUY-12",
+        "buyer_name": "Sundaram Auto Components Pvt Ltd",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 14370000,
+        "days_overdue": 158,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0073",
@@ -3712,7 +3710,7 @@
         "days_overdue": 225,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0061",
@@ -3727,6 +3725,30 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
+        "invoice_id": "INV-2026-0129",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "status": "partially_paid",
+        "outstanding_paise": 10307779,
+        "days_overdue": 152,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 152 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0112",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "status": "partially_paid",
+        "outstanding_paise": 10170204,
+        "days_overdue": 150,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 150 days overdue; ceiling 4)"
+      },
+      {
         "invoice_id": "INV-2026-0125",
         "buyer_id": "BUY-02",
         "buyer_name": "Bharat Polymers Ltd",
@@ -3739,16 +3761,16 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0083",
-        "buyer_id": "BUY-11",
-        "buyer_name": "Sethi Brothers",
-        "persona": "cash_tight",
+        "invoice_id": "INV-2026-0122",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
         "status": "partially_paid",
-        "outstanding_paise": 9267390,
-        "days_overdue": 173,
+        "outstanding_paise": 9470492,
+        "days_overdue": 145,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0149",
@@ -3811,28 +3833,16 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0147",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 5948350,
-        "days_overdue": 149,
-        "disputed": false,
-        "last_rung": 3,
-        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
-      },
-      {
-        "invoice_id": "INV-2026-0138",
-        "buyer_id": "BUY-12",
-        "buyer_name": "Sundaram Auto Components Pvt Ltd",
+        "invoice_id": "INV-2026-0157",
+        "buyer_id": "BUY-11",
+        "buyer_name": "Sethi Brothers",
         "persona": "cash_tight",
         "status": "partially_paid",
-        "outstanding_paise": 5292635,
-        "days_overdue": 158,
+        "outstanding_paise": 5810000,
+        "days_overdue": 135,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 135 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0016",
@@ -3844,7 +3854,7 @@
         "days_overdue": 262,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0064",
@@ -3868,7 +3878,7 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0160",
@@ -3931,6 +3941,18 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
+        "invoice_id": "INV-2026-0156",
+        "buyer_id": "BUY-05",
+        "buyer_name": "Modern Tools and Spares",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 2620000,
+        "days_overdue": 105,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 43 (poor band) starts at rung 2; 105 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+      },
+      {
         "invoice_id": "INV-2026-0166",
         "buyer_id": "BUY-14",
         "buyer_name": "Krishna Electricals",
@@ -3955,16 +3977,28 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 43 (poor band) starts at rung 2; 234 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0032",
+        "invoice_id": "INV-2026-0162",
+        "buyer_id": "BUY-11",
+        "buyer_name": "Sethi Brothers",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 1576370,
+        "days_overdue": 127,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 127 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0096",
         "buyer_id": "BUY-06",
         "buyer_name": "Sharma Trading Co",
         "persona": "cash_tight",
         "status": "partially_paid",
-        "outstanding_paise": 921454,
-        "days_overdue": 255,
+        "outstanding_paise": 991345,
+        "days_overdue": 163,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 48 (poor band) starts at rung 2; 255 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0107",
@@ -3976,19 +4010,19 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 48 (poor band) starts at rung 2; 169 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 169 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0156",
-        "buyer_id": "BUY-05",
-        "buyer_name": "Modern Tools and Spares",
+        "invoice_id": "INV-2026-0032",
+        "buyer_id": "BUY-06",
+        "buyer_name": "Sharma Trading Co",
         "persona": "cash_tight",
         "status": "partially_paid",
-        "outstanding_paise": 687473,
-        "days_overdue": 105,
+        "outstanding_paise": 842047,
+        "days_overdue": 255,
         "disputed": false,
-        "last_rung": 3,
-        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0101",
@@ -4169,18 +4203,18 @@
       {
         "buyer_id": "BUY-20",
         "name": "Meridian Logistics India Pvt Ltd",
-        "outstanding_paise": 131498563,
-        "overdue_count": 5,
+        "outstanding_paise": 101548475,
+        "overdue_count": 4,
         "oldest_days_overdue": 216,
         "score": {
           "buyer_id": "BUY-20",
           "name": "Meridian Logistics India Pvt Ltd",
           "score": 0,
           "confidence": "high",
-          "history_count": 15,
+          "history_count": 16,
           "signals": {
-            "average_delay_days": 42.5,
-            "worst_delay_days": 64,
+            "average_delay_days": 43.0,
+            "worst_delay_days": 65,
             "broken_promises": 9,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -4193,8 +4227,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.5 days late on average",
-              "points": -51.0
+              "detail": "43.0 days late on average",
+              "points": -51.6
             },
             {
               "factor": "broken promises",
@@ -4213,8 +4247,8 @@
             },
             {
               "factor": "clamped",
-              "detail": "raw score -23.0 pulled inside 0-100",
-              "points": 23.0
+              "detail": "raw score -23.6 pulled inside 0-100",
+              "points": 23.6
             }
           ],
           "trend": {
@@ -4227,21 +4261,21 @@
           "as_of": "2026-12-21"
         },
         "promises": {
-          "made": 6,
+          "made": 1,
           "kept": 1,
-          "broken": 5,
+          "broken": 0,
           "in_flight": 0,
-          "reliability_pct": 16.7,
+          "reliability_pct": 100.0,
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 12,
-          "replies": 10,
-          "response_rate_pct": 83.3
+          "messages_sent": 7,
+          "replies": 6,
+          "response_rate_pct": 85.7
         },
         "recovery_state": {
           "not_yet_due": 0,
-          "in_ladder": 1,
+          "in_ladder": 0,
           "handed_off": 4,
           "stopped": 0
         }
@@ -4255,12 +4289,12 @@
         "score": {
           "buyer_id": "BUY-03",
           "name": "Ravi Steel Traders",
-          "score": 33,
+          "score": 32,
           "confidence": "medium",
           "history_count": 4,
           "signals": {
-            "average_delay_days": 56.0,
-            "worst_delay_days": 76,
+            "average_delay_days": 56.8,
+            "worst_delay_days": 79,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -4273,8 +4307,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "56.0 days late on average",
-              "points": -67.2
+              "detail": "56.8 days late on average",
+              "points": -68.2
             },
             {
               "factor": "broken promises",
@@ -4402,6 +4436,81 @@
         }
       },
       {
+        "buyer_id": "BUY-12",
+        "name": "Sundaram Auto Components Pvt Ltd",
+        "outstanding_paise": 78775736,
+        "overdue_count": 5,
+        "oldest_days_overdue": 198,
+        "score": {
+          "buyer_id": "BUY-12",
+          "name": "Sundaram Auto Components Pvt Ltd",
+          "score": 32,
+          "confidence": "medium",
+          "history_count": 8,
+          "signals": {
+            "average_delay_days": 25.6,
+            "worst_delay_days": 36,
+            "broken_promises": 4,
+            "disputes_raised": 1,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "25.6 days late on average",
+              "points": -30.7
+            },
+            {
+              "factor": "broken promises",
+              "detail": "4 promise(s) not kept",
+              "points": -32.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "1 dispute(s) on past invoices",
+              "points": -5.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "steady",
+            "earlier_score": 31,
+            "delta": 1,
+            "window_days": 182,
+            "detail": "31 six months ago, 32 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 2,
+          "kept": 1,
+          "broken": 1,
+          "in_flight": 0,
+          "reliability_pct": 50.0,
+          "avg_days_late": null
+        },
+        "response": {
+          "messages_sent": 8,
+          "replies": 2,
+          "response_rate_pct": 25.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 0,
+          "handed_off": 5,
+          "stopped": 0
+        }
+      },
+      {
         "buyer_id": "BUY-13",
         "name": "Deccan Electricals Ltd",
         "outstanding_paise": 66600000,
@@ -4473,81 +4582,6 @@
           "not_yet_due": 0,
           "in_ladder": 0,
           "handed_off": 6,
-          "stopped": 0
-        }
-      },
-      {
-        "buyer_id": "BUY-19",
-        "name": "Om Sai Distributors",
-        "outstanding_paise": 63598845,
-        "overdue_count": 2,
-        "oldest_days_overdue": 147,
-        "score": {
-          "buyer_id": "BUY-19",
-          "name": "Om Sai Distributors",
-          "score": 64,
-          "confidence": "medium",
-          "history_count": 8,
-          "signals": {
-            "average_delay_days": 23.5,
-            "worst_delay_days": 88,
-            "broken_promises": 1,
-            "disputes_raised": 0,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "23.5 days late on average",
-              "points": -28.2
-            },
-            {
-              "factor": "broken promises",
-              "detail": "1 promise(s) not kept",
-              "points": -8.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "0 dispute(s) on past invoices",
-              "points": 0.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 100,
-            "delta": -36,
-            "window_days": 182,
-            "detail": "100 six months ago, 64 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 0,
-          "kept": 0,
-          "broken": 0,
-          "in_flight": 0,
-          "reliability_pct": null,
-          "avg_days_late": null
-        },
-        "response": {
-          "messages_sent": 6,
-          "replies": 6,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 2,
-          "handed_off": 0,
           "stopped": 0
         }
       },
@@ -4712,21 +4746,21 @@
         }
       },
       {
-        "buyer_id": "BUY-12",
-        "name": "Sundaram Auto Components Pvt Ltd",
-        "outstanding_paise": 25058371,
-        "overdue_count": 4,
-        "oldest_days_overdue": 198,
+        "buyer_id": "BUY-11",
+        "name": "Sethi Brothers",
+        "outstanding_paise": 31546370,
+        "overdue_count": 3,
+        "oldest_days_overdue": 173,
         "score": {
-          "buyer_id": "BUY-12",
-          "name": "Sundaram Auto Components Pvt Ltd",
-          "score": 32,
-          "confidence": "medium",
-          "history_count": 9,
+          "buyer_id": "BUY-11",
+          "name": "Sethi Brothers",
+          "score": 36,
+          "confidence": "high",
+          "history_count": 16,
           "signals": {
-            "average_delay_days": 25.7,
-            "worst_delay_days": 36,
-            "broken_promises": 4,
+            "average_delay_days": 29.0,
+            "worst_delay_days": 160,
+            "broken_promises": 3,
             "disputes_raised": 1,
             "on_time_streak": 0
           },
@@ -4738,13 +4772,13 @@
             },
             {
               "factor": "average delay",
-              "detail": "25.7 days late on average",
-              "points": -30.8
+              "detail": "29.0 days late on average",
+              "points": -34.8
             },
             {
               "factor": "broken promises",
-              "detail": "4 promise(s) not kept",
-              "points": -32.0
+              "detail": "3 promise(s) not kept",
+              "points": -24.0
             },
             {
               "factor": "disputes raised",
@@ -4758,31 +4792,31 @@
             }
           ],
           "trend": {
-            "direction": "steady",
-            "earlier_score": 31,
-            "delta": 1,
+            "direction": "worsening",
+            "earlier_score": 57,
+            "delta": -21,
             "window_days": 182,
-            "detail": "31 six months ago, 32 now"
+            "detail": "57 six months ago, 36 now"
           },
           "as_of": "2026-12-21"
         },
         "promises": {
-          "made": 4,
-          "kept": 3,
-          "broken": 1,
+          "made": 3,
+          "kept": 1,
+          "broken": 2,
           "in_flight": 0,
-          "reliability_pct": 75.0,
+          "reliability_pct": 33.3,
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 9,
-          "replies": 4,
-          "response_rate_pct": 44.4
+          "messages_sent": 5,
+          "replies": 5,
+          "response_rate_pct": 100.0
         },
         "recovery_state": {
           "not_yet_due": 0,
           "in_ladder": 0,
-          "handed_off": 4,
+          "handed_off": 3,
           "stopped": 0
         }
       },
@@ -4799,8 +4833,8 @@
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 9.0,
-            "worst_delay_days": 75,
+            "average_delay_days": 9.3,
+            "worst_delay_days": 77,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -4813,8 +4847,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "9.0 days late on average",
-              "points": -10.8
+              "detail": "9.3 days late on average",
+              "points": -11.2
             },
             {
               "factor": "broken promises",
@@ -4937,20 +4971,20 @@
         }
       },
       {
-        "buyer_id": "BUY-18",
-        "name": "Northstar Engineering Pvt Ltd",
-        "outstanding_paise": 11190000,
+        "buyer_id": "BUY-19",
+        "name": "Om Sai Distributors",
+        "outstanding_paise": 17188498,
         "overdue_count": 1,
-        "oldest_days_overdue": 225,
+        "oldest_days_overdue": 147,
         "score": {
-          "buyer_id": "BUY-18",
-          "name": "Northstar Engineering Pvt Ltd",
-          "score": 37,
+          "buyer_id": "BUY-19",
+          "name": "Om Sai Distributors",
+          "score": 62,
           "confidence": "medium",
-          "history_count": 6,
+          "history_count": 9,
           "signals": {
-            "average_delay_days": 45.7,
-            "worst_delay_days": 69,
+            "average_delay_days": 25.2,
+            "worst_delay_days": 92,
             "broken_promises": 1,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -4963,8 +4997,83 @@
             },
             {
               "factor": "average delay",
-              "detail": "45.7 days late on average",
-              "points": -54.8
+              "detail": "25.2 days late on average",
+              "points": -30.2
+            },
+            {
+              "factor": "broken promises",
+              "detail": "1 promise(s) not kept",
+              "points": -8.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "0 dispute(s) on past invoices",
+              "points": 0.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 100,
+            "delta": -38,
+            "window_days": 182,
+            "detail": "100 six months ago, 62 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 0,
+          "kept": 0,
+          "broken": 0,
+          "in_flight": 0,
+          "reliability_pct": null,
+          "avg_days_late": null
+        },
+        "response": {
+          "messages_sent": 7,
+          "replies": 7,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 1,
+          "handed_off": 0,
+          "stopped": 0
+        }
+      },
+      {
+        "buyer_id": "BUY-18",
+        "name": "Northstar Engineering Pvt Ltd",
+        "outstanding_paise": 11190000,
+        "overdue_count": 1,
+        "oldest_days_overdue": 225,
+        "score": {
+          "buyer_id": "BUY-18",
+          "name": "Northstar Engineering Pvt Ltd",
+          "score": 36,
+          "confidence": "medium",
+          "history_count": 6,
+          "signals": {
+            "average_delay_days": 46.8,
+            "worst_delay_days": 72,
+            "broken_promises": 1,
+            "disputes_raised": 0,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "46.8 days late on average",
+              "points": -56.2
             },
             {
               "factor": "broken promises",
@@ -5012,81 +5121,6 @@
         }
       },
       {
-        "buyer_id": "BUY-11",
-        "name": "Sethi Brothers",
-        "outstanding_paise": 9267390,
-        "overdue_count": 1,
-        "oldest_days_overdue": 173,
-        "score": {
-          "buyer_id": "BUY-11",
-          "name": "Sethi Brothers",
-          "score": 35,
-          "confidence": "high",
-          "history_count": 18,
-          "signals": {
-            "average_delay_days": 29.7,
-            "worst_delay_days": 160,
-            "broken_promises": 3,
-            "disputes_raised": 1,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "29.7 days late on average",
-              "points": -35.6
-            },
-            {
-              "factor": "broken promises",
-              "detail": "3 promise(s) not kept",
-              "points": -24.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "1 dispute(s) on past invoices",
-              "points": -5.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 57,
-            "delta": -22,
-            "window_days": 182,
-            "detail": "57 six months ago, 35 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 5,
-          "kept": 4,
-          "broken": 1,
-          "in_flight": 0,
-          "reliability_pct": 80.0,
-          "avg_days_late": 30.0
-        },
-        "response": {
-          "messages_sent": 6,
-          "replies": 6,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 0,
-          "handed_off": 1,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-15",
         "name": "Verma Hardware Stores",
         "outstanding_paise": 4610000,
@@ -5095,11 +5129,11 @@
         "score": {
           "buyer_id": "BUY-15",
           "name": "Verma Hardware Stores",
-          "score": 25,
+          "score": 24,
           "confidence": "medium",
           "history_count": 7,
           "signals": {
-            "average_delay_days": 42.7,
+            "average_delay_days": 43.3,
             "worst_delay_days": 54,
             "broken_promises": 3,
             "disputes_raised": 0,
@@ -5113,8 +5147,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.7 days late on average",
-              "points": -51.2
+              "detail": "43.3 days late on average",
+              "points": -52.0
             },
             {
               "factor": "broken promises",
@@ -5135,9 +5169,9 @@
           "trend": {
             "direction": "steady",
             "earlier_score": 21,
-            "delta": 4,
+            "delta": 3,
             "window_days": 182,
-            "detail": "21 six months ago, 25 now"
+            "detail": "21 six months ago, 24 now"
           },
           "as_of": "2026-12-21"
         },
@@ -5164,7 +5198,7 @@
       {
         "buyer_id": "BUY-05",
         "name": "Modern Tools and Spares",
-        "outstanding_paise": 2577473,
+        "outstanding_paise": 4510000,
         "overdue_count": 2,
         "oldest_days_overdue": 234,
         "score": {
@@ -5218,38 +5252,38 @@
         },
         "promises": {
           "made": 3,
-          "kept": 2,
-          "broken": 1,
+          "kept": 1,
+          "broken": 2,
           "in_flight": 0,
-          "reliability_pct": 66.7,
+          "reliability_pct": 33.3,
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 4,
-          "replies": 4,
+          "messages_sent": 3,
+          "replies": 3,
           "response_rate_pct": 100.0
         },
         "recovery_state": {
           "not_yet_due": 0,
-          "in_ladder": 1,
-          "handed_off": 1,
+          "in_ladder": 0,
+          "handed_off": 2,
           "stopped": 0
         }
       },
       {
         "buyer_id": "BUY-06",
         "name": "Sharma Trading Co",
-        "outstanding_paise": 2276287,
-        "overdue_count": 3,
+        "outstanding_paise": 3188225,
+        "overdue_count": 4,
         "oldest_days_overdue": 255,
         "score": {
           "buyer_id": "BUY-06",
           "name": "Sharma Trading Co",
-          "score": 48,
+          "score": 50,
           "confidence": "high",
-          "history_count": 17,
+          "history_count": 16,
           "signals": {
-            "average_delay_days": 23.3,
+            "average_delay_days": 21.5,
             "worst_delay_days": 95,
             "broken_promises": 3,
             "disputes_raised": 0,
@@ -5263,8 +5297,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "23.3 days late on average",
-              "points": -28.0
+              "detail": "21.5 days late on average",
+              "points": -25.8
             },
             {
               "factor": "broken promises",
@@ -5285,9 +5319,9 @@
           "trend": {
             "direction": "worsening",
             "earlier_score": 70,
-            "delta": -22,
+            "delta": -20,
             "window_days": 182,
-            "detail": "70 six months ago, 48 now"
+            "detail": "70 six months ago, 50 now"
           },
           "as_of": "2026-12-21"
         },
@@ -5297,7 +5331,7 @@
           "broken": 4,
           "in_flight": 0,
           "reliability_pct": 60.0,
-          "avg_days_late": 13.0
+          "avg_days_late": 25.0
         },
         "response": {
           "messages_sent": 12,
@@ -5307,7 +5341,7 @@
         "recovery_state": {
           "not_yet_due": 0,
           "in_ladder": 1,
-          "handed_off": 2,
+          "handed_off": 3,
           "stopped": 0
         }
       },
@@ -5320,12 +5354,12 @@
         "score": {
           "buyer_id": "BUY-16",
           "name": "Fatima Traders",
-          "score": 67,
+          "score": 66,
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 27.5,
-            "worst_delay_days": 99,
+            "average_delay_days": 28.5,
+            "worst_delay_days": 102,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -5338,8 +5372,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "27.5 days late on average",
-              "points": -33.0
+              "detail": "28.5 days late on average",
+              "points": -34.2
             },
             {
               "factor": "broken promises",
@@ -5360,9 +5394,9 @@
           "trend": {
             "direction": "worsening",
             "earlier_score": 99,
-            "delta": -32,
+            "delta": -33,
             "window_days": 182,
-            "detail": "99 six months ago, 67 now"
+            "detail": "99 six months ago, 66 now"
           },
           "as_of": "2026-12-21"
         },
@@ -5375,9 +5409,9 @@
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 5,
+          "messages_sent": 6,
           "replies": 5,
-          "response_rate_pct": 100.0
+          "response_rate_pct": 83.3
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -5391,15 +5425,20 @@
       "mode": "agent_ev",
       "seed": 7,
       "attribution_horizon_days": 14,
-      "actions_recorded": 177,
-      "actions_paid_within_horizon": 55,
-      "payments_recorded": 59,
-      "payments_attributed": 55,
-      "payments_unattributed": 4,
-      "paise_attributed": 1220671422,
-      "paise_unattributed": 71930000
+      "actions_recorded": 189,
+      "actions_paid_within_horizon": 53,
+      "payments_recorded": 56,
+      "payments_attributed": 54,
+      "payments_unattributed": 2,
+      "paise_attributed": 1265741047,
+      "paise_unattributed": 24380000
     },
-    "narrative": []
+    "narrative": [],
+    "reaction_delays": true,
+    "in_flight": {
+      "reactions_in_flight_at_end": 0,
+      "payments_in_flight_at_end": 0
+    }
   },
   "agent_learned": {
     "mode": "agent",
@@ -5414,62 +5453,74 @@
     "online_updates": null,
     "final": {
       "day": "2026-12-21",
-      "recovered_paise": 1167670267,
-      "outstanding_paise": 1550069733,
-      "disputed_paise": 446430000,
-      "disputed_count": 15
+      "recovered_paise": 1545694933,
+      "outstanding_paise": 1172045067,
+      "disputed_paise": 624020000,
+      "disputed_count": 18
     },
-    "messages_sent": 53,
-    "invoice_contacts": 113,
+    "messages_sent": 61,
+    "invoice_contacts": 132,
     "edge_case_counts": {
       "malformed_invoices": 0,
-      "superseded_promise_invoices": 6
+      "superseded_promise_invoices": 4
     },
-    "handoffs": 43,
+    "handoffs": 47,
     "stops": 2,
-    "disputes": 14,
+    "disputes": 17,
     "handoff_reasons": {
-      "disputed": 15,
-      "rung4_escalation": 28
+      "disputed": 18,
+      "rung4_escalation": 29
     },
     "stop_reasons": {
       "opted_out": 2
     },
-    "avg_days_to_pay": 90.3,
+    "avg_days_to_pay": 91.4,
     "paid_invoices": {
       "INV-2026-0017": 196,
-      "INV-2026-0037": 147,
+      "INV-2026-0027": 162,
+      "INV-2026-0029": 156,
+      "INV-2026-0037": 150,
+      "INV-2026-0046": 139,
+      "INV-2026-0048": 138,
       "INV-2026-0051": 141,
-      "INV-2026-0054": 126,
-      "INV-2026-0057": 127,
-      "INV-2026-0059": 124,
-      "INV-2026-0078": 114,
-      "INV-2026-0079": 108,
-      "INV-2026-0080": 106,
-      "INV-2026-0081": 103,
-      "INV-2026-0088": 99,
-      "INV-2026-0091": 97,
-      "INV-2026-0094": 104,
-      "INV-2026-0096": 97,
+      "INV-2026-0054": 131,
+      "INV-2026-0057": 128,
+      "INV-2026-0059": 126,
+      "INV-2026-0078": 115,
+      "INV-2026-0079": 111,
+      "INV-2026-0080": 111,
+      "INV-2026-0081": 104,
+      "INV-2026-0088": 100,
+      "INV-2026-0091": 100,
+      "INV-2026-0094": 107,
+      "INV-2026-0097": 100,
       "INV-2026-0099": 103,
       "INV-2026-0106": 92,
-      "INV-2026-0108": 82,
+      "INV-2026-0108": 85,
       "INV-2026-0109": 91,
-      "INV-2026-0116": 78,
-      "INV-2026-0119": 72,
-      "INV-2026-0121": 80,
+      "INV-2026-0115": 80,
+      "INV-2026-0116": 79,
+      "INV-2026-0119": 77,
+      "INV-2026-0120": 78,
+      "INV-2026-0121": 84,
       "INV-2026-0123": 82,
-      "INV-2026-0134": 60,
+      "INV-2026-0127": 74,
+      "INV-2026-0134": 64,
       "INV-2026-0135": 74,
+      "INV-2026-0137": 59,
       "INV-2026-0139": 61,
+      "INV-2026-0146": 51,
+      "INV-2026-0147": 64,
       "INV-2026-0148": 54,
       "INV-2026-0150": 82,
       "INV-2026-0152": 50,
+      "INV-2026-0154": 37,
+      "INV-2026-0155": 44,
       "INV-2026-0157": 47,
       "INV-2026-0162": 64,
       "INV-2026-0163": 59,
       "INV-2026-0165": 43,
-      "INV-2026-0167": 16
+      "INV-2026-0167": 19
     },
     "per_rung": {
       "1": {
@@ -5478,53 +5529,17 @@
         "effectiveness_pct": 66.7
       },
       "2": {
-        "invoices_contacted": 51,
-        "recovered_here": 24,
-        "effectiveness_pct": 47.1
+        "invoices_contacted": 63,
+        "recovered_here": 38,
+        "effectiveness_pct": 60.3
       },
       "3": {
         "invoices_contacted": 39,
-        "recovered_here": 7,
-        "effectiveness_pct": 17.9
+        "recovered_here": 5,
+        "effectiveness_pct": 12.8
       }
     },
     "exceptions": [
-      {
-        "invoice_id": "INV-2026-0120",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 103140000,
-        "days_overdue": 146,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 146 days overdue; ceiling 4; first contact but already 146 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 61884000 paise)"
-      },
-      {
-        "invoice_id": "INV-2026-0155",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 97410000,
-        "days_overdue": 137,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 137 days overdue; ceiling 4; first contact but already 137 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 58446000 paise)"
-      },
-      {
-        "invoice_id": "INV-2026-0097",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 92020000,
-        "days_overdue": 163,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 163 days overdue; ceiling 4; first contact but already 163 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 55212000 paise)"
-      },
       {
         "invoice_id": "INV-2026-0068",
         "buyer_id": "BUY-02",
@@ -5554,12 +5569,12 @@
         "buyer_id": "BUY-09",
         "buyer_name": "Orbit Retail Ventures Pvt Ltd",
         "persona": "disputer",
-        "status": "open",
+        "status": "disputed",
         "outstanding_paise": 78560000,
         "days_overdue": 154,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 73 (medium band) starts at rung 1; 154 days overdue; ceiling 4; first contact but already 154 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 47136000 paise)"
+        "disputed": true,
+        "last_rung": 0,
+        "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
         "invoice_id": "INV-2026-0066",
@@ -5590,12 +5605,12 @@
         "buyer_id": "BUY-09",
         "buyer_name": "Orbit Retail Ventures Pvt Ltd",
         "persona": "disputer",
-        "status": "open",
+        "status": "disputed",
         "outstanding_paise": 62770000,
         "days_overdue": 153,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 73 (medium band) starts at rung 1; 153 days overdue; ceiling 4; first contact but already 153 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 37662000 paise)"
+        "disputed": true,
+        "last_rung": 0,
+        "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
         "invoice_id": "INV-2026-0090",
@@ -5631,7 +5646,7 @@
         "days_overdue": 168,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 168 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0043",
@@ -5662,12 +5677,12 @@
         "buyer_id": "BUY-09",
         "buyer_name": "Orbit Retail Ventures Pvt Ltd",
         "persona": "disputer",
-        "status": "open",
+        "status": "disputed",
         "outstanding_paise": 36260000,
         "days_overdue": 204,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 73 (medium band) starts at rung 1; 204 days overdue; ceiling 4; first contact but already 204 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 21756000 paise)"
+        "disputed": true,
+        "last_rung": 0,
+        "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
         "invoice_id": "INV-2026-0069",
@@ -5694,18 +5709,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0132",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 28330000,
-        "days_overdue": 147,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 147 days overdue; ceiling 4; first contact but already 147 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 16998000 paise)"
-      },
-      {
         "invoice_id": "INV-2026-0124",
         "buyer_id": "BUY-03",
         "buyer_name": "Ravi Steel Traders",
@@ -5716,6 +5719,18 @@
         "disputed": false,
         "last_rung": 3,
         "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
+      },
+      {
+        "invoice_id": "INV-2026-0083",
+        "buyer_id": "BUY-11",
+        "buyer_name": "Sethi Brothers",
+        "persona": "cash_tight",
+        "status": "open",
+        "outstanding_paise": 24160000,
+        "days_overdue": 173,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0151",
@@ -5754,30 +5769,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0112",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 19520000,
-        "days_overdue": 150,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 150 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
-      },
-      {
-        "invoice_id": "INV-2026-0129",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "open",
-        "outstanding_paise": 19290000,
-        "days_overdue": 152,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 152 days overdue; ceiling 4)"
-      },
-      {
         "invoice_id": "INV-2026-0038",
         "buyer_id": "BUY-13",
         "buyer_name": "Deccan Electricals Ltd",
@@ -5790,16 +5781,16 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0154",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
+        "invoice_id": "INV-2026-0132",
+        "buyer_id": "BUY-19",
+        "buyer_name": "Om Sai Distributors",
         "persona": "forgetful",
         "status": "partially_paid",
-        "outstanding_paise": 16220000,
-        "days_overdue": 138,
+        "outstanding_paise": 17188498,
+        "days_overdue": 147,
         "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 138 days overdue; ceiling 4; first contact but already 138 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 9732000 paise)"
+        "last_rung": 3,
+        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
       },
       {
         "invoice_id": "INV-2026-0161",
@@ -5812,18 +5803,6 @@
         "disputed": true,
         "last_rung": 0,
         "reason": "the invoice is disputed, so it goes to a human immediately"
-      },
-      {
-        "invoice_id": "INV-2026-0122",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 15140213,
-        "days_overdue": 145,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0098",
@@ -5847,7 +5826,7 @@
         "days_overdue": 101,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0073",
@@ -5895,19 +5874,7 @@
         "days_overdue": 225,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 37 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
-      },
-      {
-        "invoice_id": "INV-2026-0137",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 10870000,
-        "days_overdue": 159,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 159 days overdue; ceiling 4; first contact but already 159 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 6522000 paise)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 36 (poor band) starts at rung 2; 225 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0061",
@@ -5922,6 +5889,30 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
+        "invoice_id": "INV-2026-0129",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "status": "partially_paid",
+        "outstanding_paise": 10307779,
+        "days_overdue": 152,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 152 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0112",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
+        "status": "partially_paid",
+        "outstanding_paise": 10170204,
+        "days_overdue": 150,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 150 days overdue; ceiling 4)"
+      },
+      {
         "invoice_id": "INV-2026-0125",
         "buyer_id": "BUY-02",
         "buyer_name": "Bharat Polymers Ltd",
@@ -5934,16 +5925,16 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0083",
-        "buyer_id": "BUY-11",
-        "buyer_name": "Sethi Brothers",
-        "persona": "cash_tight",
+        "invoice_id": "INV-2026-0122",
+        "buyer_id": "BUY-20",
+        "buyer_name": "Meridian Logistics India Pvt Ltd",
+        "persona": "habitual_delayer",
         "status": "partially_paid",
-        "outstanding_paise": 9267390,
-        "days_overdue": 173,
+        "outstanding_paise": 9470492,
+        "days_overdue": 145,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 35 (poor band) starts at rung 2; 173 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 145 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0149",
@@ -5994,30 +5985,6 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 163 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0127",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "partially_paid",
-        "outstanding_paise": 6440000,
-        "days_overdue": 138,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 138 days overdue; ceiling 4; first contact but already 138 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 3864000 paise)"
-      },
-      {
-        "invoice_id": "INV-2026-0029",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 6340000,
-        "days_overdue": 227,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 227 days overdue; ceiling 4; first contact but already 227 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 3804000 paise)"
-      },
-      {
         "invoice_id": "INV-2026-0118",
         "buyer_id": "BUY-13",
         "buyer_name": "Deccan Electricals Ltd",
@@ -6030,66 +5997,6 @@
         "reason": "the invoice is disputed, so it goes to a human immediately"
       },
       {
-        "invoice_id": "INV-2026-0147",
-        "buyer_id": "BUY-20",
-        "buyer_name": "Meridian Logistics India Pvt Ltd",
-        "persona": "habitual_delayer",
-        "status": "partially_paid",
-        "outstanding_paise": 5948350,
-        "days_overdue": 149,
-        "disputed": false,
-        "last_rung": 3,
-        "reason": "partial payment and an unclear reply; holding off. MOCK: insufficient signal to escalate"
-      },
-      {
-        "invoice_id": "INV-2026-0138",
-        "buyer_id": "BUY-12",
-        "buyer_name": "Sundaram Auto Components Pvt Ltd",
-        "persona": "cash_tight",
-        "status": "partially_paid",
-        "outstanding_paise": 5292635,
-        "days_overdue": 158,
-        "disputed": false,
-        "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
-      },
-      {
-        "invoice_id": "INV-2026-0027",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 5110000,
-        "days_overdue": 228,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 228 days overdue; ceiling 4; first contact but already 228 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 3066000 paise)"
-      },
-      {
-        "invoice_id": "INV-2026-0048",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 5010000,
-        "days_overdue": 206,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 206 days overdue; ceiling 4; first contact but already 206 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 3006000 paise)"
-      },
-      {
-        "invoice_id": "INV-2026-0115",
-        "buyer_id": "BUY-08",
-        "buyer_name": "Kaveri Textiles Ltd",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 4910000,
-        "days_overdue": 148,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 89 (good band) starts at rung 1; 148 days overdue; ceiling 4; first contact but already 148 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 2946000 paise)"
-      },
-      {
         "invoice_id": "INV-2026-0016",
         "buyer_id": "BUY-15",
         "buyer_name": "Verma Hardware Stores",
@@ -6099,7 +6006,7 @@
         "days_overdue": 262,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 25 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 24 (poor band) starts at rung 2; 262 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0064",
@@ -6123,7 +6030,7 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 33 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 169 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0160",
@@ -6136,6 +6043,18 @@
         "disputed": false,
         "last_rung": 4,
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 0 (poor band) starts at rung 2; 115 days overdue; ceiling 4)"
+      },
+      {
+        "invoice_id": "INV-2026-0138",
+        "buyer_id": "BUY-12",
+        "buyer_name": "Sundaram Auto Components Pvt Ltd",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 3515011,
+        "days_overdue": 158,
+        "disputed": false,
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 158 days overdue; ceiling 4)"
       },
       {
         "invoice_id": "INV-2026-0042",
@@ -6186,18 +6105,6 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 32 (poor band) starts at rung 2; 101 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0046",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 2690000,
-        "days_overdue": 207,
-        "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 207 days overdue; ceiling 4; first contact but already 207 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 1614000 paise)"
-      },
-      {
         "invoice_id": "INV-2026-0166",
         "buyer_id": "BUY-14",
         "buyer_name": "Krishna Electricals",
@@ -6222,16 +6129,16 @@
         "reason": "escalated to the final rung, so contact stops and a human takes over (score 43 (poor band) starts at rung 2; 234 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0032",
+        "invoice_id": "INV-2026-0096",
         "buyer_id": "BUY-06",
         "buyer_name": "Sharma Trading Co",
         "persona": "cash_tight",
         "status": "partially_paid",
-        "outstanding_paise": 921454,
-        "days_overdue": 255,
+        "outstanding_paise": 991345,
+        "days_overdue": 163,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 48 (poor band) starts at rung 2; 255 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 163 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0107",
@@ -6243,19 +6150,19 @@
         "days_overdue": 169,
         "disputed": false,
         "last_rung": 4,
-        "reason": "escalated to the final rung, so contact stops and a human takes over (score 48 (poor band) starts at rung 2; 169 days overdue; ceiling 4)"
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 169 days overdue; ceiling 4)"
       },
       {
-        "invoice_id": "INV-2026-0146",
-        "buyer_id": "BUY-19",
-        "buyer_name": "Om Sai Distributors",
-        "persona": "forgetful",
-        "status": "open",
-        "outstanding_paise": 800000,
-        "days_overdue": 150,
+        "invoice_id": "INV-2026-0032",
+        "buyer_id": "BUY-06",
+        "buyer_name": "Sharma Trading Co",
+        "persona": "cash_tight",
+        "status": "partially_paid",
+        "outstanding_paise": 842047,
+        "days_overdue": 255,
         "disputed": false,
-        "last_rung": 2,
-        "reason": "score 93 (good band) starts at rung 1; 150 days overdue; ceiling 4; first contact but already 150 days overdue, paced one rung ahead of the base for the backlog; EV ranked wait highest for a good_customer buyer (60% recover, EV 480000 paise)"
+        "last_rung": 4,
+        "reason": "escalated to the final rung, so contact stops and a human takes over (score 50 (medium band) starts at rung 1; 255 days overdue; ceiling 4; wanted to escalate further but the law supports at most 4)"
       },
       {
         "invoice_id": "INV-2026-0156",
@@ -6371,81 +6278,6 @@
         }
       },
       {
-        "buyer_id": "BUY-19",
-        "name": "Om Sai Distributors",
-        "outstanding_paise": 243240000,
-        "overdue_count": 6,
-        "oldest_days_overdue": 207,
-        "score": {
-          "buyer_id": "BUY-19",
-          "name": "Om Sai Distributors",
-          "score": 93,
-          "confidence": "medium",
-          "history_count": 4,
-          "signals": {
-            "average_delay_days": 0.5,
-            "worst_delay_days": 6,
-            "broken_promises": 1,
-            "disputes_raised": 0,
-            "on_time_streak": 1
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "0.5 days late on average",
-              "points": -0.6
-            },
-            {
-              "factor": "broken promises",
-              "detail": "1 promise(s) not kept",
-              "points": -8.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "0 dispute(s) on past invoices",
-              "points": 0.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "1 recent invoice(s) paid on time",
-              "points": 2.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 100,
-            "delta": -7,
-            "window_days": 182,
-            "detail": "100 six months ago, 93 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 0,
-          "kept": 0,
-          "broken": 0,
-          "in_flight": 0,
-          "reliability_pct": null,
-          "avg_days_late": null
-        },
-        "response": {
-          "messages_sent": 0,
-          "replies": 0,
-          "response_rate_pct": null
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 6,
-          "handed_off": 0,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-09",
         "name": "Orbit Retail Ventures Pvt Ltd",
         "outstanding_paise": 177590000,
@@ -6509,107 +6341,32 @@
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 0,
-          "replies": 0,
-          "response_rate_pct": null
+          "messages_sent": 5,
+          "replies": 3,
+          "response_rate_pct": 60.0
         },
         "recovery_state": {
           "not_yet_due": 0,
-          "in_ladder": 3,
-          "handed_off": 0,
-          "stopped": 0
-        }
-      },
-      {
-        "buyer_id": "BUY-08",
-        "name": "Kaveri Textiles Ltd",
-        "outstanding_paise": 136050000,
-        "overdue_count": 7,
-        "oldest_days_overdue": 228,
-        "score": {
-          "buyer_id": "BUY-08",
-          "name": "Kaveri Textiles Ltd",
-          "score": 89,
-          "confidence": "medium",
-          "history_count": 8,
-          "signals": {
-            "average_delay_days": 2.5,
-            "worst_delay_days": 8,
-            "broken_promises": 1,
-            "disputes_raised": 0,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "2.5 days late on average",
-              "points": -3.0
-            },
-            {
-              "factor": "broken promises",
-              "detail": "1 promise(s) not kept",
-              "points": -8.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "0 dispute(s) on past invoices",
-              "points": 0.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "steady",
-            "earlier_score": 89,
-            "delta": 0,
-            "window_days": 182,
-            "detail": "89 six months ago, 89 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 0,
-          "kept": 0,
-          "broken": 0,
-          "in_flight": 0,
-          "reliability_pct": null,
-          "avg_days_late": null
-        },
-        "response": {
-          "messages_sent": 0,
-          "replies": 0,
-          "response_rate_pct": null
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 7,
-          "handed_off": 0,
+          "in_ladder": 0,
+          "handed_off": 3,
           "stopped": 0
         }
       },
       {
         "buyer_id": "BUY-20",
         "name": "Meridian Logistics India Pvt Ltd",
-        "outstanding_paise": 131498563,
-        "overdue_count": 5,
+        "outstanding_paise": 101548475,
+        "overdue_count": 4,
         "oldest_days_overdue": 216,
         "score": {
           "buyer_id": "BUY-20",
           "name": "Meridian Logistics India Pvt Ltd",
           "score": 0,
           "confidence": "high",
-          "history_count": 15,
+          "history_count": 16,
           "signals": {
-            "average_delay_days": 42.5,
-            "worst_delay_days": 64,
+            "average_delay_days": 43.0,
+            "worst_delay_days": 65,
             "broken_promises": 9,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -6622,8 +6379,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.5 days late on average",
-              "points": -51.0
+              "detail": "43.0 days late on average",
+              "points": -51.6
             },
             {
               "factor": "broken promises",
@@ -6642,8 +6399,8 @@
             },
             {
               "factor": "clamped",
-              "detail": "raw score -23.0 pulled inside 0-100",
-              "points": 23.0
+              "detail": "raw score -23.6 pulled inside 0-100",
+              "points": 23.6
             }
           ],
           "trend": {
@@ -6656,21 +6413,21 @@
           "as_of": "2026-12-21"
         },
         "promises": {
-          "made": 6,
+          "made": 1,
           "kept": 1,
-          "broken": 5,
+          "broken": 0,
           "in_flight": 0,
-          "reliability_pct": 16.7,
+          "reliability_pct": 100.0,
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 12,
-          "replies": 10,
-          "response_rate_pct": 83.3
+          "messages_sent": 7,
+          "replies": 6,
+          "response_rate_pct": 85.7
         },
         "recovery_state": {
           "not_yet_due": 0,
-          "in_ladder": 1,
+          "in_ladder": 0,
           "handed_off": 4,
           "stopped": 0
         }
@@ -6684,12 +6441,12 @@
         "score": {
           "buyer_id": "BUY-03",
           "name": "Ravi Steel Traders",
-          "score": 33,
+          "score": 32,
           "confidence": "medium",
           "history_count": 4,
           "signals": {
-            "average_delay_days": 56.0,
-            "worst_delay_days": 76,
+            "average_delay_days": 56.8,
+            "worst_delay_days": 79,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -6702,8 +6459,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "56.0 days late on average",
-              "points": -67.2
+              "detail": "56.8 days late on average",
+              "points": -68.2
             },
             {
               "factor": "broken promises",
@@ -7066,9 +6823,84 @@
         }
       },
       {
+        "buyer_id": "BUY-11",
+        "name": "Sethi Brothers",
+        "outstanding_paise": 24160000,
+        "overdue_count": 1,
+        "oldest_days_overdue": 173,
+        "score": {
+          "buyer_id": "BUY-11",
+          "name": "Sethi Brothers",
+          "score": 35,
+          "confidence": "high",
+          "history_count": 18,
+          "signals": {
+            "average_delay_days": 29.8,
+            "worst_delay_days": 160,
+            "broken_promises": 3,
+            "disputes_raised": 1,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "29.8 days late on average",
+              "points": -35.8
+            },
+            {
+              "factor": "broken promises",
+              "detail": "3 promise(s) not kept",
+              "points": -24.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "1 dispute(s) on past invoices",
+              "points": -5.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 57,
+            "delta": -22,
+            "window_days": 182,
+            "detail": "57 six months ago, 35 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 5,
+          "kept": 3,
+          "broken": 2,
+          "in_flight": 0,
+          "reliability_pct": 60.0,
+          "avg_days_late": 30.0
+        },
+        "response": {
+          "messages_sent": 6,
+          "replies": 6,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 0,
+          "handed_off": 1,
+          "stopped": 0
+        }
+      },
+      {
         "buyer_id": "BUY-12",
         "name": "Sundaram Auto Components Pvt Ltd",
-        "outstanding_paise": 25058371,
+        "outstanding_paise": 23280747,
         "overdue_count": 4,
         "oldest_days_overdue": 198,
         "score": {
@@ -7130,8 +6962,8 @@
         },
         "response": {
           "messages_sent": 9,
-          "replies": 4,
-          "response_rate_pct": 44.4
+          "replies": 5,
+          "response_rate_pct": 55.6
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -7153,8 +6985,8 @@
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 9.0,
-            "worst_delay_days": 75,
+            "average_delay_days": 9.3,
+            "worst_delay_days": 77,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -7167,8 +6999,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "9.0 days late on average",
-              "points": -10.8
+              "detail": "9.3 days late on average",
+              "points": -11.2
             },
             {
               "factor": "broken promises",
@@ -7291,20 +7123,20 @@
         }
       },
       {
-        "buyer_id": "BUY-18",
-        "name": "Northstar Engineering Pvt Ltd",
-        "outstanding_paise": 11190000,
+        "buyer_id": "BUY-19",
+        "name": "Om Sai Distributors",
+        "outstanding_paise": 17188498,
         "overdue_count": 1,
-        "oldest_days_overdue": 225,
+        "oldest_days_overdue": 147,
         "score": {
-          "buyer_id": "BUY-18",
-          "name": "Northstar Engineering Pvt Ltd",
-          "score": 37,
+          "buyer_id": "BUY-19",
+          "name": "Om Sai Distributors",
+          "score": 62,
           "confidence": "medium",
-          "history_count": 6,
+          "history_count": 9,
           "signals": {
-            "average_delay_days": 45.7,
-            "worst_delay_days": 69,
+            "average_delay_days": 25.2,
+            "worst_delay_days": 92,
             "broken_promises": 1,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -7317,8 +7149,83 @@
             },
             {
               "factor": "average delay",
-              "detail": "45.7 days late on average",
-              "points": -54.8
+              "detail": "25.2 days late on average",
+              "points": -30.2
+            },
+            {
+              "factor": "broken promises",
+              "detail": "1 promise(s) not kept",
+              "points": -8.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "0 dispute(s) on past invoices",
+              "points": 0.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 100,
+            "delta": -38,
+            "window_days": 182,
+            "detail": "100 six months ago, 62 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 0,
+          "kept": 0,
+          "broken": 0,
+          "in_flight": 0,
+          "reliability_pct": null,
+          "avg_days_late": null
+        },
+        "response": {
+          "messages_sent": 7,
+          "replies": 7,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 1,
+          "handed_off": 0,
+          "stopped": 0
+        }
+      },
+      {
+        "buyer_id": "BUY-18",
+        "name": "Northstar Engineering Pvt Ltd",
+        "outstanding_paise": 11190000,
+        "overdue_count": 1,
+        "oldest_days_overdue": 225,
+        "score": {
+          "buyer_id": "BUY-18",
+          "name": "Northstar Engineering Pvt Ltd",
+          "score": 36,
+          "confidence": "medium",
+          "history_count": 6,
+          "signals": {
+            "average_delay_days": 46.8,
+            "worst_delay_days": 72,
+            "broken_promises": 1,
+            "disputes_raised": 0,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "46.8 days late on average",
+              "points": -56.2
             },
             {
               "factor": "broken promises",
@@ -7366,81 +7273,6 @@
         }
       },
       {
-        "buyer_id": "BUY-11",
-        "name": "Sethi Brothers",
-        "outstanding_paise": 9267390,
-        "overdue_count": 1,
-        "oldest_days_overdue": 173,
-        "score": {
-          "buyer_id": "BUY-11",
-          "name": "Sethi Brothers",
-          "score": 35,
-          "confidence": "high",
-          "history_count": 18,
-          "signals": {
-            "average_delay_days": 29.7,
-            "worst_delay_days": 160,
-            "broken_promises": 3,
-            "disputes_raised": 1,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "29.7 days late on average",
-              "points": -35.6
-            },
-            {
-              "factor": "broken promises",
-              "detail": "3 promise(s) not kept",
-              "points": -24.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "1 dispute(s) on past invoices",
-              "points": -5.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 57,
-            "delta": -22,
-            "window_days": 182,
-            "detail": "57 six months ago, 35 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 5,
-          "kept": 4,
-          "broken": 1,
-          "in_flight": 0,
-          "reliability_pct": 80.0,
-          "avg_days_late": 30.0
-        },
-        "response": {
-          "messages_sent": 6,
-          "replies": 6,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 0,
-          "handed_off": 1,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-15",
         "name": "Verma Hardware Stores",
         "outstanding_paise": 4610000,
@@ -7449,11 +7281,11 @@
         "score": {
           "buyer_id": "BUY-15",
           "name": "Verma Hardware Stores",
-          "score": 25,
+          "score": 24,
           "confidence": "medium",
           "history_count": 7,
           "signals": {
-            "average_delay_days": 42.7,
+            "average_delay_days": 43.3,
             "worst_delay_days": 54,
             "broken_promises": 3,
             "disputes_raised": 0,
@@ -7467,8 +7299,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "42.7 days late on average",
-              "points": -51.2
+              "detail": "43.3 days late on average",
+              "points": -52.0
             },
             {
               "factor": "broken promises",
@@ -7489,9 +7321,9 @@
           "trend": {
             "direction": "steady",
             "earlier_score": 21,
-            "delta": 4,
+            "delta": 3,
             "window_days": 182,
-            "detail": "21 six months ago, 25 now"
+            "detail": "21 six months ago, 24 now"
           },
           "as_of": "2026-12-21"
         },
@@ -7512,6 +7344,81 @@
           "not_yet_due": 0,
           "in_ladder": 0,
           "handed_off": 1,
+          "stopped": 0
+        }
+      },
+      {
+        "buyer_id": "BUY-06",
+        "name": "Sharma Trading Co",
+        "outstanding_paise": 3188225,
+        "overdue_count": 4,
+        "oldest_days_overdue": 255,
+        "score": {
+          "buyer_id": "BUY-06",
+          "name": "Sharma Trading Co",
+          "score": 50,
+          "confidence": "high",
+          "history_count": 16,
+          "signals": {
+            "average_delay_days": 21.5,
+            "worst_delay_days": 95,
+            "broken_promises": 3,
+            "disputes_raised": 0,
+            "on_time_streak": 0
+          },
+          "breakdown": [
+            {
+              "factor": "starting score",
+              "detail": "every buyer starts here",
+              "points": 100.0
+            },
+            {
+              "factor": "average delay",
+              "detail": "21.5 days late on average",
+              "points": -25.8
+            },
+            {
+              "factor": "broken promises",
+              "detail": "3 promise(s) not kept",
+              "points": -24.0
+            },
+            {
+              "factor": "disputes raised",
+              "detail": "0 dispute(s) on past invoices",
+              "points": 0.0
+            },
+            {
+              "factor": "on-time streak",
+              "detail": "0 recent invoice(s) paid on time",
+              "points": 0.0
+            }
+          ],
+          "trend": {
+            "direction": "worsening",
+            "earlier_score": 70,
+            "delta": -20,
+            "window_days": 182,
+            "detail": "70 six months ago, 50 now"
+          },
+          "as_of": "2026-12-21"
+        },
+        "promises": {
+          "made": 10,
+          "kept": 6,
+          "broken": 4,
+          "in_flight": 0,
+          "reliability_pct": 60.0,
+          "avg_days_late": 25.0
+        },
+        "response": {
+          "messages_sent": 12,
+          "replies": 12,
+          "response_rate_pct": 100.0
+        },
+        "recovery_state": {
+          "not_yet_due": 0,
+          "in_ladder": 1,
+          "handed_off": 3,
           "stopped": 0
         }
       },
@@ -7591,81 +7498,6 @@
         }
       },
       {
-        "buyer_id": "BUY-06",
-        "name": "Sharma Trading Co",
-        "outstanding_paise": 2276287,
-        "overdue_count": 3,
-        "oldest_days_overdue": 255,
-        "score": {
-          "buyer_id": "BUY-06",
-          "name": "Sharma Trading Co",
-          "score": 48,
-          "confidence": "high",
-          "history_count": 17,
-          "signals": {
-            "average_delay_days": 23.3,
-            "worst_delay_days": 95,
-            "broken_promises": 3,
-            "disputes_raised": 0,
-            "on_time_streak": 0
-          },
-          "breakdown": [
-            {
-              "factor": "starting score",
-              "detail": "every buyer starts here",
-              "points": 100.0
-            },
-            {
-              "factor": "average delay",
-              "detail": "23.3 days late on average",
-              "points": -28.0
-            },
-            {
-              "factor": "broken promises",
-              "detail": "3 promise(s) not kept",
-              "points": -24.0
-            },
-            {
-              "factor": "disputes raised",
-              "detail": "0 dispute(s) on past invoices",
-              "points": 0.0
-            },
-            {
-              "factor": "on-time streak",
-              "detail": "0 recent invoice(s) paid on time",
-              "points": 0.0
-            }
-          ],
-          "trend": {
-            "direction": "worsening",
-            "earlier_score": 70,
-            "delta": -22,
-            "window_days": 182,
-            "detail": "70 six months ago, 48 now"
-          },
-          "as_of": "2026-12-21"
-        },
-        "promises": {
-          "made": 10,
-          "kept": 6,
-          "broken": 4,
-          "in_flight": 0,
-          "reliability_pct": 60.0,
-          "avg_days_late": 13.0
-        },
-        "response": {
-          "messages_sent": 12,
-          "replies": 12,
-          "response_rate_pct": 100.0
-        },
-        "recovery_state": {
-          "not_yet_due": 0,
-          "in_ladder": 1,
-          "handed_off": 2,
-          "stopped": 0
-        }
-      },
-      {
         "buyer_id": "BUY-16",
         "name": "Fatima Traders",
         "outstanding_paise": 591923,
@@ -7674,12 +7506,12 @@
         "score": {
           "buyer_id": "BUY-16",
           "name": "Fatima Traders",
-          "score": 67,
+          "score": 66,
           "confidence": "high",
           "history_count": 11,
           "signals": {
-            "average_delay_days": 27.5,
-            "worst_delay_days": 99,
+            "average_delay_days": 28.5,
+            "worst_delay_days": 102,
             "broken_promises": 0,
             "disputes_raised": 0,
             "on_time_streak": 0
@@ -7692,8 +7524,8 @@
             },
             {
               "factor": "average delay",
-              "detail": "27.5 days late on average",
-              "points": -33.0
+              "detail": "28.5 days late on average",
+              "points": -34.2
             },
             {
               "factor": "broken promises",
@@ -7714,9 +7546,9 @@
           "trend": {
             "direction": "worsening",
             "earlier_score": 99,
-            "delta": -32,
+            "delta": -33,
             "window_days": 182,
-            "detail": "99 six months ago, 67 now"
+            "detail": "99 six months ago, 66 now"
           },
           "as_of": "2026-12-21"
         },
@@ -7729,9 +7561,9 @@
           "avg_days_late": null
         },
         "response": {
-          "messages_sent": 5,
+          "messages_sent": 6,
           "replies": 5,
-          "response_rate_pct": 100.0
+          "response_rate_pct": 83.3
         },
         "recovery_state": {
           "not_yet_due": 0,
@@ -7745,14 +7577,19 @@
       "mode": "agent_ev_learned",
       "seed": 7,
       "attribution_horizon_days": 14,
-      "actions_recorded": 156,
-      "actions_paid_within_horizon": 42,
-      "payments_recorded": 46,
-      "payments_attributed": 42,
+      "actions_recorded": 183,
+      "actions_paid_within_horizon": 57,
+      "payments_recorded": 62,
+      "payments_attributed": 58,
       "payments_unattributed": 4,
-      "paise_attributed": 904980267,
+      "paise_attributed": 1283004933,
       "paise_unattributed": 71930000
     },
-    "narrative": []
+    "narrative": [],
+    "reaction_delays": true,
+    "in_flight": {
+      "reactions_in_flight_at_end": 0,
+      "payments_in_flight_at_end": 0
+    }
   }
 }
