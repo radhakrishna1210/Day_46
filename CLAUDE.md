@@ -409,8 +409,10 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       PROJECT_WALKTHROUGH.md S16 now says the audit figures are ROWS over 120
       days, not distinct invoices (5136 handoff rows <-> 47 real escalations).
       Artifacts regenerated via scripts/regen.py; 1032 tests still pass.
-- [ ] 12 - Final check + submit (the Sept 5 deadline has passed; the project
-      is now in a post-deadline enhancement phase)
+- [-] 12 - Final check + submit: DROPPED 2026-09-24. Not a hackathon entry
+      any more (the Sept 5 deadline passed); no submission, no demo video.
+      Still worth doing as ordinary hygiene: a full pytest pass and a
+      fresh-clone check.
 - [x] E1 - EV sets the delivered rung (config/rules.yaml brain.ev_sets_rung:
       true, only read on the ev_mode path). engine/brain.py
       ev_send_candidates(): the walk's own tier, or a GENTLER tier from the
