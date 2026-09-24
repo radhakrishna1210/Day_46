@@ -62,6 +62,7 @@
   <h1>Revenue Recovery Agent -- Baseline vs Agent</h1>
   <div class="meta">
     seed {{ seed }} &middot; {{ days }} simulated days &middot; generated {{ generated }}
+    {% if reaction_delays %}&middot; buyer reactions delayed (replies 0&ndash;2 days, payments 1&ndash;5 days){% else %}&middot; buyer reactions land the same day as the message{% endif %}
   </div>
 
   <p class="pitch">

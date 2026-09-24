@@ -597,6 +597,9 @@ def _view(results: dict[str, Any]) -> dict[str, Any]:
         "multi_seed": _multi_seed_rows(results),
         "edge_case_note": _edge_case_note(results),
         "guardrails": GUARDRAILS,
+        # Phase R1: whether buyer reactions landed with a delay in this run.
+        # Absent from a pre-R1 results.json, which reads as False.
+        "reaction_delays": bool(results.get("reaction_delays", False)),
         "days_to_pay_note": _days_to_pay_note(results),
         "gain_paise": (results["agent"]["final"]["recovered_paise"]
                       - results["baseline"]["final"]["recovered_paise"]),

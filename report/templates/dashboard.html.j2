@@ -348,7 +348,7 @@
         Legal figures are a simplified snapshot ({{ m.legal.as_of }}, RBI Bank
         Rate {{ m.legal.bank_rate_pct }}%) and are not legal advice.
       </p>
-      <p class="prov">Two time views of one seeded world. Portfolio, early warning and the decision queue are a live pipeline pass at day&nbsp;0 ({{ m.day0 }}). The recovery benchmark and everything after it is the {{ m.days }}-day simulation. Each block says which it is.</p>
+      <p class="prov">Two time views of one seeded world. Portfolio, early warning and the decision queue are a live pipeline pass at day&nbsp;0 ({{ m.day0 }}). The recovery benchmark and everything after it is the {{ m.days }}-day simulation{% if m.reaction_delays %}, in which a buyer&rsquo;s reply lands 0&ndash;2 days and a payment 1&ndash;5 days after the message{% else %}, in which a buyer&rsquo;s reaction lands the same day as the message{% endif %}. Each block says which it is.</p>
 
       {% if d0.hero %}
       <div class="hero">

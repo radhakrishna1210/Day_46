@@ -774,6 +774,8 @@ def build_payload(seed: int, days: int, results_path: Path) -> dict[str, Any]:
             "days": results["days"],
             "day0": day0["today"],
             "day120": results["agent"]["final"]["day"],
+            # Phase R1: absent from a pre-R1 results.json, which reads as False.
+            "reaction_delays": bool(results.get("reaction_delays", False)),
             "generated": datetime.now().isoformat(timespec="seconds"),
             "results_generated": results.get("generated"),
             "supplier": {

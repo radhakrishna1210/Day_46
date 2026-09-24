@@ -70,7 +70,11 @@ STEPS: tuple[tuple[str, list[str]], ...] = (
     (
         "simulation (six seeds x four arms x 120 days)",
         ["sim/run_sim.py", "--compare", "--seed", str(SEED),
-         "--extra-seeds", EXTRA_SEEDS, "--days", DAYS],
+         "--extra-seeds", EXTRA_SEEDS, "--days", DAYS,
+         # Phase R1: the committed headline lands buyer reactions late
+         # (sim/personas.py REACTION_DELAY_DAYS). Explicit, not left to the
+         # CLI default, so this file alone says how the artifacts were built.
+         "--reaction-delays"],
     ),
     (
         "scoreboard report",

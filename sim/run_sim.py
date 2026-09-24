@@ -1629,11 +1629,14 @@ def main() -> int:
     parser.add_argument("--scenario", choices=("tc141",), default=None,
                         help="run a scripted end-to-end scenario instead of the seeded simulation "
                              "(docs/edge_cases.md TC-141 -> tc141)")
-    parser.add_argument("--reaction-delays", action="store_true",
+    parser.add_argument("--reaction-delays", action=argparse.BooleanOptionalAction,
+                        default=True,
                         help="Phase R1: land each buyer reaction 0-2 days (a reply) or 1-5 days "
                              "(a payment) after the message instead of the same day, for every "
-                             "arm alike (sim/personas.py REACTION_DELAY_DAYS). Off by default: "
-                             "without it every run is byte-identical to before R1")
+                             "arm alike (sim/personas.py REACTION_DELAY_DAYS). ON by default for "
+                             "the CLI since 2026-09-25 -- the committed headline uses it. "
+                             "--no-reaction-delays reproduces every pre-R1 run exactly; "
+                             "run_agent()/run_baseline() themselves still default to off.")
     args = parser.parse_args()
     rd = args.reaction_delays
 
