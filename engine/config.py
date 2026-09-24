@@ -7,6 +7,9 @@ different rule set call :func:`reload`.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -34,10 +37,42 @@ def legal() -> dict[str, Any]:
     return yaml.safe_load(LEGAL_PATH.read_text(encoding="utf-8"))
 
 
-@lru_cache(maxsize=1)
+#: SaaS: the supplier identity of the business (tenant) an API request is
+#: acting for. None everywhere else -- the simulator, main.py and every test
+#: read config/supplier.yaml exactly as before.
+_supplier_override: ContextVar[dict[str, Any] | None] = ContextVar(
+    "supplier_override", default=None)
+
+
 def supplier() -> dict[str, Any]:
-    """Our own business identity. Needed to file anything in our own name."""
+    """Our own business identity. Needed to file anything in our own name.
+
+    Returns the tenant's identity inside supplier_context() (the SaaS API, one
+    business per request), otherwise config/supplier.yaml.
+    """
+    override = _supplier_override.get()
+    return override if override is not None else _supplier_file()
+
+
+@lru_cache(maxsize=1)
+def _supplier_file() -> dict[str, Any]:
     return yaml.safe_load(SUPPLIER_PATH.read_text(encoding="utf-8"))
+
+
+# Kept so existing callers of supplier.cache_clear() (reload(), tests) work.
+supplier.cache_clear = _supplier_file.cache_clear  # type: ignore[attr-defined]
+
+
+@contextmanager
+def supplier_context(profile: dict[str, Any]) -> Iterator[None]:
+    """Make `profile` (same shape as config/supplier.yaml) the supplier for the
+    duration of the block -- writer sign-offs and Samadhaan drafts then carry
+    the tenant's own name and Udyam number, not the demo placeholder."""
+    token = _supplier_override.set(profile)
+    try:
+        yield
+    finally:
+        _supplier_override.reset(token)
 
 
 @lru_cache(maxsize=1)

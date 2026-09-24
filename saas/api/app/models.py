@@ -1,0 +1,192 @@
+"""Tables. Every tenant-owned row carries tenant_id; nothing is shared across
+tenants except users (one person can belong to several businesses).
+
+Money is integer paise, dates are datetime.date -- the same conventions the
+engine uses, so rows map onto engine records without conversion loss.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime, timezone
+
+from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
+                        UniqueConstraint)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+
+
+def _id() -> str:
+    return uuid.uuid4().hex
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Tenant(Base):
+    """One business (an MSME supplier) using the platform."""
+
+    __tablename__ = "tenants"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    legal_name: Mapped[str] = mapped_column(String(200))
+    udyam_registration: Mapped[str | None] = mapped_column(String(40))
+    enterprise_class: Mapped[str] = mapped_column(String(10), default="small")  # micro|small|medium
+    gstin: Mapped[str | None] = mapped_column(String(20))
+    pan: Mapped[str | None] = mapped_column(String(12))
+    address_line1: Mapped[str | None] = mapped_column(String(200))
+    address_line2: Mapped[str | None] = mapped_column(String(200))
+    city: Mapped[str | None] = mapped_column(String(80))
+    state: Mapped[str | None] = mapped_column(String(80))
+    pincode: Mapped[str | None] = mapped_column(String(10))
+    contact_name: Mapped[str | None] = mapped_column(String(120))
+    contact_email: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    memberships: Mapped[list[Membership]] = relationship(back_populates="tenant",
+                                                          cascade="all, delete-orphan")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    memberships: Mapped[list[Membership]] = relationship(back_populates="user",
+                                                          cascade="all, delete-orphan")
+
+
+ROLES = ("owner", "admin", "member")
+
+
+class Membership(Base):
+    """A user's role inside one tenant."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (UniqueConstraint("user_id", "tenant_id"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10), default="member")
+
+    user: Mapped[User] = relationship(back_populates="memberships")
+    tenant: Mapped[Tenant] = relationship(back_populates="memberships")
+
+
+class Buyer(Base):
+    """A customer of the tenant -- someone who owes them money."""
+
+    __tablename__ = "buyers"
+    __table_args__ = (UniqueConstraint("tenant_id", "code"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(40))            # tenant-visible id, e.g. BUY-07
+    name: Mapped[str] = mapped_column(String(200))
+    profile: Mapped[str] = mapped_column(String(20), default="corporate")  # corporate|small_trader
+    sector: Mapped[str | None] = mapped_column(String(60))
+    language_pref: Mapped[str] = mapped_column(String(20), default="english")  # english|hinglish
+    contact_name: Mapped[str | None] = mapped_column(String(120))
+    contact_email: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(30))
+    city: Mapped[str | None] = mapped_column(String(80))
+    state: Mapped[str | None] = mapped_column(String(80))
+    gstin: Mapped[str | None] = mapped_column(String(20))
+    preferred_channel: Mapped[str] = mapped_column(String(20), default="email")
+    opted_out: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+    __table_args__ = (UniqueConstraint("tenant_id", "invoice_number"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    buyer_id: Mapped[str] = mapped_column(ForeignKey("buyers.id", ondelete="CASCADE"), index=True)
+    invoice_number: Mapped[str] = mapped_column(String(60))
+    description: Mapped[str | None] = mapped_column(String(300))
+    po_number: Mapped[str | None] = mapped_column(String(60))
+    amount_paise: Mapped[int] = mapped_column(Integer)
+    issue_date: Mapped[date] = mapped_column(Date)
+    acceptance_date: Mapped[date] = mapped_column(Date)
+    written_agreement: Mapped[bool] = mapped_column(Boolean, default=False)
+    agreed_days: Mapped[int | None] = mapped_column(Integer)
+    disputed: Mapped[bool] = mapped_column(Boolean, default=False)
+    dispute_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    buyer: Mapped[Buyer] = relationship()
+    payments: Mapped[list[Payment]] = relationship(cascade="all, delete-orphan",
+                                                    order_by="Payment.paid_on")
+    promises: Mapped[list[Promise]] = relationship(cascade="all, delete-orphan",
+                                                    order_by="Promise.recorded_on")
+    contacts: Mapped[list[ContactLog]] = relationship(cascade="all, delete-orphan",
+                                                       order_by="ContactLog.contacted_on")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    paid_on: Mapped[date] = mapped_column(Date)
+    amount_paise: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(String(300))
+
+
+class Promise(Base):
+    """A buyer's commitment to pay, logged by the tenant."""
+
+    __tablename__ = "promises"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    promised_date: Mapped[date] = mapped_column(Date)
+    amount: Mapped[str] = mapped_column(String(10), default="full")   # full|partial
+    status: Mapped[str] = mapped_column(String(10), default="open")    # open|kept|broken
+    recorded_on: Mapped[date] = mapped_column(Date)
+    note: Mapped[str | None] = mapped_column(String(300))
+
+
+class ContactLog(Base):
+    """A reminder the tenant approved at a given rung. With channels not yet
+    connected, "approved" means the owner sent it themselves -- the engine
+    still needs the history to pace the next one."""
+
+    __tablename__ = "contact_logs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    contacted_on: Mapped[date] = mapped_column(Date)
+    rung: Mapped[int] = mapped_column(Integer)
+    channel: Mapped[str] = mapped_column(String(20), default="manual")
+    outcome: Mapped[str] = mapped_column(String(30), default="no_reply")
+
+
+class AuditEntry(Base):
+    """Append-only. The API exposes no update or delete for this table."""
+
+    __tablename__ = "audit_entries"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    actor: Mapped[str] = mapped_column(String(200))        # a user's email, or "agent"
+    action: Mapped[str] = mapped_column(String(60))
+    invoice_number: Mapped[str | None] = mapped_column(String(60))
+    buyer_name: Mapped[str | None] = mapped_column(String(200))
+    reason: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(10), default="rule")   # rule|llm|user
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)

@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pyjwt
+email-validator
+python-multipart
+httpx
+pytest
+# plus the repo-root requirements.txt (the engine: pyyaml, jinja2, scipy, ...)
