@@ -125,6 +125,22 @@ def test_the_same_seed_gives_the_same_delayed_run() -> None:
     assert first["paid_invoices"] == second["paid_invoices"]
 
 
+def test_a_delay_changes_when_a_partial_payment_lands_not_how_much() -> None:
+    """R1's own investigation found the partial-payment share drawn from the
+    LANDING day's stream, so a delay re-rolled how much the buyer paid. It is
+    drawn from the day the reaction was decided (rolled_on) now."""
+    def paid_on(landing: date) -> int:
+        invoice = {"invoice_id": "INV-X", "buyer_id": "BUY-01", "amount_paise": 10_000_000,
+                   "acceptance_date": "2026-05-01", "issue_date": "2026-05-01",
+                   "written_agreement": False, "agreed_days": None, "status": "open",
+                   "partial_payments": [], "amount_paid_paise": 0}
+        run_sim._apply_reaction(invoice, [], {"outcome": personas.PAY_PARTIAL}, landing,
+                                SEED, log=False, rolled_on=date(2026, 8, 24))
+        return invoice["amount_paid_paise"]
+
+    assert paid_on(date(2026, 8, 25)) == paid_on(date(2026, 8, 29)) > 0
+
+
 # --------------------------------------------------------------------------
 # a reaction that has not landed is not a reply
 # --------------------------------------------------------------------------

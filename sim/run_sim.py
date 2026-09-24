@@ -301,14 +301,22 @@ def _apply_reaction(
     seed: int,
     log: bool,
     ledger: outcomes.OutcomeLedger | None = None,
+    rolled_on: date | None = None,
 ) -> str:
-    """Apply what the persona did and return the history outcome tag."""
+    """Apply what the persona did and return the history outcome tag.
+
+    rolled_on: the day the reaction was DECIDED (the message's send day) --
+    defaults to `today`, which is what it always is with reaction delays off.
+    The partial-payment share is drawn from that day's stream, so a delayed
+    reaction changes when the money lands, never how much of it the buyer
+    chose to pay (Phase R1 found the landing-day key was re-rolling it).
+    """
     outcome = reaction["outcome"]
     if outcome == personas.PAY_FULL:
         _apply_payment(invoice, law.outstanding_paise(invoice, today), today, ledger)
         return "paid_full"
     if outcome == personas.PAY_PARTIAL:
-        rng = _rng(seed, invoice["invoice_id"], today, "partial_amount")
+        rng = _rng(seed, invoice["invoice_id"], rolled_on or today, "partial_amount")
         remaining = law.outstanding_paise(invoice, today)
         _apply_payment(invoice, int(remaining * rng.uniform(0.35, 0.6)), today, ledger)
         # A part-payment with no explanation is exactly the ambiguous case
@@ -845,7 +853,8 @@ def run_agent(
             return
         plist = promises_by_invoice.setdefault(inv_id, [])
         outcome = _apply_reaction(invoice, plist, item["reaction"], day, seed, log=True,
-                                  ledger=ledger)
+                                  ledger=ledger,
+                                  rolled_on=date.fromisoformat(item["entry"]["date"]))
         item["entry"]["outcome"] = outcome
         if verbose and (item["narrate"] or outcome in ("paid_full", "disputed")):
             promise = plist[-1] if outcome == "promise_made" and plist else None
@@ -1260,7 +1269,7 @@ def run_baseline(seed: int, days: int, verbose: bool = False,
             return   # settled meanwhile -- same rule as run_agent()'s land()
         plist = promises_by_invoice.setdefault(inv_id, [])
         outcome = _apply_reaction(invoice, plist, item["reaction"], day, seed, log=False,
-                                  ledger=ledger)
+                                  ledger=ledger, rolled_on=item["sent_on"])
         if outcome == "disputed":
             disputes.add(inv_id)
         if verbose:
