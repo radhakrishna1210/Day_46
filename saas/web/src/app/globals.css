@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------------
+   Recova design tokens. Everything reads a role, never a raw hex, so light
+   and dark swap in one place. Dark is its own selected set (not a flip):
+   the OS setting covers it, and a data-theme stamp on <html> wins both ways.
+   ------------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --bg: #f6f5f1;            /* warm paper */
+  --bg-raised: #fbfaf7;
+  --surface: #ffffff;
+  --surface-2: #f1efe9;
+  --line: #e4e1d8;
+  --line-strong: #d3cfc3;
+  --ink: #0e1116;
+  --ink-2: #454a52;
+  --ink-3: #7a7f87;
+  --brand: #0f766e;         /* deep teal: money coming back */
+  --brand-ink: #ffffff;
+  --brand-soft: #d9efeb;
+  --brand-glow: #34d399;
+  --focus: #0f766e;
+  /* status (dataviz reference palette; never used as a series colour) */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-ink: #0a6b0a;
+  --warning-ink: #8a5a00;
+  --serious-ink: #9a3f16;
+  --critical-ink: #a62828;
+  /* data: one validated blue ramp (ordinal, lightest step clears 2:1) */
+  --viz-1: #86b6ef;
+  --viz-2: #5598e7;
+  --viz-3: #2a78d6;
+  --viz-4: #1c5cab;
+  --viz-5: #104281;
+  --viz-line: #2a78d6;
+  --viz-grid: #ebe8e0;
+  --shadow: 0 1px 2px rgb(14 17 22 / 0.04), 0 8px 24px -12px rgb(14 17 22 / 0.12);
+  --shadow-lg: 0 2px 4px rgb(14 17 22 / 0.04), 0 24px 48px -16px rgb(14 17 22 / 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #0b0d10;
+    --bg-raised: #101318;
+    --surface: #14181e;
+    --surface-2: #1b2028;
+    --line: #242a33;
+    --line-strong: #323a45;
+    --ink: #f2f1ec;
+    --ink-2: #b9bcc2;
+    --ink-3: #868b93;
+    --brand: #2dd4bf;
+    --brand-ink: #04201d;
+    --brand-soft: #0f2e2b;
+    --brand-glow: #34d399;
+    --focus: #2dd4bf;
+    --good-ink: #5ad35a;
+    --warning-ink: #fab219;
+    --serious-ink: #f09a78;
+    --critical-ink: #ef7c7c;
+    /* dark ordinal ramp: MORE severe = LIGHTER on a dark surface */
+    --viz-1: #184f95;
+    --viz-2: #256abf;
+    --viz-3: #3987e5;
+    --viz-4: #6da7ec;
+    --viz-5: #9ec5f4;
+    --viz-line: #3987e5;
+    --viz-grid: #20262e;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 24px 48px -16px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --bg-raised: #101318;
+  --surface: #14181e;
+  --surface-2: #1b2028;
+  --line: #242a33;
+  --line-strong: #323a45;
+  --ink: #f2f1ec;
+  --ink-2: #b9bcc2;
+  --ink-3: #868b93;
+  --brand: #2dd4bf;
+  --brand-ink: #04201d;
+  --brand-soft: #0f2e2b;
+  --brand-glow: #34d399;
+  --focus: #2dd4bf;
+  --good-ink: #5ad35a;
+  --warning-ink: #fab219;
+  --serious-ink: #f09a78;
+  --critical-ink: #ef7c7c;
+  --viz-1: #184f95;
+  --viz-2: #256abf;
+  --viz-3: #3987e5;
+  --viz-4: #6da7ec;
+  --viz-5: #9ec5f4;
+  --viz-line: #3987e5;
+  --viz-grid: #20262e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 24px 48px -16px rgb(0 0 0 / 0.7);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-glow: var(--brand-glow);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --color-good-ink: var(--good-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-serious-ink: var(--serious-ink);
+  --color-critical-ink: var(--critical-ink);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+}
+
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+
+/* Money and counts line up in columns. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+::selection { background: color-mix(in oklab, var(--brand) 25%, transparent); }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+/* A fine grain that makes flat colour feel like paper. */
+.grain::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+}
+
+/* Thin scrollbars that match the surface. */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }

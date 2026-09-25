@@ -119,6 +119,21 @@ def test_the_audit_trail_records_who_did_what_and_cannot_be_edited(client, demo)
         assert getattr(client, method)(f"/audit/{entry_id}").status_code in (404, 405)
 
 
+def test_legal_figures_are_served_from_config_not_typed_into_the_ui(client) -> None:
+    """The web app quotes statutory numbers only from this endpoint, which reads
+    config/legal.yaml through the engine -- non-negotiable #3."""
+    from engine.config import legal
+    figures = client.get("/meta/legal").json()
+    assert figures["no_agreement_days"] == legal()["no_agreement_days"]
+    assert figures["max_agreement_days"] == legal()["max_agreement_days"]
+    assert figures["bank_rate_multiplier"] == legal()["bank_rate_multiplier"]
+
+
+def test_early_warnings_name_the_buyer_and_explain_themselves(client, demo) -> None:
+    for w in client.get("/dashboard").json()["early_warnings"]:
+        assert w["buyer"] and w["reasons"] and w["risk_band"] in ("watch", "high")
+
+
 def test_business_profile_drives_the_udyam_flag(client) -> None:
     register(client, "owner@example.com", "Profile Co")
     assert client.get("/business").json()["udyam_on_file"] is False

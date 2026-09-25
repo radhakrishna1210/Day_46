@@ -60,6 +60,7 @@ def overview(ctx: TenantContext = Depends(tenant_context), as_of: date | None = 
             if start <= p.paid_on <= today:
                 weeks[(p.paid_on - start).days // 7]["paise"] += p.amount_paise
 
+    names = {b.id: b.name for b in buyers}
     due_soon = [(i, o, l) for i, o, l in open_rows
                 if -14 <= l["days_overdue"] <= 0 and not i.disputed]
 
@@ -84,5 +85,9 @@ def overview(ctx: TenantContext = Depends(tenant_context), as_of: date | None = 
                       "outstanding_paise": o, "due_date": l["statutory_due_date"],
                       "days_to_due": -l["days_overdue"]}
                      for i, o, l in sorted(due_soon, key=lambda r: -r[2]["days_overdue"])][:8],
-        "early_warnings": bridge.early_warnings(buyers, invoices, scores, today)[:8],
+        "early_warnings": [
+            {"invoice_number": w["invoice_id"], "buyer": names.get(w["buyer_id"], ""),
+             "outstanding_paise": w["outstanding_paise"], "days_until_due": w["days_until_due"],
+             "risk_band": w["risk_band"], "reasons": w["reasons"]}
+            for w in bridge.early_warnings(buyers, invoices, scores, today)[:8]],
     }
