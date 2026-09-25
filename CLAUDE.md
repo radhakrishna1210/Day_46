@@ -449,6 +449,18 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       agent +Rs 58,17,884 vs baseline, 192 fewer msgs, 6/6 money + 6/6 matched
       days; agent+EV vs agent 4/6 (3W 1T 2L); learned vs EV 6/6 (4W 2T, mean
       +Rs 3,80,496). 1053 tests pass.
+- [x] S1 - SaaS app "Recova" (branch saas-app; working name). saas/api:
+      FastAPI + SQLAlchemy (SQLite local, Postgres via DATABASE_URL), tenants/
+      users/memberships, email+password auth (scrypt + JWT cookie), every
+      tenant query through app/deps.py TenantContext (cross-tenant ids -> 404,
+      tested), engine used unchanged via app/bridge.py (+ engine/config.py
+      supplier_context() so drafts carry the tenant's identity), append-only
+      per-tenant audit table, GET /meta/legal so the UI never types a legal
+      number. saas/web: Next.js 16 (proxy.ts, async params) + Tailwind v4 +
+      motion + recharts. 20 API tests; web lints clean and builds. Email/
+      WhatsApp/payments deliberately NOT connected (user has other plans);
+      Google sign-in / OTP later. The scope guard below (no dashboards/auth/
+      multi-tenant) was a deadline rule and is lifted for this work.
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
   (sim -> report -> dashboard, in order, no commit). Anything else -- pytest,
