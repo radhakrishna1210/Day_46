@@ -41,8 +41,23 @@ def queue(db: Session, *, to: str, kind: str, subject: str, text: str,
     return row
 
 
+def allowed(to: str) -> bool:
+    """RECOVA_EMAIL_ALLOWLIST (comma-separated addresses or @domains): when set,
+    only those receive real email -- a safety net for development, where demo
+    accounts carry made-up addresses that may belong to real strangers."""
+    rules = [r.strip().lower() for r in settings.env("RECOVA_EMAIL_ALLOWLIST").split(",") if r.strip()]
+    if not rules:
+        return True
+    to = to.lower()
+    return any(to == r or (r.startswith("@") and to.endswith(r)) for r in rules)
+
+
 def deliver(db: Session, row: OutboxEmail) -> bool:
     """Try to send one queued email; record the outcome on the row."""
+    if settings.smtp_enabled() and not allowed(row.to_email):
+        row.status, row.last_error = "blocked", "not sent: outside RECOVA_EMAIL_ALLOWLIST"
+        log.warning("email to %s blocked by RECOVA_EMAIL_ALLOWLIST (%s)", row.to_email, row.kind)
+        return False
     row.attempts += 1
     try:
         if settings.smtp_enabled():

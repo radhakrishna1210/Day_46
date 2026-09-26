@@ -96,7 +96,8 @@ def _me(db: Session, user: User, active_tenant_id: str | None) -> dict:
                      "email_verified": user.email_verified,
                      "has_password": user.password_hash is not None,
                      "google_linked": user.google_sub is not None,
-                     "is_super_admin": is_super_admin(user)},
+                     "is_super_admin": is_super_admin(user),
+                     "digest_opt_out": user.digest_opt_out},
             "businesses": businesses, "active_business": active}
 
 
@@ -190,6 +191,20 @@ def session_info(db: Session = Depends(get_db), user: User = Depends(current_use
     """Who am I, which businesses can I use, which one is active."""
     claims = read_session(session) if session else None
     return _me(db, user, (claims or {}).get("tid"))
+
+
+class PreferencesIn(BaseModel):
+    digest_opt_out: bool
+
+
+@router.put("/preferences")
+def preferences(body: PreferencesIn, db: Session = Depends(get_db),
+                user: User = Depends(current_user),
+                session: str | None = Cookie(default=None, alias=SESSION_COOKIE)) -> dict:
+    """Per person, not per business: the morning digest on or off."""
+    user.digest_opt_out = body.digest_opt_out
+    db.commit()
+    return _me(db, user, (read_session(session) or {}).get("tid") if session else None)
 
 
 @router.post("/switch")

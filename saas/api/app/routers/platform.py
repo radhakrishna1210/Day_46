@@ -49,6 +49,7 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(super_admin))
     businesses = [{
         "id": t.id, "name": t.legal_name, "created_at": _iso(t.created_at),
         "suspended_at": _iso(t.suspended_at),
+        "last_daily_run": t.last_daily_run.isoformat() if t.last_daily_run else None,
         "owner_email": owners.get(t.id), "members": members.get(t.id, 0),
         "buyers": buyers.get(t.id, 0), "invoices": invoices.get(t.id, 0),
         "udyam_registered": bool(t.udyam_registration),
@@ -75,9 +76,22 @@ def overview(db: Session = Depends(get_db), _admin: User = Depends(super_admin))
         "users": users,
         "email": {"sent": email_status.get("sent", 0), "queued": email_status.get("queued", 0),
                   "failed": email_status.get("failed", 0),
+                  "blocked": email_status.get("blocked", 0),
                   "recent_failures": [{"to": e.to_email, "kind": e.kind, "at": _iso(e.created_at),
                                        "error": (e.last_error or "")[:200]} for e in failed]},
     }
+
+
+@router.post("/daily-run")
+def daily_run(force: bool = False, db: Session = Depends(get_db),
+              _admin: User = Depends(super_admin)) -> dict:
+    """Run today's daily run now instead of waiting for the scheduler. Without
+    force, businesses that already ran today are skipped (no double emails)."""
+    from app import digest   # late: digest imports the decisions router
+    ran = digest.run_daily(db, force=force)
+    return {"ran": len(ran), "emailed": sum(len(r["emailed"]) for r in ran),
+            "businesses": [{"name": r["tenant"], "emailed": len(r["emailed"]),
+                            "to_act": r["summary"]["to_act"]} for r in ran]}
 
 
 # --------------------------------------------------------------------------

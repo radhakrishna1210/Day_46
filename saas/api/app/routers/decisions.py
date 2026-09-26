@@ -12,11 +12,13 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app import audit, bridge
 from app.clock import today_for
 from app.deps import TenantContext, tenant_context
-from app.models import Buyer, ContactLog, Invoice
+from app.models import Buyer, ContactLog, Invoice, Tenant
 
 router = APIRouter(prefix="/decisions", tags=["decisions"])
 
@@ -37,12 +39,17 @@ def _decision_row(inv: Invoice, decision: dict, legal: dict, owed: int) -> dict:
 
 @router.get("")
 def queue(ctx: TenantContext = Depends(tenant_context), as_of: date | None = None) -> dict:
-    today = today_for(as_of)
-    buyers = ctx.db.scalars(ctx.scoped(Buyer)).all()
-    invoices = ctx.db.scalars(ctx.scoped(Invoice)).all()
+    return build_queue(ctx.db, ctx.tenant, today_for(as_of))
+
+
+def build_queue(db: Session, tenant: Tenant, today: date) -> dict:
+    """The queue for one business on one day. No request needed, so the daily
+    run (app/digest.py) computes exactly what the Decisions page shows."""
+    buyers = db.scalars(select(Buyer).where(Buyer.tenant_id == tenant.id)).all()
+    invoices = db.scalars(select(Invoice).where(Invoice.tenant_id == tenant.id)).all()
     scores = bridge.score_buyers(buyers, invoices, today)
     rows = []
-    with bridge.as_tenant(ctx.tenant):
+    with bridge.as_tenant(tenant):
         for inv in invoices:
             owed = bridge.outstanding(inv, today)
             if owed <= 0:

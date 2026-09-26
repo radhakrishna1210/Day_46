@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { Building2, Mail, ShieldCheck, Users } from "lucide-react";
 import { useState } from "react";
-import { Card, CardHeader, EmptyState, ErrorNote, PageHeader, Pill, Skeleton, stagger } from "@/components/ui";
+import { Button, Card, CardHeader, EmptyState, ErrorNote, PageHeader, Pill, Skeleton, stagger } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
 import { date, dateTime, plural } from "@/lib/format";
@@ -20,7 +20,7 @@ type Overview = {
     has_password: boolean; google_linked: boolean; businesses: number; is_super_admin: boolean;
     suspended_at: string | null;
   }[];
-  email: { sent: number; queued: number; failed: number; recent_failures: { to: string; kind: string; at: string | null; error: string }[] };
+  email: { sent: number; queued: number; failed: number; blocked: number; recent_failures: { to: string; kind: string; at: string | null; error: string }[] };
 };
 
 function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Users }) {
@@ -70,6 +70,24 @@ function SuspendButton({ kind, id, name, suspended, onDone }: {
   );
 }
 
+function RunNowButton({ onDone }: { onDone: () => Promise<void> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    try {
+      const r = await api<{ ran: number; emailed: number }>("/platform/daily-run", { method: "POST" });
+      toast(r.ran ? `Daily run done for ${r.ran} business${r.ran === 1 ? "" : "es"}, ${r.emailed} digest${r.emailed === 1 ? "" : "s"} emailed` : "Every business already ran today");
+      await onDone();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "That didn’t work", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Button variant="secondary" loading={busy} onClick={() => void go()}>Run today’s daily run now</Button>;
+}
+
 export default function PlatformPage() {
   const { data, error, loading, reload } = useApi<Overview>("/platform/overview");
 
@@ -84,7 +102,7 @@ export default function PlatformPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Platform · super admin" title="Everyone on Recova"
+      <PageHeader eyebrow="Platform · super admin" title="Everyone on Recova" actions={<RunNowButton onDone={reload} />}
         description="Every business and user on this Recova server. Counts only: no buyer, invoice or message from any business is shown here. Suspending is recorded in the affected businesses’ own audit trails." />
 
       {loading && !data ? (
@@ -195,6 +213,7 @@ export default function PlatformPage() {
               <Pill tone="good">{data.email.sent} sent</Pill>
               <Pill tone="neutral">{data.email.queued} queued</Pill>
               <Pill tone={data.email.failed ? "critical" : "neutral"}>{data.email.failed} failed</Pill>
+              {data.email.blocked > 0 && <Pill tone="warning">{data.email.blocked} held back by the allow-list</Pill>}
             </div>
             {data.email.recent_failures.length > 0 && (
               <ul className="divide-y divide-line border-t border-line">

@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { BadgeCheck, Building2, Landmark, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "@/components/session";
+import { DigestCard } from "@/components/digest-card";
 import { TeamCard } from "@/components/team";
 import { Button, Card, CardHeader, ErrorNote, Field, PageHeader, Select, Skeleton } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -100,6 +101,7 @@ function SideCards({ legal }: { legal: LegalFigures | null }) {
   return (
         <div className="space-y-6">
           <TeamCard />
+          <DigestCard />
 
           <Card>
             <CardHeader title="Legal figures in use" subtitle={legal ? `As of ${legal.as_of}` : "Loading…"} action={<Landmark className="size-4 text-ink-3" />} />

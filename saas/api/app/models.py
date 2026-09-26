@@ -176,6 +176,8 @@ class Promise(Base):
     recorded_on: Mapped[date] = mapped_column(Date)
     note: Mapped[str | None] = mapped_column(String(300))
 
+    invoice: Mapped[Invoice] = relationship(viewonly=True)
+
 
 class ContactLog(Base):
     """A reminder the tenant approved at a given rung. With channels not yet
@@ -222,7 +224,7 @@ class OutboxEmail(Base):
     subject: Mapped[str] = mapped_column(String(300))
     body_text: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(10), default="queued")   # queued | sent | failed
+    status: Mapped[str] = mapped_column(String(10), default="queued")   # queued|sent|failed|blocked
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

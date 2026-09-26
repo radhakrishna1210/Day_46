@@ -15,7 +15,7 @@ export type InviteInfo = {
 };
 
 export type Session = {
-  user: { id: string; name: string; email: string; email_verified: boolean; has_password: boolean; google_linked: boolean; is_super_admin: boolean };
+  user: { id: string; name: string; email: string; email_verified: boolean; has_password: boolean; google_linked: boolean; is_super_admin: boolean; digest_opt_out: boolean };
   businesses: Business[];
   active_business: Business | null;
 };
