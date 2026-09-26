@@ -65,3 +65,67 @@ def test_overview_counts_every_business_but_carries_no_ledger_detail(client, sec
     assert body["totals"]["invoices"] == owner_works["invoices"]
     text = str(body)
     assert "INV-" not in text and "amount_paise" not in text and "outstanding" not in text
+
+
+def _admin(client, monkeypatch) -> None:
+    monkeypatch.setenv("RECOVA_SUPER_ADMIN_EMAILS", ADMIN)
+    register(client, ADMIN, "Boss Works")
+    _verify(client, ADMIN)
+
+
+def _ids(client) -> tuple[dict, dict]:
+    body = client.get("/platform/overview").json()
+    return ({b["name"]: b["id"] for b in body["businesses"]},
+            {u["email"]: u["id"] for u in body["users"]})
+
+
+def test_suspending_a_user_locks_them_out_until_reactivated(client, second_client,
+                                                           monkeypatch) -> None:
+    _admin(client, monkeypatch)
+    register(second_client, "owner@example.com", "Owner Works")
+    _, users = _ids(client)
+    res = client.post(f"/platform/users/{users['owner@example.com']}/suspend",
+                      json={"reason": "chargeback"})
+    assert res.status_code == 200 and res.json()["suspended_at"]
+
+    assert second_client.get("/dashboard").status_code == 403       # live session ends
+    second_client.post("/auth/logout")
+    login = second_client.post("/auth/login", json={"email": "owner@example.com",
+                                                    "password": "correct horse 9"})
+    assert login.status_code == 403 and "suspended" in login.json()["detail"]
+
+    assert client.post(f"/platform/users/{users['owner@example.com']}/reactivate").status_code == 200
+    assert second_client.post("/auth/login", json={"email": "owner@example.com",
+                                                   "password": "correct horse 9"}).status_code == 200
+    assert second_client.get("/dashboard").status_code == 200
+    reasons = [e["reason"] for e in second_client.get("/audit").json()["entries"]]
+    assert any("suspended owner@example.com -- chargeback" in r for r in reasons)
+
+
+def test_suspending_a_business_freezes_it_for_every_member(client, second_client,
+                                                           monkeypatch) -> None:
+    _admin(client, monkeypatch)
+    register(second_client, "owner@example.com", "Owner Works")
+    businesses, _ = _ids(client)
+    assert client.post(f"/platform/businesses/{businesses['Owner Works']}/suspend").status_code == 200
+
+    blocked = second_client.get("/dashboard")
+    assert blocked.status_code == 403 and "business is suspended" in blocked.json()["detail"]
+    me = second_client.get("/auth/session").json()                   # still signed in
+    assert me["active_business"]["suspended"] is True
+
+    client.post(f"/platform/businesses/{businesses['Owner Works']}/reactivate")
+    assert second_client.get("/dashboard").status_code == 200
+    actions = [e["action"] for e in second_client.get("/audit").json()["entries"]]
+    assert "business_suspended" in actions and "business_reactivated" in actions
+
+
+def test_super_admins_cannot_be_suspended_and_others_cannot_suspend(client, second_client,
+                                                                    monkeypatch) -> None:
+    _admin(client, monkeypatch)
+    register(second_client, "owner@example.com", "Owner Works")
+    businesses, users = _ids(client)
+    assert client.post(f"/platform/users/{users[ADMIN]}/suspend").status_code == 409
+    assert second_client.post(f"/platform/users/{users[ADMIN]}/suspend").status_code == 404
+    assert second_client.post(
+        f"/platform/businesses/{businesses['Boss Works']}/suspend").status_code == 404

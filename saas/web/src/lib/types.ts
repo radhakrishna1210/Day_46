@@ -1,4 +1,4 @@
-export type Business = { id: string; name: string; role: Role };
+export type Business = { id: string; name: string; role: Role; suspended?: boolean };
 
 export type Role = "owner" | "admin" | "member" | "viewer";
 

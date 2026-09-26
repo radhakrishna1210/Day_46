@@ -89,8 +89,8 @@ def _first_tenant_id(db: Session, user: User) -> str | None:
 
 def _me(db: Session, user: User, active_tenant_id: str | None) -> dict:
     memberships = db.scalars(select(Membership).where(Membership.user_id == user.id)).all()
-    businesses = [{"id": m.tenant.id, "name": m.tenant.legal_name, "role": m.role}
-                  for m in memberships]
+    businesses = [{"id": m.tenant.id, "name": m.tenant.legal_name, "role": m.role,
+                   "suspended": m.tenant.suspended_at is not None} for m in memberships]
     active = next((b for b in businesses if b["id"] == active_tenant_id), None)
     return {"user": {"id": user.id, "name": user.name, "email": user.email,
                      "email_verified": user.email_verified,

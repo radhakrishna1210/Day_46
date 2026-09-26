@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Building2, Check, ChevronsUpDown, Eye, FileText, Gavel, LayoutDashboard, LogOut, MailCheck, Menu, Moon,
-  ScrollText, Settings, ShieldCheck, Sun, Upload, Users, X,
+  ScrollText, Settings, ShieldAlert, ShieldCheck, Sun, Upload, Users, X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Logo } from "@/components/logo";
@@ -121,6 +121,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Logo />
           </div>
           {!session.user.email_verified && <VerifyEmailBanner email={session.user.email} onVerified={refresh} />}
+          {session.active_business?.suspended && (
+            <div className="flex items-center gap-2 border-b border-line bg-[color-mix(in_oklab,var(--critical)_12%,var(--bg))] px-4 py-2.5 text-[13px] text-critical-ink sm:px-8">
+              <ShieldAlert className="size-4 shrink-0" aria-hidden />
+              {session.active_business.name} is suspended by Recova, so its data can’t be opened. Contact Recova support.
+            </div>
+          )}
           {session.active_business?.role === "viewer" && (
             <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2 text-[13px] text-ink-2 sm:px-8">
               <Eye className="size-4 shrink-0 text-ink-3" aria-hidden />
