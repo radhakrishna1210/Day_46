@@ -25,6 +25,8 @@ def client(tmp_path, monkeypatch):
     # SMTP_HOST empty the mailer records into mailer.DEV_SENT instead.
     monkeypatch.setenv("SMTP_HOST", "")
     monkeypatch.setenv("RECOVA_PUBLIC_URL", "http://localhost:3000")
+    # No super admin unless a test names one (saas/api/.env may list a real one).
+    monkeypatch.setenv("RECOVA_SUPER_ADMIN_EMAILS", "")
     from app import mailer
     mailer.DEV_SENT.clear()
     engine = db_module.make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Building2, Check, ChevronsUpDown, FileText, Gavel, LayoutDashboard, LogOut, MailCheck, Menu, Moon,
-  ScrollText, Settings, Sun, Upload, Users, X,
+  ScrollText, Settings, ShieldCheck, Sun, Upload, Users, X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Logo } from "@/components/logo";
@@ -25,6 +25,9 @@ const NAV = [
   { href: "/app/audit", label: "Audit trail", icon: ScrollText },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
+
+// Only for platform super admins (the API decides; this just hides the link).
+const PLATFORM_NAV = { href: "/app/platform", label: "Platform", icon: ShieldCheck };
 
 /** The theme lives on <html data-theme> (or the OS setting) -- external state,
  *  so it is read with useSyncExternalStore rather than mirrored into React. */
@@ -182,7 +185,7 @@ function Sidebar({ session }: { session: Session }) {
       <div className="px-5 pt-5 pb-4"><Link href="/app"><Logo /></Link></div>
       <div className="px-3"><BusinessSwitcher session={session} /></div>
       <nav className="mt-4 flex-1 space-y-0.5 px-3">
-        {NAV.map(({ href, label, icon: Icon }) => (
+        {(session.user.is_super_admin ? [...NAV, PLATFORM_NAV] : NAV).map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}

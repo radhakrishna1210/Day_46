@@ -13,7 +13,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.db import create_all
-from app.routers import audit_log, auth, business, buyers, dashboard, decisions, invoices, meta
+from app.routers import (audit_log, auth, business, buyers, dashboard, decisions, invoices, meta,
+                         platform)
 
 
 @asynccontextmanager
@@ -26,7 +27,7 @@ app = FastAPI(title="Recova API", version="0.1.0", lifespan=lifespan,
               description="Receivables recovery for Indian MSMEs -- rules decide, AI writes, "
                           "every action audited.")
 
-for module in (auth, business, buyers, invoices, dashboard, decisions, audit_log, meta):
+for module in (auth, business, buyers, invoices, dashboard, decisions, audit_log, meta, platform):
     app.include_router(module.router)
 
 

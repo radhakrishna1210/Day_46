@@ -15,6 +15,7 @@ from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import settings
 from app.db import get_db
 from app.models import Membership, Tenant, User
 from app.security import SESSION_COOKIE, read_session
@@ -26,6 +27,19 @@ def current_user(db: Session = Depends(get_db),
     user = db.get(User, claims["sub"]) if claims else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in")
+    return user
+
+
+def is_super_admin(user: User) -> bool:
+    """Listed in RECOVA_SUPER_ADMIN_EMAILS *and* the email is verified -- so
+    registering someone else's address with a password grants nothing."""
+    return user.email_verified and user.email.lower() in settings.super_admin_emails()
+
+
+def super_admin(user: User = Depends(current_user)) -> User:
+    """Gate for the platform area. 404, not 403, so it is not advertised."""
+    if not is_super_admin(user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     return user
 
 

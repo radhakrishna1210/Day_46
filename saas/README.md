@@ -45,11 +45,12 @@ API settings live in `saas/api/.env` (copy `saas/api/.env.example`; git-ignored)
 | `RECOVA_PUBLIC_URL` | API env | `http://localhost:3000` — builds the Google redirect URI and email links |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | API env | empty = no Google button |
 | `SMTP_HOST` … `MAIL_FROM` | API env | empty host = emails (incl. sign-in codes) printed to the API log, not sent |
+| `RECOVA_SUPER_ADMIN_EMAILS` | API env | empty = no platform admin. Comma-separated; counts only once that email is verified |
 | `RECOVA_TODAY` | API env | real date — pin a day for demos and tests |
 | `RECOVA_API_URL` | web env | `http://127.0.0.1:8000` |
 | `LLM_MODE` | repo `.env` | `mock` — canned, deterministic drafts; `live` uses Gemini via `engine/llm.py` |
 
-Tests: `cd saas/api && python -m pytest tests` (37, including cross-tenant
+Tests: `cd saas/api && python -m pytest tests` (42, including cross-tenant
 isolation). The engine's own suite still runs from the repo root.
 
 ## What is built
@@ -64,6 +65,15 @@ isolation). The engine's own suite still runs from the repo root.
   you its owner; a Google sign-up names its business on a welcome step. Users can belong to several businesses and switch between
   them. Every tenant query goes through one scoped path (`app/deps.py`); another
   business's ids read as *not found*, and tests try to break that.
+- **Platform super admin.** Whoever runs the server, set only by
+  `RECOVA_SUPER_ADMIN_EMAILS` (never by sign-up or invite) and only once that
+  email is verified. They get a **Platform** page listing every business and
+  user as counts (team, buyers, invoices, last activity) plus email-delivery
+  health — no buyer, invoice or message from any business. Everyone else gets
+  a 404 there. Read-only for now.
+- **Roles inside a business:** owner, admin, member. Owner and admin can edit
+  the business profile, delete buyers/invoices and load demo data; members do
+  the day-to-day work. (Assigning admin/member arrives with team invites.)
 - **Screens.** Landing page · sign-in / sign-up · Overview (receivable, overdue,
   statutory interest, aging chart, 12-week collections, who owes most, coming
   due, early warnings) · Today's decisions (per invoice: the decision, its

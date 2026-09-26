@@ -1,7 +1,7 @@
 export type Business = { id: string; name: string; role: "owner" | "admin" | "member" };
 
 export type Session = {
-  user: { id: string; name: string; email: string; email_verified: boolean; has_password: boolean; google_linked: boolean };
+  user: { id: string; name: string; email: string; email_verified: boolean; has_password: boolean; google_linked: boolean; is_super_admin: boolean };
   businesses: Business[];
   active_business: Business | null;
 };

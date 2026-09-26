@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, google, mailer, otp, settings
 from app.db import get_db
-from app.deps import current_user
+from app.deps import current_user, is_super_admin
 from app.models import Membership, Tenant, User
 from app.security import (SESSION_COOKIE, SESSION_DAYS, hash_password, issue_session,
                           read_session, verify_password)
@@ -91,7 +91,8 @@ def _me(db: Session, user: User, active_tenant_id: str | None) -> dict:
     return {"user": {"id": user.id, "name": user.name, "email": user.email,
                      "email_verified": user.email_verified,
                      "has_password": user.password_hash is not None,
-                     "google_linked": user.google_sub is not None},
+                     "google_linked": user.google_sub is not None,
+                     "is_super_admin": is_super_admin(user)},
             "businesses": businesses, "active_business": active}
 
 

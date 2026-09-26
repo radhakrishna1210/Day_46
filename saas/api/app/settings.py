@@ -32,3 +32,11 @@ def google_enabled() -> bool:
 
 def smtp_enabled() -> bool:
     return bool(env("SMTP_HOST"))
+
+
+def super_admin_emails() -> frozenset[str]:
+    """Platform super admins: the people who run Recova itself, not any one
+    business. Set only here (RECOVA_SUPER_ADMIN_EMAILS, comma-separated), never
+    through the app, so no sign-up or invite can grant it."""
+    return frozenset(e.strip().lower() for e in env("RECOVA_SUPER_ADMIN_EMAILS").split(",")
+                     if e.strip())
