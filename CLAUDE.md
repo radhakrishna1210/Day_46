@@ -461,6 +461,15 @@ Hard deadline: submission by Sept 5, 2026. Prefer finished-and-honest over fancy
       WhatsApp/payments deliberately NOT connected (user has other plans);
       Google sign-in / OTP later. The scope guard below (no dashboards/auth/
       multi-tenant) was a deadline rule and is lifted for this work.
+- [x] S2 - Recova, second pass (branch saas-app): Google sign-in + email codes
+      + SMTP outbox; platform super admin (RECOVA_SUPER_ADMIN_EMAILS, verified
+      email only) with suspend/reactivate; team invites + owner/admin/member/
+      viewer (viewer blocked on every non-read request in deps.py); daily run +
+      morning digest (background loop, one per business per day, audited);
+      buyer replies (engine.promises.parse_reply when LLM_MODE=live, else an
+      offline keyword reader labelled rules; a person confirms);
+      RECOVA_EMAIL_ALLOWLIST keeps real email to the owner's own inboxes
+      (non-negotiable #4); phone + dark pass. 77 API tests.
 Notes for next session: (keep 3-5 bullets max, prune old ones)
 - Regenerate the 5 committed artifacts with ONE command: `python scripts/regen.py`
   (sim -> report -> dashboard, in order, no commit). Anything else -- pytest,

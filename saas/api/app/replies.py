@@ -143,6 +143,8 @@ def offline(text: str, today: date, outstanding_paise: int | None = None) -> dic
     amount = None
     if intent == "promise":
         amount = "partial" if any(w in t for w in PARTIAL) else "full"
+    else:
+        when = None     # a date only means something on a promise (a dispute outranks it)
     out: dict[str, Any] = {"intent": intent, "date": when.isoformat() if when else None,
                            "amount": amount, "confidence": confidence,
                            "quote": text[:160], "source": "rule"}

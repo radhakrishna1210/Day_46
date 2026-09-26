@@ -42,6 +42,7 @@ def test_offline_reader_applies_the_engine_bounds() -> None:
 def test_flags_for_a_human(monkeypatch) -> None:
     got = replies.read("goods were damaged, but Rs 1 lakh Friday and Rs 4 lakh next month", DAY)
     assert got["reader"] == "rules" and got["intent"] == "dispute"
+    assert got["date"] is None                      # a dispute outranks the payment offer
     promise = replies.read("Rs 1 lakh on 30th and remaining Rs 2 lakh later", DAY)
     assert any("more than one amount" in f for f in promise["flags"])
 

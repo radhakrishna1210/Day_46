@@ -46,12 +46,14 @@ API settings live in `saas/api/.env` (copy `saas/api/.env.example`; git-ignored)
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | API env | empty = no Google button |
 | `SMTP_HOST` … `MAIL_FROM` | API env | empty host = emails (incl. sign-in codes) printed to the API log, not sent |
 | `RECOVA_SUPER_ADMIN_EMAILS` | API env | empty = no platform admin. Comma-separated; counts only once that email is verified |
+| `RECOVA_EMAIL_ALLOWLIST` | API env | empty = email anyone. Set in development: only these addresses / `@domains` get real email |
+| `RECOVA_SCHEDULER` / `RECOVA_DIGEST_HOUR` | API env | `on` / `8` — the daily run + digest, once per business per day after that local hour |
 | `RECOVA_TODAY` | API env | real date — pin a day for demos and tests |
 | `RECOVA_API_URL` | web env | `http://127.0.0.1:8000` |
 | `LLM_MODE` | repo `.env` | `mock` — canned, deterministic drafts; `live` uses Gemini via `engine/llm.py` |
 
-Tests: `cd saas/api && python -m pytest tests` (42, including cross-tenant
-isolation). The engine's own suite still runs from the repo root.
+Tests: `cd saas/api && python -m pytest tests` (77, including cross-tenant
+isolation and every role rule). The engine's own suite still runs from the repo root.
 
 ## What is built
 
@@ -69,11 +71,33 @@ isolation). The engine's own suite still runs from the repo root.
   `RECOVA_SUPER_ADMIN_EMAILS` (never by sign-up or invite) and only once that
   email is verified. They get a **Platform** page listing every business and
   user as counts (team, buyers, invoices, last activity) plus email-delivery
-  health — no buyer, invoice or message from any business. Everyone else gets
-  a 404 there. Read-only for now.
-- **Roles inside a business:** owner, admin, member. Owner and admin can edit
-  the business profile, delete buyers/invoices and load demo data; members do
-  the day-to-day work. (Assigning admin/member arrives with team invites.)
+  health — no buyer, invoice or message from any business — and can
+  **suspend / reactivate** a business or a user (recorded in the affected
+  businesses' own audit trails) or run the daily run on demand. Everyone else
+  gets a 404 there. A super admin needs no business of their own.
+- **Team invites and four roles.** Settings → Team: invite by email as admin,
+  member or viewer (7-day link, only the hash stored, one live invite per
+  address; resend / cancel). **Owner** — everything, one per business, hands
+  over by an explicit transfer. **Admin** — profile, deletes, the team (never
+  the owner). **Member** — buyers, invoices, payments, promises, sends.
+  **Viewer** — reads everything, changes nothing (refused on every non-read
+  request in one place, `app/deps.py`). Nobody edits their own role; anyone but
+  the owner can leave. `/invite/<token>` handles signed-in, wrong-account,
+  existing-account, new-account and Google.
+- **Daily run + morning digest.** Once a day per business after
+  `RECOVA_DIGEST_HOUR`: today's decision queue (the same code as the Decisions
+  page), one audit row, and an email to verified owners/admins/members who
+  haven't switched it off — top actions, promises due, totals. Nothing to do →
+  no email. Settings shows today's digest and can email it to you now.
+- **Buyer replies.** Paste what a buyer said (English or Hinglish). With
+  `LLM_MODE=live` the engine's own reader (`engine.promises.parse_reply`,
+  Gemini) reads it; without a key a small keyword reader stands in, labelled
+  as rules, using the engine's date resolver and sanity bounds. A person
+  confirms or corrects before anything changes (a promise pauses reminders, a
+  dispute goes to a person); both steps are audited.
+- **Email allow-list.** `RECOVA_EMAIL_ALLOWLIST` (development): only listed
+  addresses get real email, the rest are recorded as blocked — demo accounts
+  carry made-up addresses.
 - **Screens.** Landing page · sign-in / sign-up · Overview (receivable, overdue,
   statutory interest, aging chart, 12-week collections, who owes most, coming
   due, early warnings) · Today's decisions (per invoice: the decision, its
@@ -96,8 +120,8 @@ isolation). The engine's own suite still runs from the repo root.
 - **Sending.** Email, WhatsApp and payment links are not wired in. Recova drafts
   the message; the owner sends it themselves and marks it sent (with the
   channel), which the engine needs as history to pace the next one.
-- **Team invites.** Email delivery exists now; the invite flow itself is next.
 - **Row-level security in Postgres**, as a second barrier behind the app-level
-  scoping, once the database is Postgres.
-- **Background daily runs / notifications.** Decisions are computed on demand
-  when the page loads.
+  scoping, once the database is Postgres — and Alembic migrations (today a
+  startup step only ADDS missing columns).
+- **Replies arriving by themselves.** Replies are pasted in; reading them from
+  a WhatsApp or email inbox comes with those channels.

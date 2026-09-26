@@ -62,7 +62,26 @@ export default function InvoicesPage() {
             body={data?.length ? "Try another filter or search." : "Add one, or import a CSV from your accounting software."}
             action={!data?.length && <Link href="/app/import"><Button variant="secondary">Import a CSV</Button></Link>} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phones: one card per invoice. The table below takes over from sm up. */}
+          <ul className="divide-y divide-line sm:hidden">
+            {rows.slice(0, 300).map((r) => (
+              <li key={r.id}>
+                <Link href={`/app/invoices/${r.id}`} className="flex items-start justify-between gap-3 px-4 py-3.5 active:bg-bg-raised">
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-medium">{r.invoice_number}</span>
+                    <span className="block truncate text-[13px] text-ink-2">{r.buyer.name}</span>
+                    <span className="mt-1.5 block"><StatusPill row={r} /></span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="tnum block font-mono text-[14px]">{r.outstanding_paise ? rupees(r.outstanding_paise) : "—"}</span>
+                    <span className="block text-[12px] text-ink-3">due {date(r.statutory_due_date)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[760px] text-[13.5px]">
               <thead className="bg-bg-raised text-left text-[12px] text-ink-3">
                 <tr>
@@ -86,6 +105,7 @@ export default function InvoicesPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
 

@@ -106,10 +106,10 @@ export default function PlatformPage() {
         description="Every business and user on this Recova server. Counts only: no buyer, invoice or message from any business is shown here. Suspending is recorded in the affected businesses’ own audit trails." />
 
       {loading && !data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : data && (
         <>
-          <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <Stat label="Businesses" value={data.totals.businesses} icon={Building2} />
             <Stat label="Users" value={data.totals.users} icon={Users} />
             <Stat label="Buyers tracked" value={data.totals.buyers} icon={Users} />

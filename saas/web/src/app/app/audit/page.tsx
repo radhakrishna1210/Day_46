@@ -56,8 +56,9 @@ export default function AuditPage() {
                       {e.buyer_name && <span className="text-[12.5px] text-ink-3">· {e.buyer_name}</span>}
                     </div>
                     <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{e.reason}</p>
+                    <p className="mt-1 truncate text-[12px] text-ink-3 sm:hidden">{dateTime(e.at)} · {e.actor}</p>
                   </div>
-                  <div className="shrink-0 text-right text-[12px] text-ink-3">
+                  <div className="hidden shrink-0 text-right text-[12px] text-ink-3 sm:block">
                     <div>{dateTime(e.at)}</div>
                     <div className="mt-0.5 max-w-[160px] truncate">{e.actor}</div>
                   </div>
