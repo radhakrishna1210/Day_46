@@ -112,6 +112,9 @@ def legal_summary(inv: Invoice, today: date) -> dict[str, Any]:
     pos = law.legal_position(invoice_record(inv), today)
     return {
         "statutory_due_date": pos["statutory_due_date"],
+        # days_overdue is floored at 0 by the engine, so it cannot say how far
+        # off a not-yet-due invoice is; this can (negative once overdue).
+        "days_to_due": (date.fromisoformat(pos["statutory_due_date"]) - today).days,
         "interest_from": pos["interest_from"],
         "days_overdue": pos["days_overdue"],
         "principal_paise": pos["principal_paise"],

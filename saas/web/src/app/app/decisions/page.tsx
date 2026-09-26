@@ -26,6 +26,11 @@ const KIND_LABEL: Record<DecisionKind, string> = {
   handoff: "Hand to a person", wait: "Wait", stop: "Stop",
 };
 
+function isWeekend(iso: string) {
+  const day = new Date(`${iso}T00:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
 export default function DecisionsPage() {
   const { data, error, loading, reload } = useApi<{ as_of: string; tally: Record<string, number>; decisions: Decision[] }>("/decisions");
   const [group, setGroup] = useState<Group>("act");
@@ -61,7 +66,16 @@ export default function DecisionsPage() {
       {loading && !data ? (
         <div className="space-y-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)}</div>
       ) : rows.length === 0 ? (
-        <Card><EmptyState icon={<ShieldCheck className="size-6" />} title="Nothing here" body={group === "act" ? "No reminders are due today. Spacing, promises and weekends are all respected." : "No invoices in this group today."} /></Card>
+        <Card>
+          {group === "act" && data && isWeekend(data.as_of) && counts.wait > 0 ? (
+            <EmptyState icon={<Hourglass className="size-6" />} title="It’s the weekend"
+              body={`Reminders never go out on a Saturday or Sunday. ${plural(counts.wait, "invoice")} are waiting and come back on Monday.`}
+              action={<Button variant="secondary" onClick={() => setGroup("wait")}>See what’s waiting</Button>} />
+          ) : (
+            <EmptyState icon={<ShieldCheck className="size-6" />} title="Nothing here"
+              body={group === "act" ? "No reminders are due today. Spacing, promises and weekends are all respected." : "No invoices in this group today."} />
+          )}
+        </Card>
       ) : (
         <motion.ul layout className="space-y-3">
           <AnimatePresence initial={false}>

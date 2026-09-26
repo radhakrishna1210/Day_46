@@ -70,7 +70,8 @@ def invoice_out(inv: Invoice, today: date, *, detail: bool = False) -> dict:
         "written_agreement": inv.written_agreement, "agreed_days": inv.agreed_days,
         "disputed": inv.disputed, "status": status_,
         "statutory_due_date": legal["statutory_due_date"],
-        "days_overdue": legal["days_overdue"], "interest_paise": legal["interest_paise"],
+        "days_overdue": legal["days_overdue"], "days_to_due": legal["days_to_due"],
+        "interest_paise": legal["interest_paise"],
     }
     if detail:
         out |= {

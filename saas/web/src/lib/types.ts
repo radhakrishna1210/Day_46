@@ -36,6 +36,8 @@ export type InvoiceRow = {
   written_agreement: boolean; agreed_days: number | null;
   disputed: boolean; status: InvoiceStatus;
   statutory_due_date: string; days_overdue: number; interest_paise: number;
+  /** Days until the statutory due date; negative once overdue. */
+  days_to_due: number;
 };
 
 export type Legal = {

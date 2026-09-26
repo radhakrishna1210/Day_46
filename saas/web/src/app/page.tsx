@@ -88,7 +88,7 @@ function Hero() {
           </motion.div>
           <motion.h1 variants={stagger.item} className="font-display text-[52px] leading-[0.98] tracking-tight sm:text-[76px]">
             Get paid what you’re owed.
-            <span className="block italic text-transparent [background:linear-gradient(90deg,#2dd4bf,#86b6ef)] [-webkit-background-clip:text] [background-clip:text]">
+            <span className="block bg-gradient-to-r from-[#2dd4bf] to-[#86b6ef] bg-clip-text pb-1 italic text-transparent">
               Politely. Legally. On time.
             </span>
           </motion.h1>
@@ -140,7 +140,7 @@ function HeroCards() {
         </div>
       </Float>
 
-      <Float delay={0.45} className="absolute right-0 top-28 w-[290px]">
+      <Float delay={0.45} className="absolute right-0 top-40 w-[290px]">
         <div className="rounded-2xl border border-[#2dd4bf]/30 bg-[#0f2e2b]/70 p-5 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-2 text-[12px] font-medium tracking-wide text-[#2dd4bf] uppercase"><Gavel className="size-3.5" /> Today’s decision</div>
           <div className="mt-2 text-[15px] font-medium">Send a firm reminder</div>
@@ -154,7 +154,7 @@ function HeroCards() {
         </div>
       </Float>
 
-      <Float delay={0.7} className="absolute bottom-2 left-10 w-[330px]">
+      <Float delay={0.7} className="absolute -bottom-6 left-10 w-[330px]">
         <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-4 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-2 text-[12px] text-white/50"><ScrollText className="size-3.5" /> Audit trail</div>
           <ul className="mt-2 space-y-2 text-[12.5px]">

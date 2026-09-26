@@ -62,7 +62,7 @@ def overview(ctx: TenantContext = Depends(tenant_context), as_of: date | None = 
 
     names = {b.id: b.name for b in buyers}
     due_soon = [(i, o, l) for i, o, l in open_rows
-                if -14 <= l["days_overdue"] <= 0 and not i.disputed]
+                if 0 <= l["days_to_due"] <= 14 and not i.disputed]
 
     return {
         "as_of": today.isoformat(),
@@ -83,8 +83,8 @@ def overview(ctx: TenantContext = Depends(tenant_context), as_of: date | None = 
         "collections": weeks,
         "due_soon": [{"id": i.id, "invoice_number": i.invoice_number, "buyer": i.buyer.name,
                       "outstanding_paise": o, "due_date": l["statutory_due_date"],
-                      "days_to_due": -l["days_overdue"]}
-                     for i, o, l in sorted(due_soon, key=lambda r: -r[2]["days_overdue"])][:8],
+                      "days_to_due": l["days_to_due"]}
+                     for i, o, l in sorted(due_soon, key=lambda r: r[2]["days_to_due"])][:8],
         "early_warnings": [
             {"invoice_number": w["invoice_id"], "buyer": names.get(w["buyer_id"], ""),
              "outstanding_paise": w["outstanding_paise"], "days_until_due": w["days_until_due"],

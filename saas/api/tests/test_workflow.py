@@ -134,6 +134,21 @@ def test_early_warnings_name_the_buyer_and_explain_themselves(client, demo) -> N
         assert w["buyer"] and w["reasons"] and w["risk_band"] in ("watch", "high")
 
 
+def test_not_yet_due_invoices_say_how_far_off_they_are(client, demo) -> None:
+    """The engine floors days_overdue at 0, so days-to-due has to come from the
+    statutory due date itself -- a first build showed every future invoice
+    as 'due in 0 days'."""
+    from datetime import date
+    today = date.fromisoformat("2026-09-25")
+    rows = [r for r in client.get("/invoices").json() if r["status"] == "open"]
+    assert rows
+    for r in rows:
+        assert r["days_to_due"] == (date.fromisoformat(r["statutory_due_date"]) - today).days >= 0
+    due_soon = client.get("/dashboard").json()["due_soon"]
+    assert all(0 <= d["days_to_due"] <= 14 for d in due_soon)
+    assert [d["days_to_due"] for d in due_soon] == sorted(d["days_to_due"] for d in due_soon)
+
+
 def test_business_profile_drives_the_udyam_flag(client) -> None:
     register(client, "owner@example.com", "Profile Co")
     assert client.get("/business").json()["udyam_on_file"] is False
