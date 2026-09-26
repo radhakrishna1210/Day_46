@@ -56,7 +56,11 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(120))
-    password_hash: Mapped[str] = mapped_column(String(300))
+    #: None for someone who only ever signs in with Google or an email code.
+    password_hash: Mapped[str | None] = mapped_column(String(300))
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Google's stable account id ("sub"), once linked.
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="user",
@@ -173,6 +177,42 @@ class ContactLog(Base):
     rung: Mapped[int] = mapped_column(Integer)
     channel: Mapped[str] = mapped_column(String(20), default="manual")
     outcome: Mapped[str] = mapped_column(String(30), default="no_reply")
+
+
+class EmailCode(Base):
+    """A one-time 6-digit code sent by email. Only its keyed hash is stored."""
+
+    __tablename__ = "email_codes"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    purpose: Mapped[str] = mapped_column(String(10))          # login | verify | reset
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class OutboxEmail(Base):
+    """Every email the platform sends, queued first and then delivered, so a
+    failure is retried and visible rather than silently lost. Sent to the
+    platform's own users only (owners and teammates) -- never to buyers."""
+
+    __tablename__ = "outbox_emails"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    to_email: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(30))               # login_code | verify_email | ...
+    subject: Mapped[str] = mapped_column(String(300))
+    body_text: Mapped[str] = mapped_column(Text)
+    body_html: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="queued")   # queued | sent | failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditEntry(Base):

@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app import audit
+from app import audit, settings
 from app.bridge import REPO_ROOT  # noqa: F401  -- puts the engine/data packages on sys.path
 from app.clock import today_for
-from app.deps import TenantContext, tenant_context
-from app.models import Buyer, Invoice, Membership, Payment
+from app.db import get_db
+from app.deps import TenantContext, current_user, tenant_context
+from app.models import Buyer, Invoice, Membership, Payment, Tenant, User
+from app.security import SESSION_COOKIE, SESSION_DAYS, issue_session
 
 router = APIRouter(prefix="/business", tags=["business"])
 
@@ -46,6 +49,30 @@ def profile_out(ctx: TenantContext) -> dict:
             # the engine keeps Samadhaan drafts BLOCKED until one is on file.
             "udyam_on_file": bool(udyam) and not udyam.upper().startswith("UDYAM-XX"),
             "msmed_covered": t.enterprise_class in ("micro", "small")}
+
+
+class CreateIn(BaseModel):
+    legal_name: str = Field(min_length=2, max_length=200)
+
+
+@router.post("/create", status_code=status.HTTP_201_CREATED)
+def create_business(body: CreateIn, response: Response, db: Session = Depends(get_db),
+                    user: User = Depends(current_user)) -> dict:
+    """A new business owned by the caller, made the active one. How someone who
+    signed up with Google gets their first workspace -- and how one person runs
+    several businesses."""
+    tenant = Tenant(legal_name=body.legal_name.strip(), contact_name=user.name,
+                    contact_email=user.email)
+    db.add(tenant)
+    db.flush()
+    db.add(Membership(user_id=user.id, tenant_id=tenant.id, role="owner"))
+    audit.record(db, tenant_id=tenant.id, actor=user.email, action="business_created",
+                 reason=f"{user.name} created {tenant.legal_name} and is its owner")
+    db.commit()
+    response.set_cookie(SESSION_COOKIE, issue_session(user.id, tenant.id), httponly=True,
+                        samesite="lax", secure=settings.public_url().startswith("https://"),
+                        max_age=SESSION_DAYS * 86400, path="/")
+    return {"id": tenant.id, "name": tenant.legal_name, "role": "owner"}
 
 
 @router.get("")

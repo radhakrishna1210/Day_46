@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Building2, Check, ChevronsUpDown, FileText, Gavel, LayoutDashboard, LogOut, Menu, Moon,
+  Building2, Check, ChevronsUpDown, FileText, Gavel, LayoutDashboard, LogOut, MailCheck, Menu, Moon,
   ScrollText, Settings, Sun, Upload, Users, X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -62,11 +62,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setSession(await api<Session>("/auth/session"));
   }, []);
+  const router = useRouter();
   useEffect(() => {
     let live = true;
-    api<Session>("/auth/session").then((s) => { if (live) setSession(s); }, () => {});
+    api<Session>("/auth/session").then((s) => {
+      if (!live) return;
+      // Signed in but no business yet (a new Google sign-up): name one first.
+      if (!s.active_business) router.replace("/welcome");
+      else setSession(s);
+    }, () => {});
     return () => { live = false; };
-  }, []);
+  }, [router]);
 
   if (!session) {
     return (
@@ -104,6 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button onClick={() => setMobileOpen(true)} className="rounded-lg p-1.5 text-ink-2" aria-label="Open menu"><Menu className="size-5" /></button>
             <Logo />
           </div>
+          {!session.user.email_verified && <VerifyEmailBanner email={session.user.email} onVerified={refresh} />}
           <main className="mx-auto w-full max-w-[1240px] flex-1 px-4 py-8 sm:px-8 lg:py-10">
             <AnimatePresence mode="wait">
               <motion.div
@@ -122,6 +129,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </SessionContext.Provider>
+  );
+}
+
+function VerifyEmailBanner({ email, onVerified }: { email: string; onVerified: () => Promise<void> }) {
+  const toast = useToast();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function resend() {
+    try {
+      const r = await api<{ message: string }>("/auth/verify-email/send", { method: "POST" });
+      toast(r.message);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not send the code", "bad");
+    }
+  }
+
+  async function verify(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api("/auth/verify-email", { method: "POST", json: { code } });
+      toast("Email confirmed");
+      await onVerified();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "That code didn’t work", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <motion.form onSubmit={verify} initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+      className="flex flex-wrap items-center gap-3 border-b border-line bg-[color-mix(in_oklab,var(--warning)_12%,var(--bg))] px-4 py-2.5 text-[13px] sm:px-8">
+      <MailCheck className="size-4 shrink-0 text-warning-ink" aria-hidden />
+      <span className="text-ink-2">Confirm <b className="font-medium text-ink">{email}</b> — enter the 6-digit code we emailed you.</span>
+      <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric"
+        autoComplete="one-time-code" aria-label="Verification code" placeholder="000000"
+        className="h-8 w-28 rounded-lg border border-line-strong bg-surface px-2 text-center font-mono tracking-[0.3em] outline-none focus:border-brand" />
+      <button type="submit" disabled={busy || code.length !== 6} className="h-8 rounded-lg bg-brand px-3 font-medium text-brand-ink disabled:opacity-50">Confirm</button>
+      <button type="button" onClick={() => void resend()} className="text-brand hover:underline">Send a new code</button>
+    </motion.form>
   );
 }
 

@@ -21,6 +21,12 @@ TODAY = "2026-09-25"
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("RECOVA_TODAY", TODAY)
+    # Never send real email from tests, whatever saas/api/.env says: with
+    # SMTP_HOST empty the mailer records into mailer.DEV_SENT instead.
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("RECOVA_PUBLIC_URL", "http://localhost:3000")
+    from app import mailer
+    mailer.DEV_SENT.clear()
     engine = db_module.make_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     db_module.create_all(engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

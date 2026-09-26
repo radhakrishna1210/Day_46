@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthShell } from "@/components/auth-shell";
+import { GoogleButton } from "@/components/google-button";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -33,6 +34,7 @@ export default function SignupPage() {
       subtitle="One account per person. Your business gets its own private workspace."
       footer={<>Already have an account? <Link href="/login" className="font-medium text-brand hover:underline">Sign in</Link></>}
     >
+      <GoogleButton label="Sign up with Google" />
       <form onSubmit={submit} className="space-y-4">
         {error && <ErrorNote message={error} />}
         <Field label="Your name" autoComplete="name" required value={form.name} onChange={set("name")} />
@@ -40,7 +42,7 @@ export default function SignupPage() {
         <Field label="Work email" type="email" autoComplete="email" required value={form.email} onChange={set("email")} />
         <Field label="Password" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={set("password")} hint="At least 8 characters." />
         <Button type="submit" size="lg" className="w-full" loading={busy}>Create account</Button>
-        <p className="text-center text-[12px] text-ink-3">Google sign-in and one-time email codes are coming soon.</p>
+        <p className="text-center text-[12px] text-ink-3">We’ll email you a code to confirm your address.</p>
       </form>
     </AuthShell>
   );

@@ -36,21 +36,32 @@ Open http://localhost:3000, create an account, and on the overview choose
 **Load a demo book** (20 synthetic buyers, ~100 open invoices, dated to today)
 — or import a CSV, or add a buyer by hand.
 
+API settings live in `saas/api/.env` (copy `saas/api/.env.example`; git-ignored).
+
 | Setting | Where | Default |
 |---|---|---|
 | `DATABASE_URL` | API env | `sqlite:///saas/api/recova.db` — any SQLAlchemy URL; Postgres in production |
 | `RECOVA_SECRET_KEY` | API env | random per start (sessions end on restart) — **set it** outside local dev |
+| `RECOVA_PUBLIC_URL` | API env | `http://localhost:3000` — builds the Google redirect URI and email links |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | API env | empty = no Google button |
+| `SMTP_HOST` … `MAIL_FROM` | API env | empty host = emails (incl. sign-in codes) printed to the API log, not sent |
 | `RECOVA_TODAY` | API env | real date — pin a day for demos and tests |
 | `RECOVA_API_URL` | web env | `http://127.0.0.1:8000` |
 | `LLM_MODE` | repo `.env` | `mock` — canned, deterministic drafts; `live` uses Gemini via `engine/llm.py` |
 
-Tests: `cd saas/api && python -m pytest tests` (20, including cross-tenant
+Tests: `cd saas/api && python -m pytest tests` (37, including cross-tenant
 isolation). The engine's own suite still runs from the repo root.
 
 ## What is built
 
+- **Sign-in three ways:** email + password, a one-time emailed code, or Google
+  (OAuth code flow; ID token verified against Google's keys, state + nonce
+  checked). Email verification and password reset by code. Codes: 6 digits,
+  stored only as an HMAC, 10-minute expiry, single use, 5 guesses, rate-limited,
+  and the request reply never reveals whether an account exists. Every email
+  goes through an outbox table (queued → sent / retried / failed) over SMTP.
 - **Accounts & tenancy.** Email + password sign-up creates a business and makes
-  you its owner. Users can belong to several businesses and switch between
+  you its owner; a Google sign-up names its business on a welcome step. Users can belong to several businesses and switch between
   them. Every tenant query goes through one scoped path (`app/deps.py`); another
   business's ids read as *not found*, and tests try to break that.
 - **Screens.** Landing page · sign-in / sign-up · Overview (receivable, overdue,
@@ -75,8 +86,7 @@ isolation). The engine's own suite still runs from the repo root.
 - **Sending.** Email, WhatsApp and payment links are not wired in. Recova drafts
   the message; the owner sends it themselves and marks it sent (with the
   channel), which the engine needs as history to pace the next one.
-- **Google sign-in, email OTP, team invites.** They slot into the same session
-  issue path (`app/security.py`).
+- **Team invites.** Email delivery exists now; the invite flow itself is next.
 - **Row-level security in Postgres**, as a second barrier behind the app-level
   scoping, once the database is Postgres.
 - **Background daily runs / notifications.** Decisions are computed on demand

@@ -35,7 +35,9 @@ def test_register_creates_a_business_and_signs_in(client) -> None:
 
 def test_the_password_is_never_stored_or_returned_in_plain_text(client) -> None:
     me = register(client, "a@example.com", "Alpha Works")
-    assert "password" not in str(me)
+    # Neither the password nor its hash is ever returned (a has_password flag is fine).
+    assert "correct horse" not in str(me) and "scrypt$" not in str(me)
+    assert "password_hash" not in str(me)
     from app import db
     from app.models import User
     with next(client.app.dependency_overrides[db.get_db]()) as session:
