@@ -70,14 +70,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let live = true;
     api<Session>("/auth/session").then((s) => {
       if (!live) return;
-      // Signed in but no business yet (a new Google sign-up): name one first.
-      if (!s.active_business) router.replace("/welcome");
+      // Signed in but no business yet (a new Google sign-up): name one first --
+      // except a platform super admin, who needs no business of their own.
+      if (!s.active_business && !s.user.is_super_admin) router.replace("/welcome");
       else setSession(s);
     }, () => {});
     return () => { live = false; };
   }, [router]);
 
-  if (!session) {
+  // A super admin without a business has only the Platform page to show.
+  const platformOnly = !!session && !session.active_business;
+  useEffect(() => {
+    if (platformOnly && pathname !== PLATFORM_NAV.href) router.replace(PLATFORM_NAV.href);
+  }, [platformOnly, pathname, router]);
+
+  if (!session || (platformOnly && pathname !== PLATFORM_NAV.href)) {
     return (
       <div className="flex min-h-screen">
         <div className="hidden w-64 border-r border-line p-4 lg:block"><Skeleton className="h-8 w-32" /></div>
@@ -180,12 +187,14 @@ function VerifyEmailBanner({ email, onVerified }: { email: string; onVerified: (
 function Sidebar({ session }: { session: Session }) {
   const pathname = usePathname();
   const active = (href: string) => (href === "/app" ? pathname === "/app" : pathname.startsWith(href));
+  const items = !session.active_business ? [PLATFORM_NAV]
+    : session.user.is_super_admin ? [...NAV, PLATFORM_NAV] : NAV;
   return (
     <>
-      <div className="px-5 pt-5 pb-4"><Link href="/app"><Logo /></Link></div>
+      <div className="px-5 pt-5 pb-4"><Link href={session.active_business ? "/app" : PLATFORM_NAV.href}><Logo /></Link></div>
       <div className="px-3"><BusinessSwitcher session={session} /></div>
       <nav className="mt-4 flex-1 space-y-0.5 px-3">
-        {(session.user.is_super_admin ? [...NAV, PLATFORM_NAV] : NAV).map(({ href, label, icon: Icon }) => (
+        {items.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -231,10 +240,10 @@ function BusinessSwitcher({ session }: { session: Session }) {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-left shadow-card hover:border-line-strong">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-[12px] font-semibold text-brand">{initials(current?.name ?? "?")}</span>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-[12px] font-semibold text-brand">{initials(current?.name ?? "Recova platform")}</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-medium">{current?.name ?? "No business"}</span>
-          <span className="block text-[11.5px] text-ink-3 capitalize">{current?.role}</span>
+          <span className="block truncate text-[13.5px] font-medium">{current?.name ?? "Recova platform"}</span>
+          <span className="block text-[11.5px] text-ink-3 capitalize">{current ? current.role : "Super admin"}</span>
         </span>
         <ChevronsUpDown className="size-4 text-ink-3" />
       </button>
@@ -252,6 +261,10 @@ function BusinessSwitcher({ session }: { session: Session }) {
                 {b.id === current?.id && <Check className="size-4 text-brand" />}
               </button>
             ))}
+            {!session.businesses.length && <p className="px-3 pb-1 text-[13px] text-ink-3">None yet.</p>}
+            <Link href="/welcome" onClick={() => setOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg border-t border-line px-3 py-2 text-[13.5px] text-brand hover:bg-surface-2">
+              <Building2 className="size-4" /> Create a business
+            </Link>
           </motion.div>
         )}
       </AnimatePresence>

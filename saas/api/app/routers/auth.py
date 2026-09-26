@@ -292,7 +292,8 @@ def google_callback(code: str | None = None, state: str | None = None, error: st
     db.commit()
 
     tenant_id = _first_tenant_id(db, user)
-    dest = "/app" if tenant_id else "/welcome"
+    # No business yet: name one -- unless a platform super admin, who needs none.
+    dest = "/app" if tenant_id else "/app/platform" if is_super_admin(user) else "/welcome"
     resp = RedirectResponse(f"{settings.public_url()}{dest}", status_code=302)
     _set_cookie(resp, issue_session(user.id, tenant_id))
     resp.delete_cookie(GOOGLE_STATE_COOKIE, path="/")

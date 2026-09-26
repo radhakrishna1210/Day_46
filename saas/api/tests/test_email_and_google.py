@@ -175,6 +175,16 @@ def test_a_new_google_user_is_created_and_sent_to_set_up_a_business(client, goog
     assert client.get("/dashboard").status_code == 200
 
 
+def test_a_new_google_super_admin_goes_to_the_platform_without_a_business(client, google_on,
+                                                                          monkeypatch) -> None:
+    monkeypatch.setenv("RECOVA_SUPER_ADMIN_EMAILS", "g@example.com")
+    res = _google_round_trip(client)
+    assert res.status_code == 302 and res.headers["location"] == "http://localhost:3000/app/platform"
+    me = client.get("/auth/session").json()
+    assert me["user"]["is_super_admin"] is True and me["businesses"] == []
+    assert client.get("/platform/overview").status_code == 200
+
+
 def test_google_links_to_an_existing_account_with_the_same_email(client, google_on) -> None:
     register(client, "g@example.com", "Existing Works")
     client.post("/auth/logout")
