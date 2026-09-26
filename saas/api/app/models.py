@@ -149,6 +149,8 @@ class Invoice(Base):
                                                     order_by="Promise.recorded_on")
     contacts: Mapped[list[ContactLog]] = relationship(cascade="all, delete-orphan",
                                                        order_by="ContactLog.contacted_on")
+    replies: Mapped[list[BuyerReply]] = relationship(cascade="all, delete-orphan",
+                                                     order_by="BuyerReply.created_at")
 
 
 class Payment(Base):
@@ -229,6 +231,27 @@ class OutboxEmail(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BuyerReply(Base):
+    """What a buyer said back, as a person pasted it, and what was done with it.
+    `suggested_*` is the reader's guess (AI or rules); `intent` is what the
+    person confirmed -- both kept, so the gap between them stays visible."""
+
+    __tablename__ = "buyer_replies"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    received_on: Mapped[date] = mapped_column(Date)
+    channel: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text)
+    suggested_intent: Mapped[str | None] = mapped_column(String(10))
+    suggested_by: Mapped[str | None] = mapped_column(String(10))       # ai | rules
+    intent: Mapped[str] = mapped_column(String(10))
+    promised_date: Mapped[date | None] = mapped_column(Date)
+    recorded_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Invite(Base):

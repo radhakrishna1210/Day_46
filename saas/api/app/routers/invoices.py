@@ -9,10 +9,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 
-from app import audit, bridge
+from app import audit, bridge, replies
 from app.clock import today_for
 from app.deps import TenantContext, tenant_context
-from app.models import Buyer, Invoice, Payment, Promise
+from app.models import Buyer, BuyerReply, Invoice, Payment, Promise
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -85,6 +85,11 @@ def invoice_out(inv: Invoice, today: date, *, detail: bool = False) -> dict:
             "contacts": [{"id": c.id, "contacted_on": c.contacted_on.isoformat(), "rung": c.rung,
                           "rung_name": bridge.RUNG_NAMES.get(c.rung), "channel": c.channel,
                           "outcome": c.outcome} for c in inv.contacts],
+            "replies": [{"id": r.id, "received_on": r.received_on.isoformat(), "channel": r.channel,
+                         "text": r.text, "intent": r.intent, "suggested_intent": r.suggested_intent,
+                         "suggested_by": r.suggested_by, "recorded_by": r.recorded_by,
+                         "promised_date": r.promised_date.isoformat() if r.promised_date else None}
+                        for r in inv.replies],
         }
     return out
 
@@ -177,6 +182,92 @@ def add_promise(invoice_id: str, body: PromiseIn,
     _note(ctx, inv, "promise_recorded",
           f"buyer promised to pay ({body.amount}) by {body.promised_date}; "
           f"the agent holds off until then")
+    ctx.db.commit()
+    ctx.db.refresh(inv)
+    return invoice_out(inv, today, detail=True)
+
+
+# --------------------------------------------------------------------------
+# buyer replies: read (AI or rules) -> a person confirms -> it takes effect
+# --------------------------------------------------------------------------
+
+INTENT_WORDS = {"promise": "a promise to pay", "dispute": "a dispute", "refusal": "a refusal",
+                "question": "a question", "noise": "nothing actionable"}
+
+
+class ReplyIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class ReplyConfirmIn(ReplyIn):
+    intent: str = Field(pattern="^(promise|dispute|refusal|question|noise)$")
+    channel: str = Field(default="whatsapp", pattern="^(whatsapp|email|phone|in_person|sms|other)$")
+    received_on: date | None = None
+    promised_date: date | None = None
+    amount: str = Field(default="full", pattern="^(full|partial)$")
+    suggested_intent: str | None = None
+    suggested_by: str | None = Field(default=None, pattern="^(ai|rules)$")
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.intent == "promise" and self.promised_date is None:
+            raise ValueError("a promise needs the date they promised to pay by")
+        return self
+
+
+@router.post("/{invoice_id}/replies/read")
+def read_reply(invoice_id: str, body: ReplyIn, ctx: TenantContext = Depends(tenant_context)) -> dict:
+    """Suggest what a pasted reply means. Changes nothing but the audit trail."""
+    inv = _load(ctx, invoice_id)
+    today = today_for()
+    suggestion = replies.read(body.text, today, bridge.outstanding(inv, today))
+    reason = f"read the buyer's reply as {INTENT_WORDS[suggestion['intent']]}"
+    if suggestion.get("date"):
+        reason += f", paying by {suggestion['date']}"
+    if suggestion.get("downgraded"):
+        reason += f"; not taken at face value: {'; '.join(suggestion['downgraded'])}"
+    audit.record(ctx.db, tenant_id=ctx.tenant.id, actor="agent",
+                 source="llm" if suggestion["reader"] == "ai" else "rule",
+                 action="reply_read", reason=reason, invoice_number=inv.invoice_number,
+                 buyer_name=inv.buyer.name, detail={"reply": body.text, **suggestion})
+    ctx.db.commit()
+    return suggestion
+
+
+@router.post("/{invoice_id}/replies", status_code=status.HTTP_201_CREATED)
+def confirm_reply(invoice_id: str, body: ReplyConfirmIn,
+                  ctx: TenantContext = Depends(tenant_context)) -> dict:
+    """A person says what the reply meant; Recova acts on THAT, not the guess."""
+    inv = _load(ctx, invoice_id)
+    today = today_for()
+    if body.intent == "promise" and body.promised_date < today:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "A promise has to be for today or a future date")
+    ctx.db.add(BuyerReply(
+        tenant_id=ctx.tenant.id, invoice_id=inv.id, received_on=body.received_on or today,
+        channel=body.channel, text=body.text, suggested_intent=body.suggested_intent,
+        suggested_by=body.suggested_by, intent=body.intent,
+        promised_date=body.promised_date if body.intent == "promise" else None,
+        recorded_by=ctx.user.email))
+    effect = "no change to the ladder"
+    if body.intent == "promise":
+        ctx.db.add(Promise(tenant_id=ctx.tenant.id, invoice_id=inv.id, recorded_on=today,
+                           promised_date=body.promised_date, amount=body.amount,
+                           note=f"from the buyer's reply: {body.text[:200]}"))
+        effect = f"promise ({body.amount}) recorded for {body.promised_date}; reminders pause"
+    elif body.intent == "dispute":
+        inv.disputed, inv.dispute_note = True, body.text[:300]
+        effect = "invoice marked disputed; automated chasing stops and it goes to a person"
+    guess = ""
+    if body.suggested_intent:
+        by = "the AI" if body.suggested_by == "ai" else "the rules"
+        guess = (f"{by} read it as {body.suggested_intent}; "
+                 + ("confirmed" if body.suggested_intent == body.intent
+                    else f"corrected to {body.intent}") + "; ")
+    _note(ctx, inv, "reply_recorded",
+          f"buyer replied by {body.channel.replace('_', ' ')}: {guess}{effect}",
+          reply=body.text, intent=body.intent, suggested_intent=body.suggested_intent,
+          suggested_by=body.suggested_by)
     ctx.db.commit()
     ctx.db.refresh(inv)
     return invoice_out(inv, today, detail=True)

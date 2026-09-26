@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarCheck2, HandCoins, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CalendarCheck2, HandCoins, MessageSquareText, ShieldAlert, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useRole } from "@/components/session";
 import { Button, Field, Select, cx } from "@/components/ui";
@@ -9,7 +9,120 @@ import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { rupees, toPaise } from "@/lib/format";
 
-type Mode = "payment" | "promise" | "dispute" | null;
+type Mode = "reply" | "payment" | "promise" | "dispute" | null;
+type Intent = "promise" | "dispute" | "refusal" | "question" | "noise";
+
+type Suggestion = {
+  intent: Intent; date: string | null; amount: "full" | "partial" | null; confidence: string;
+  quote: string; reader: "ai" | "rules"; flags: string[]; downgraded?: string[];
+};
+
+const INTENTS: { key: Intent; label: string; effect: string }[] = [
+  { key: "promise", label: "Promise to pay", effect: "Records the promise; reminders pause until that date." },
+  { key: "dispute", label: "Dispute", effect: "Marks the invoice disputed; automated chasing stops and it goes to a person." },
+  { key: "refusal", label: "Refusal", effect: "Recorded. The ladder carries on as the rules decide." },
+  { key: "question", label: "Question", effect: "Recorded. Answer them yourself; the ladder carries on." },
+  { key: "noise", label: "Nothing actionable", effect: "Recorded, nothing changes." },
+];
+
+/** Paste what the buyer said; the reader (AI if connected, else rules)
+ *  suggests what it means; a person confirms or corrects it; only then does
+ *  anything change. Both steps land in the audit trail. */
+function ReplyPanel({ invoiceId, onCancel, onDone }: { invoiceId: string; onCancel: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [channel, setChannel] = useState("whatsapp");
+  const [s, setS] = useState<Suggestion | null>(null);
+  const [intent, setIntent] = useState<Intent>("noise");
+  const [when, setWhen] = useState("");
+  const [amount, setAmount] = useState<"full" | "partial">("full");
+  const [busy, setBusy] = useState(false);
+
+  async function read() {
+    setBusy(true);
+    try {
+      const got = await api<Suggestion>(`/invoices/${invoiceId}/replies/read`, { method: "POST", json: { text } });
+      setS(got);
+      setIntent(got.intent);
+      setWhen(got.date ?? "");
+      setAmount(got.amount ?? "full");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not read that", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      await api(`/invoices/${invoiceId}/replies`, { method: "POST", json: {
+        text, intent, channel, promised_date: intent === "promise" ? when || null : null, amount,
+        suggested_intent: s?.intent ?? null, suggested_by: s?.reader ?? null } });
+      toast(intent === "promise" ? "Promise recorded — reminders pause until then"
+        : intent === "dispute" ? "Marked disputed — handed to a person" : "Reply recorded");
+      onDone();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save", "bad");
+      setBusy(false);
+    }
+  }
+
+  const chosen = INTENTS.find((i) => i.key === intent)!;
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-line bg-bg-raised p-4">
+      <label className="block">
+        <span className="mb-1.5 block text-[13px] font-medium text-ink-2">What did the buyer say?</span>
+        <textarea value={text} onChange={(e) => { setText(e.target.value); setS(null); }} rows={3} autoFocus
+          placeholder="Paste their WhatsApp message or email — English or Hinglish, e.g. “5 tarikh tak ho jayega”"
+          className="w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-brand" />
+      </label>
+      {!s ? (
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button type="button" loading={busy} disabled={!text.trim()} onClick={() => void read()} icon={<Sparkles className="size-4" />}>Read it</Button>
+        </div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+          <div className="rounded-xl bg-brand-soft px-4 py-3 text-[13px] text-brand">
+            <span className="font-medium">{s.reader === "ai" ? "AI" : "Rules"} read this as {INTENTS.find((i) => i.key === s.intent)?.label.toLowerCase()}</span>
+            {s.date && <> · paying by {s.date}</>} · {s.confidence} confidence
+            {s.reader === "rules" && <span className="mt-1 block text-[12px] opacity-80">No AI key is connected, so simple rules read it. Check it before confirming.</span>}
+            {s.downgraded?.map((d) => <span key={d} className="mt-1 block text-[12px] opacity-80">Not taken at face value: {d}</span>)}
+          </div>
+          {s.flags.map((f) => (
+            <p key={f} className="flex gap-2 rounded-xl bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] px-4 py-2.5 text-[13px] text-warning-ink">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {f}
+            </p>
+          ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select label="It means" value={intent} onChange={(e) => setIntent(e.target.value as Intent)}>
+              {INTENTS.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+            </Select>
+            <Select label="They replied by" value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="phone">Phone call</option>
+              <option value="in_person">In person</option><option value="sms">SMS</option><option value="other">Other</option>
+            </Select>
+            {intent === "promise" && (
+              <>
+                <Field label="Promised to pay by" type="date" value={when} onChange={(e) => setWhen(e.target.value)} min={today()} required />
+                <Select label="Amount promised" value={amount} onChange={(e) => setAmount(e.target.value as "full" | "partial")}>
+                  <option value="full">The full amount</option><option value="partial">Part of it</option>
+                </Select>
+              </>
+            )}
+          </div>
+          <p className="text-[12.5px] text-ink-3">{chosen.effect}</p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+            <Button type="button" loading={busy} disabled={intent === "promise" && !when} variant={intent === "dispute" ? "danger" : "primary"}
+              onClick={() => void confirm()}>{s.intent === intent ? "Confirm" : "Save my reading"}</Button>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -51,6 +164,7 @@ function InvoiceActionsForm({ invoiceId, outstandingPaise, disputed, onDone }: {
   }
 
   const tabs: { key: Exclude<Mode, null>; label: string; icon: typeof HandCoins }[] = [
+    { key: "reply", label: "Buyer replied", icon: MessageSquareText },
     { key: "payment", label: "Payment received", icon: HandCoins },
     { key: "promise", label: "Buyer promised", icon: CalendarCheck2 },
     { key: "dispute", label: disputed ? "Resolve dispute" : "Buyer disputes", icon: ShieldAlert },
@@ -68,7 +182,11 @@ function InvoiceActionsForm({ invoiceId, outstandingPaise, disputed, onDone }: {
         ))}
       </div>
       <AnimatePresence initial={false} mode="wait">
-        {mode && (
+        {mode === "reply" ? (
+          <motion.div key="reply" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+            <ReplyPanel invoiceId={invoiceId} onCancel={() => setMode(null)} onDone={() => { setMode(null); onDone(); }} />
+          </motion.div>
+        ) : mode && (
           <motion.form
             key={mode}
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}

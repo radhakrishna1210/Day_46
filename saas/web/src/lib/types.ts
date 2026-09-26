@@ -69,6 +69,10 @@ export type InvoiceDetail = InvoiceRow & {
   payments: { id: string; paid_on: string; amount_paise: number; note: string | null }[];
   promises: { id: string; promised_date: string; amount: "full" | "partial"; status: "open" | "kept" | "broken"; recorded_on: string; note: string | null }[];
   contacts: { id: string; contacted_on: string; rung: number; rung_name: string | null; channel: string; outcome: string }[];
+  replies: {
+    id: string; received_on: string; channel: string; text: string; intent: string;
+    suggested_intent: string | null; suggested_by: "ai" | "rules" | null; recorded_by: string; promised_date: string | null;
+  }[];
 };
 
 export type DecisionKind = "send" | "wait" | "handoff" | "stop" | "payment_plan" | "counter_settle";

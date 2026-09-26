@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { ArrowLeft, CalendarCheck2, HandCoins, Mail, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarCheck2, HandCoins, Mail, MessageSquareText, ShieldAlert, Trash2 } from "lucide-react";
 import { InvoiceActions } from "@/components/invoice-actions";
 import { Ladder } from "@/components/ladder";
 import { useRole } from "@/components/session";
@@ -35,6 +35,12 @@ export default function InvoicePage() {
     ...d.payments.map((p) => ({ at: p.paid_on, icon: HandCoins, title: `${rupees(p.amount_paise)} received`, body: p.note ?? undefined, tone: "good" as const })),
     ...d.promises.map((p) => ({ at: p.recorded_on, icon: CalendarCheck2, title: `Promised ${p.amount === "full" ? "full payment" : "part payment"} by ${date(p.promised_date)}`, body: `Promise ${p.status}`, tone: (p.status === "broken" ? "serious" : p.status === "kept" ? "good" : "brand") as Event["tone"] })),
     ...d.contacts.map((c) => ({ at: c.contacted_on, icon: Mail, title: `Rung ${c.rung} reminder sent`, body: `via ${c.channel.replace("_", " ")}`, tone: "brand" as const })),
+    ...d.replies.map((r) => ({
+      at: r.received_on, icon: MessageSquareText,
+      title: `Buyer replied (${r.channel.replace("_", " ")}) — ${r.intent === "noise" ? "nothing actionable" : r.intent}`,
+      body: `“${r.text}”${r.suggested_intent && r.suggested_intent !== r.intent ? ` · ${r.suggested_by === "ai" ? "AI" : "rules"} said ${r.suggested_intent}, ${r.recorded_by} corrected it` : ""}`,
+      tone: (r.intent === "dispute" ? "serious" : r.intent === "promise" ? "brand" : "neutral") as Event["tone"],
+    })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   async function remove() {
