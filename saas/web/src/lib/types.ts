@@ -1,4 +1,18 @@
-export type Business = { id: string; name: string; role: "owner" | "admin" | "member" };
+export type Business = { id: string; name: string; role: Role };
+
+export type Role = "owner" | "admin" | "member" | "viewer";
+
+export type Team = {
+  my_role: Role;
+  can_manage: boolean;
+  members: { id: string; user_id: string; name: string; email: string; role: Role; is_me: boolean }[];
+  invites: { id: string; email: string; role: Role; invited_by: string; created_at: string; expires_at: string; status: "pending" | "expired" }[];
+};
+
+export type InviteInfo = {
+  business: string; invited_by: string; role: Role; email: string;
+  status: "pending" | "accepted" | "revoked" | "expired"; has_account: boolean;
+};
 
 export type Session = {
   user: { id: string; name: string; email: string; email_verified: boolean; has_password: boolean; google_linked: boolean; is_super_admin: boolean };

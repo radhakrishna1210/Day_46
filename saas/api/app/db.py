@@ -49,4 +49,31 @@ def get_db() -> Iterator[Session]:
 def create_all(bind=None) -> None:
     from app import models  # noqa: F401  -- registers the tables
 
-    Base.metadata.create_all(bind=bind or engine)
+    bind = bind or engine
+    Base.metadata.create_all(bind=bind)
+    add_missing_columns(bind)
+
+
+def add_missing_columns(bind) -> list[str]:
+    """Add columns a model gained since its table was created -- additive only
+    (never drops or alters), so an existing local database keeps its accounts.
+    New columns must be nullable or carry a server_default. A stopgap until
+    Alembic migrations arrive with Postgres."""
+    from sqlalchemy import inspect
+    from sqlalchemy.schema import CreateColumn
+
+    added: list[str] = []
+    inspector = inspect(bind)
+    existing_tables = set(inspector.get_table_names())
+    with bind.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            have = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in have:
+                    continue
+                ddl = CreateColumn(column).compile(dialect=bind.dialect)
+                conn.exec_driver_sql(f"ALTER TABLE {table.name} ADD COLUMN {ddl}")
+                added.append(f"{table.name}.{column.name}")
+    return added

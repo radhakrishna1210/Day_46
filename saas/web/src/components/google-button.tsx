@@ -11,13 +11,13 @@ export function useProviders() {
 /** "Continue with Google" -- a plain link: the API redirects to Google and
  *  back through /api/auth/google/callback. Hidden until the server says
  *  Google sign-in is configured. */
-export function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
+export function GoogleButton({ label = "Continue with Google", next }: { label?: string; next?: string }) {
   const providers = useProviders();
   if (!providers?.google) return null;
   return (
     <>
       <a
-        href="/api/auth/google/start"
+        href={next ? `/api/auth/google/start?next=${encodeURIComponent(next)}` : "/api/auth/google/start"}
         className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-line-strong bg-surface text-[15px] font-medium text-ink transition-colors hover:bg-surface-2"
       >
         <svg viewBox="0 0 48 48" className="size-5" aria-hidden>

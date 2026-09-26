@@ -17,7 +17,7 @@ function LoginForm() {
   const next = params.get("next");
   const providers = useProviders();
   const [mode, setMode] = useState<Mode>("password");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -25,7 +25,9 @@ function LoginForm() {
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const done = () => router.push(next && next.startsWith("/app") ? next : "/app");
+  // Only our own pages: the app, or the invitation that sent them here.
+  const safeNext = next && (next.startsWith("/app") || next.startsWith("/invite/")) && !next.includes("//") ? next : null;
+  const done = () => router.push(safeNext ?? "/app");
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -58,7 +60,7 @@ function LoginForm() {
 
   return (
     <div>
-      <GoogleButton />
+      <GoogleButton next={safeNext ?? undefined} />
       <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-line bg-surface-2 p-1">
         {(["password", "code"] as Mode[]).map((m) => (
           <button key={m} type="button" onClick={() => { setMode(m); setError(null); setInfo(null); }}

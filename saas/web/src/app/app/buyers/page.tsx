@@ -7,6 +7,7 @@ import { BellOff, Plus, Search, Users } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { BuyerForm } from "@/components/buyer-form";
 import { ScoreRing } from "@/components/score-ring";
+import { useRole } from "@/components/session";
 import { Button, Card, EmptyState, ErrorNote, PageHeader, Pill, Skeleton, stagger } from "@/components/ui";
 import { useApi } from "@/lib/api";
 import { plural, rupees } from "@/lib/format";
@@ -17,7 +18,8 @@ function BuyersInner() {
   const params = useSearchParams();
   const router = useRouter();
   // ?new=1 (from the overview's "Add a buyer") opens the form straight away.
-  const [creating, setCreating] = useState(() => params.get("new") !== null);
+  const { canWrite } = useRole();
+  const [creating, setCreating] = useState(() => canWrite && params.get("new") !== null);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"overdue" | "score" | "name">("overdue");
 
@@ -35,7 +37,7 @@ function BuyersInner() {
   return (
     <>
       <PageHeader title="Buyers" description="Each buyer is scored from how they have actually paid you — the arithmetic is always one click away."
-        actions={<Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New buyer</Button>} />
+        actions={canWrite && <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New buyer</Button>} />
       {error && <ErrorNote message={error} onRetry={reload} />}
 
       <div className="mb-5 flex flex-wrap items-center gap-3">

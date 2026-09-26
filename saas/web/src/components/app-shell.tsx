@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Building2, Check, ChevronsUpDown, FileText, Gavel, LayoutDashboard, LogOut, MailCheck, Menu, Moon,
+  Building2, Check, ChevronsUpDown, Eye, FileText, Gavel, LayoutDashboard, LogOut, MailCheck, Menu, Moon,
   ScrollText, Settings, ShieldCheck, Sun, Upload, Users, X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -121,6 +121,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Logo />
           </div>
           {!session.user.email_verified && <VerifyEmailBanner email={session.user.email} onVerified={refresh} />}
+          {session.active_business?.role === "viewer" && (
+            <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2 text-[13px] text-ink-2 sm:px-8">
+              <Eye className="size-4 shrink-0 text-ink-3" aria-hidden />
+              View only — you can see everything in {session.active_business.name}, but not change it.
+            </div>
+          )}
           <main className="mx-auto w-full max-w-[1240px] flex-1 px-4 py-8 sm:px-8 lg:py-10">
             <AnimatePresence mode="wait">
               <motion.div
@@ -187,8 +193,10 @@ function VerifyEmailBanner({ email, onVerified }: { email: string; onVerified: (
 function Sidebar({ session }: { session: Session }) {
   const pathname = usePathname();
   const active = (href: string) => (href === "/app" ? pathname === "/app" : pathname.startsWith(href));
+  const role = session.active_business?.role;
+  const base = role === "viewer" ? NAV.filter((n) => n.href !== "/app/import") : NAV;
   const items = !session.active_business ? [PLATFORM_NAV]
-    : session.user.is_super_admin ? [...NAV, PLATFORM_NAV] : NAV;
+    : session.user.is_super_admin ? [...base, PLATFORM_NAV] : base;
   return (
     <>
       <div className="px-5 pt-5 pb-4"><Link href={session.active_business ? "/app" : PLATFORM_NAV.href}><Logo /></Link></div>

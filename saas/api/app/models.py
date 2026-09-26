@@ -11,7 +11,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
-                        UniqueConstraint)
+                        UniqueConstraint, false)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -45,6 +45,10 @@ class Tenant(Base):
     contact_email: Mapped[str | None] = mapped_column(String(200))
     contact_phone: Mapped[str | None] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    #: Set by a platform super admin; the whole workspace goes read-nothing.
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: The last day the daily run finished for this business (one run per day).
+    last_daily_run: Mapped[date | None] = mapped_column(Date)
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="tenant",
                                                           cascade="all, delete-orphan")
@@ -62,12 +66,22 @@ class User(Base):
     #: Google's stable account id ("sub"), once linked.
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    #: Set by a platform super admin; a suspended user cannot sign in or act.
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: The morning digest email, per person (owners/admins/members get it by default).
+    digest_opt_out: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="user",
                                                           cascade="all, delete-orphan")
 
 
-ROLES = ("owner", "admin", "member")
+#: owner   -- everything, one per business; hands over with a transfer.
+#: admin   -- the business profile, deletes, and the team (never the owner).
+#: member  -- the day-to-day work: buyers, invoices, payments, promises, sends.
+#: viewer  -- reads everything, changes nothing (an accountant, a CA).
+ROLES = ("owner", "admin", "member", "viewer")
+MANAGERS = ("owner", "admin")
+WRITERS = ("owner", "admin", "member")
 
 
 class Membership(Base):
@@ -213,6 +227,26 @@ class OutboxEmail(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Invite(Base):
+    """An emailed invitation to join a business. Only a hash of the link's
+    token is stored; the link itself exists only in the email."""
+
+    __tablename__ = "invites"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    role: Mapped[str] = mapped_column(String(10))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[str] = mapped_column(String(200))          # inviter's email
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    tenant: Mapped[Tenant] = relationship()
 
 
 class AuditEntry(Base):

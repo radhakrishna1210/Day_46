@@ -99,9 +99,16 @@ def _send_smtp(row: OutboxEmail) -> None:
 # templates
 # --------------------------------------------------------------------------
 
-def _html(title: str, intro: str, big: str | None = None, outro: str = "") -> str:
+def _html(title: str, intro: str, big: str | None = None, outro: str = "",
+          button: tuple[str, str] | None = None, body_html: str = "") -> str:
     code = (f'<p style="font:600 32px/1 ui-monospace,Menlo,monospace;letter-spacing:8px;'
             f'margin:24px 0;color:#0e1116">{html.escape(big)}</p>') if big else ""
+    if button:
+        label, href = button
+        code += (f'<p style="margin:24px 0"><a href="{html.escape(href, quote=True)}" '
+                 'style="background:#0f766e;color:#fff;text-decoration:none;padding:12px 20px;'
+                 f'border-radius:10px;font-weight:600;display:inline-block">{html.escape(label)}</a></p>')
+    code += body_html
     return (
         '<div style="background:#f6f5f1;padding:32px 16px;font-family:system-ui,Segoe UI,sans-serif">'
         '<div style="max-width:480px;margin:auto;background:#fff;border:1px solid #e4e1d8;'
@@ -126,3 +133,22 @@ def code_email(purpose: str, code: str, minutes: int) -> tuple[str, str, str]:
              f"for it, you can ignore this email.")
     text = f"{intro}\n\n    {code}\n\n{outro}\n"
     return f"{code} is your code — {subject}", text, _html(subject, intro, code, outro)
+
+
+ROLE_WORDS = {
+    "admin": "an admin (manage the team and business settings)",
+    "member": "a member (work invoices, payments and reminders)",
+    "viewer": "a viewer (see everything, change nothing)",
+}
+
+
+def invite_email(business: str, inviter: str, role: str, link: str,
+                 days: int) -> tuple[str, str, str]:
+    subject = f"{inviter} invited you to {business} on Recova"
+    intro = (f"{inviter} invited you to join {business} on Recova as {ROLE_WORDS[role]}. "
+             f"Recova tracks who owes {business} money and what to do about it today.")
+    outro = (f"The link works for {days} days, for this email address only. If you were not "
+             f"expecting it, you can ignore this email.")
+    text = f"{intro}\n\nAccept the invitation:\n{link}\n\n{outro}\n"
+    return subject, text, _html(f"Join {business}", intro, None, outro,
+                                button=("Accept invitation", link))

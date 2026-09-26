@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { FileText, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useRole } from "@/components/session";
 import { StatusPill } from "@/components/status";
 import { Button, Card, Drawer, EmptyState, ErrorNote, Field, PageHeader, Select, Skeleton, Toggle, cx } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -22,6 +23,7 @@ export default function InvoicesPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
+  const { canWrite } = useRole();
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -33,7 +35,7 @@ export default function InvoicesPage() {
   return (
     <>
       <PageHeader title="Invoices" description="Every invoice, with its statutory due date — counted the way the MSMED Act counts it."
-        actions={<Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New invoice</Button>} />
+        actions={canWrite && <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>New invoice</Button>} />
       {error && <ErrorNote message={error} onRetry={reload} />}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { CalendarCheck2, HandCoins, ShieldAlert } from "lucide-react";
 import { useState } from "react";
+import { useRole } from "@/components/session";
 import { Button, Field, Select, cx } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
@@ -16,7 +17,13 @@ function today() {
 
 /** Record what happened with a buyer: money in, a promise, a dispute. Each is
  *  one API call and one audit row; the engine re-decides from it. */
-export function InvoiceActions({ invoiceId, outstandingPaise, disputed, onDone }: {
+export function InvoiceActions(props: {
+  invoiceId: string; outstandingPaise: number; disputed: boolean; onDone: () => void;
+}) {
+  return useRole().canWrite ? <InvoiceActionsForm {...props} /> : null;
+}
+
+function InvoiceActionsForm({ invoiceId, outstandingPaise, disputed, onDone }: {
   invoiceId: string; outstandingPaise: number; disputed: boolean; onDone: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(null);

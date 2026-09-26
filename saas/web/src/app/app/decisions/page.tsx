@@ -6,6 +6,7 @@ import { Check, Copy, Gavel, Hand, Hourglass, MessageSquareText, PauseCircle, Se
 import { useMemo, useState } from "react";
 import { InvoiceActions } from "@/components/invoice-actions";
 import { Ladder } from "@/components/ladder";
+import { useRole } from "@/components/session";
 import { Button, Card, Drawer, EmptyState, ErrorNote, PageHeader, Pill, Select, Skeleton, cx } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
@@ -131,6 +132,7 @@ function DecisionDrawer({ invoiceId, onClose, onChanged }: { invoiceId: string |
   const [copied, setCopied] = useState(false);
   const d = invoiceId && data?.invoice_id === invoiceId ? data : null;
   const canSend = d && (d.kind === "send" || d.kind === "payment_plan" || d.kind === "counter_settle");
+  const { canWrite } = useRole();
 
   async function approve() {
     if (!d) return;
@@ -160,7 +162,7 @@ function DecisionDrawer({ invoiceId, onClose, onChanged }: { invoiceId: string |
       onClose={onClose}
       title={d ? d.buyer.name : "Loading…"}
       subtitle={d ? <Link href={`/app/invoices/${d.invoice_id}`} className="hover:text-brand">{d.invoice_number} · {rupees(d.outstanding_paise)} outstanding</Link> : null}
-      footer={canSend ? (
+      footer={canSend && canWrite ? (
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Select label="I sent it by" value={channel} onChange={(e) => setChannel(e.target.value)} className="w-44">
             <option value="phone">Phone call</option>

@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { ArrowUpRight, BadgeIndianRupee, CalendarClock, Database, FileWarning, Hourglass, Plus, Radar, Scale, Table2, Upload } from "lucide-react";
 import { useState } from "react";
 import { AgingChart, CollectionsChart } from "@/components/charts";
-import { useSession } from "@/components/session";
+import { useRole, useSession } from "@/components/session";
 import { AnimatedNumber, Button, Card, CardHeader, ErrorNote, PageHeader, Pill, Skeleton, cx, stagger } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
@@ -201,11 +201,15 @@ function GetStarted({ onLoaded }: { onLoaded: () => void }) {
       setBusy(false);
     }
   }
+  const { canWrite, canManage } = useRole();
   const options = [
-    { icon: Database, title: "Load a demo book", body: "20 buyers and their invoice history, synthetic, dated to today — see Recova work in a minute.", action: <Button onClick={() => void loadDemo()} loading={busy}>Load demo data</Button> },
-    { icon: Upload, title: "Import a CSV", body: "Export invoices from Tally, Zoho or Excel and bring them in, buyers and all.", action: <Link href="/app/import"><Button variant="secondary">Import invoices</Button></Link> },
-    { icon: Plus, title: "Add by hand", body: "Start with one buyer and their open invoices.", action: <Link href="/app/buyers?new=1"><Button variant="secondary">Add a buyer</Button></Link> },
-  ];
+    canManage && { icon: Database, title: "Load a demo book", body: "20 buyers and their invoice history, synthetic, dated to today — see Recova work in a minute.", action: <Button onClick={() => void loadDemo()} loading={busy}>Load demo data</Button> },
+    canWrite && { icon: Upload, title: "Import a CSV", body: "Export invoices from Tally, Zoho or Excel and bring them in, buyers and all.", action: <Link href="/app/import"><Button variant="secondary">Import invoices</Button></Link> },
+    canWrite && { icon: Plus, title: "Add by hand", body: "Start with one buyer and their open invoices.", action: <Link href="/app/buyers?new=1"><Button variant="secondary">Add a buyer</Button></Link> },
+  ].filter((o) => !!o);
+  if (!options.length) {
+    return <Card className="p-6 text-[14px] text-ink-2">Nothing here yet. Once the team adds buyers and invoices, they appear here — you have view-only access.</Card>;
+  }
   return (
     <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid gap-4 md:grid-cols-3">
       {options.map(({ icon: Icon, title, body, action }) => (

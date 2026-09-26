@@ -7,6 +7,7 @@ import { ArrowLeft, Mail, MapPin, Pencil, Phone, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { BuyerForm } from "@/components/buyer-form";
 import { ScoreRing } from "@/components/score-ring";
+import { useRole } from "@/components/session";
 import { Button, Card, CardHeader, ErrorNote, Pill, Skeleton, cx } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
@@ -18,6 +19,7 @@ export default function BuyerPage() {
   const router = useRouter();
   const toast = useToast();
   const { data: b, error, reload } = useApi<BuyerRow>(`/buyers/${id}`);
+  const { canWrite, canManage } = useRole();
   const [editing, setEditing] = useState(false);
 
   if (error) return <ErrorNote message={error} onRetry={reload} />;
@@ -56,8 +58,8 @@ export default function BuyerPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" icon={<Pencil className="size-4" />} onClick={() => setEditing(true)}>Edit</Button>
-            <Button variant="ghost" className="text-critical-ink" icon={<Trash2 className="size-4" />} onClick={() => void remove()}>Delete</Button>
+            {canWrite && <Button variant="secondary" icon={<Pencil className="size-4" />} onClick={() => setEditing(true)}>Edit</Button>}
+            {canManage && <Button variant="ghost" className="text-critical-ink" icon={<Trash2 className="size-4" />} onClick={() => void remove()}>Delete</Button>}
           </div>
         </div>
       </Card>

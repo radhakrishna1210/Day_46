@@ -1,13 +1,13 @@
 "use client";
 
 import { motion } from "motion/react";
-import { BadgeCheck, Building2, Landmark, ShieldAlert, Users } from "lucide-react";
+import { BadgeCheck, Building2, Landmark, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "@/components/session";
-import { Button, Card, CardHeader, ErrorNote, Field, PageHeader, Pill, Select, Skeleton } from "@/components/ui";
+import { TeamCard } from "@/components/team";
+import { Button, Card, CardHeader, ErrorNote, Field, PageHeader, Select, Skeleton } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
-import { initials } from "@/lib/format";
 import { useLegal, type LegalFigures } from "@/lib/legal";
 import type { BusinessProfile } from "@/lib/types";
 
@@ -24,7 +24,6 @@ const FIELDS: { key: keyof BusinessProfile; label: string; hint?: string }[] = [
 export default function SettingsPage() {
   const legal = useLegal();
   const profile = useApi<BusinessProfile>("/business");
-  const members = useApi<{ id: string; name: string; email: string; role: string }[]>("/business/members");
 
   if (profile.error) return <ErrorNote message={profile.error} onRetry={profile.reload} />;
   if (!profile.data) return <div className="space-y-4"><Skeleton className="h-10 w-60" /><Skeleton className="h-96" /></div>;
@@ -36,7 +35,7 @@ export default function SettingsPage() {
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         {/* Remounts whenever the saved profile changes, so the form always starts from what is stored. */}
         <ProfileForm key={JSON.stringify(p)} p={p} onSaved={profile.reload} />
-        <SideCards members={members.data} legal={legal} />
+        <SideCards legal={legal} />
       </div>
     </>
   );
@@ -97,24 +96,10 @@ function ProfileForm({ p, onSaved }: { p: BusinessProfile; onSaved: () => Promis
   );
 }
 
-type Member = { id: string; name: string; email: string; role: string };
-
-function SideCards({ members, legal }: { members: Member[] | null; legal: LegalFigures | null }) {
+function SideCards({ legal }: { legal: LegalFigures | null }) {
   return (
         <div className="space-y-6">
-          <Card>
-            <CardHeader title="Team" subtitle="People who can use this business" action={<Users className="size-4 text-ink-3" />} />
-            <ul className="mt-3 space-y-1 px-5 pb-5">
-              {members?.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 rounded-xl px-2 py-2">
-                  <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-[12px] font-semibold">{initials(m.name)}</span>
-                  <span className="min-w-0 flex-1"><span className="block truncate text-[13.5px] font-medium">{m.name}</span><span className="block truncate text-[12px] text-ink-3">{m.email}</span></span>
-                  <Pill tone={m.role === "owner" ? "brand" : "neutral"} icon={false}>{m.role}</Pill>
-                </li>
-              ))}
-            </ul>
-            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">Inviting teammates arrives with email sign-in.</p>
-          </Card>
+          <TeamCard />
 
           <Card>
             <CardHeader title="Legal figures in use" subtitle={legal ? `As of ${legal.as_of}` : "Loading…"} action={<Landmark className="size-4 text-ink-3" />} />

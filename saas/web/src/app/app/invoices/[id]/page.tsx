@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, CalendarCheck2, HandCoins, Mail, ShieldAlert, Trash2 } from "lucide-react";
 import { InvoiceActions } from "@/components/invoice-actions";
 import { Ladder } from "@/components/ladder";
+import { useRole } from "@/components/session";
 import { StatusPill } from "@/components/status";
 import { Button, Card, CardHeader, ErrorNote, Pill, Skeleton } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -21,6 +22,7 @@ export default function InvoicePage() {
   const toast = useToast();
   const inv = useApi<InvoiceDetail>(`/invoices/${id}`);
   const decision = useApi<DecisionDetail>(`/decisions/${id}`);
+  const { canManage } = useRole();
   const reload = () => { void inv.reload(); void decision.reload(); };
 
   if (inv.error) return <ErrorNote message={inv.error} onRetry={inv.reload} />;
@@ -139,7 +141,7 @@ export default function InvoicePage() {
             </Card>
           )}
 
-          <Button variant="ghost" className="text-critical-ink" icon={<Trash2 className="size-4" />} onClick={() => void remove()}>Delete invoice</Button>
+          {canManage && <Button variant="ghost" className="text-critical-ink" icon={<Trash2 className="size-4" />} onClick={() => void remove()}>Delete invoice</Button>}
         </div>
       </div>
     </>

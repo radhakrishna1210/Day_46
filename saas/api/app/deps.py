@@ -11,13 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import settings
 from app.db import get_db
-from app.models import Membership, Tenant, User
+from app.models import WRITERS, Membership, Tenant, User
 from app.security import SESSION_COOKIE, read_session
 
 
@@ -27,7 +27,14 @@ def current_user(db: Session = Depends(get_db),
     user = db.get(User, claims["sub"]) if claims else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in")
+    if user.suspended_at is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SUSPENDED_USER)
     return user
+
+
+SUSPENDED_USER = "This account is suspended. Contact Recova support."
+SUSPENDED_BUSINESS = "This business is suspended. Contact Recova support."
+READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
 def is_super_admin(user: User) -> bool:
@@ -67,7 +74,8 @@ class TenantContext:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Your role cannot do this")
 
 
-def tenant_context(db: Session = Depends(get_db), user: User = Depends(current_user),
+def tenant_context(request: Request, db: Session = Depends(get_db),
+                   user: User = Depends(current_user),
                    session: str | None = Cookie(default=None, alias=SESSION_COOKIE)
                    ) -> TenantContext:
     claims = read_session(session) or {}
@@ -76,4 +84,10 @@ def tenant_context(db: Session = Depends(get_db), user: User = Depends(current_u
         Membership.user_id == user.id, Membership.tenant_id == tenant_id)) if tenant_id else None
     if membership is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No active business for this session")
+    if membership.tenant.suspended_at is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SUSPENDED_BUSINESS)
+    # Viewers read, never write -- enforced here once, for every tenant endpoint,
+    # rather than trusting each route to remember.
+    if membership.role not in WRITERS and request.method not in READ_METHODS:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Viewers can look but not change anything")
     return TenantContext(db=db, user=user, tenant=membership.tenant, role=membership.role)

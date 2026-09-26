@@ -23,7 +23,8 @@ from sqlalchemy.orm import Session
 
 from app import audit, google, mailer, otp, settings
 from app.db import get_db
-from app.deps import current_user, is_super_admin
+from app.deps import SUSPENDED_USER, current_user, is_super_admin
+from app.routers import team
 from app.models import Membership, Tenant, User
 from app.security import (SESSION_COOKIE, SESSION_DAYS, hash_password, issue_session,
                           read_session, verify_password)
@@ -31,6 +32,7 @@ from app.security import (SESSION_COOKIE, SESSION_DAYS, hash_password, issue_ses
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 GOOGLE_STATE_COOKIE = "recova_oauth"
+GOOGLE_NEXT_COOKIE = "recova_next"      # where to land after Google (e.g. an invite page)
 GENERIC_CODE_REPLY = {"ok": True, "message": "If that email has an account, a code is on its way."}
 
 
@@ -38,7 +40,9 @@ class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
-    business_name: str = Field(min_length=2, max_length=200)
+    #: Required unless joining through an invitation (invite_token).
+    business_name: str | None = Field(default=None, min_length=2, max_length=200)
+    invite_token: str | None = Field(default=None, max_length=200)
 
 
 class LoginIn(BaseModel):
@@ -113,6 +117,8 @@ def _send_code(db: Session, email: str, purpose: str) -> None:
 
 
 def _sign_in(db: Session, response: Response, user: User) -> dict:
+    if user.suspended_at is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SUSPENDED_USER)
     tenant_id = _first_tenant_id(db, user)
     _set_cookie(response, issue_session(user.id, tenant_id))
     return _me(db, user, tenant_id)
@@ -135,6 +141,22 @@ def register(body: RegisterIn, response: Response, db: Session = Depends(get_db)
     if _user_by_email(db, email):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
     user = User(email=email, name=body.name.strip(), password_hash=hash_password(body.password))
+
+    if body.invite_token:
+        # Joining someone's business: no business of their own, and the emailed
+        # link already proves the inbox, so no verification code either.
+        invite = team.find_invite(db, body.invite_token)
+        if invite is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "This invitation link isn't valid")
+        db.add(user)
+        db.flush()
+        membership = team.accept_invite(db, invite, user)
+        db.commit()
+        _set_cookie(response, issue_session(user.id, membership.tenant_id))
+        return _me(db, user, membership.tenant_id)
+
+    if not body.business_name or not body.business_name.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Business name is required")
     tenant = Tenant(legal_name=body.business_name.strip(), contact_name=body.name.strip(),
                     contact_email=email)
     db.add_all([user, tenant])
@@ -251,21 +273,34 @@ def _signin_error(message: str) -> RedirectResponse:
     return RedirectResponse(f"{settings.public_url()}/login?error={quote(message)}", status_code=302)
 
 
+def _safe_next(path: str | None) -> str | None:
+    """Only our own pages -- never an open redirect to another site."""
+    if path and path.startswith(("/app", "/invite/")) and "//" not in path and "\\" not in path:
+        return path
+    return None
+
+
 @router.get("/google/start")
-def google_start() -> RedirectResponse:
+def google_start(next: str | None = None) -> RedirectResponse:  # noqa: A002 -- the query name
     if not settings.google_enabled():
         return _signin_error("Google sign-in is not set up on this server")
     state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
     resp = RedirectResponse(google.authorization_url(state, nonce), status_code=302)
+    secure = settings.public_url().startswith("https://")
     resp.set_cookie(GOOGLE_STATE_COOKIE, f"{state}.{nonce}", httponly=True, samesite="lax",
-                    secure=settings.public_url().startswith("https://"), max_age=600, path="/")
+                    secure=secure, max_age=600, path="/")
+    if _safe_next(next):
+        resp.set_cookie(GOOGLE_NEXT_COOKIE, next, httponly=True, samesite="lax",
+                        secure=secure, max_age=600, path="/")
     return resp
 
 
 @router.get("/google/callback")
 def google_callback(code: str | None = None, state: str | None = None, error: str | None = None,
                     db: Session = Depends(get_db),
-                    oauth: str | None = Cookie(default=None, alias=GOOGLE_STATE_COOKIE)) -> RedirectResponse:
+                    oauth: str | None = Cookie(default=None, alias=GOOGLE_STATE_COOKIE),
+                    next_path: str | None = Cookie(default=None, alias=GOOGLE_NEXT_COOKIE)
+                    ) -> RedirectResponse:
     if error:
         return _signin_error("Google sign-in was cancelled")
     expected_state, _, nonce = (oauth or "").partition(".")
@@ -290,11 +325,16 @@ def google_callback(code: str | None = None, state: str | None = None, error: st
         user.google_sub = user.google_sub or sub
         user.email_verified = True
     db.commit()
+    if user.suspended_at is not None:
+        return _signin_error(SUSPENDED_USER)
 
     tenant_id = _first_tenant_id(db, user)
-    # No business yet: name one -- unless a platform super admin, who needs none.
-    dest = "/app" if tenant_id else "/app/platform" if is_super_admin(user) else "/welcome"
+    # Back to where they started (an invite page), else: no business yet ->
+    # name one, unless a platform super admin, who needs none.
+    dest = _safe_next(next_path) or (
+        "/app" if tenant_id else "/app/platform" if is_super_admin(user) else "/welcome")
     resp = RedirectResponse(f"{settings.public_url()}{dest}", status_code=302)
     _set_cookie(resp, issue_session(user.id, tenant_id))
     resp.delete_cookie(GOOGLE_STATE_COOKIE, path="/")
+    resp.delete_cookie(GOOGLE_NEXT_COOKIE, path="/")
     return resp
