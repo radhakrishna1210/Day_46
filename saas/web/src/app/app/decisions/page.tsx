@@ -6,7 +6,7 @@ import { Check, Copy, Gavel, Hand, Hourglass, MessageSquareText, PauseCircle, Se
 import { useMemo, useState } from "react";
 import { InvoiceActions } from "@/components/invoice-actions";
 import { Ladder } from "@/components/ladder";
-import { useRole } from "@/components/session";
+import { useRole, useSession } from "@/components/session";
 import { Button, Card, Drawer, EmptyState, ErrorNote, PageHeader, Pill, Select, Skeleton, cx } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api, useApi } from "@/lib/api";
@@ -133,6 +133,7 @@ function DecisionDrawer({ invoiceId, onClose, onChanged }: { invoiceId: string |
   const d = invoiceId && data?.invoice_id === invoiceId ? data : null;
   const canSend = d && (d.kind === "send" || d.kind === "payment_plan" || d.kind === "counter_settle");
   const { canWrite } = useRole();
+  const { session } = useSession();
 
   async function approve() {
     if (!d) return;
@@ -144,6 +145,22 @@ function DecisionDrawer({ invoiceId, onClose, onChanged }: { invoiceId: string |
       onClose();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not log it", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function emailIt() {
+    if (!d) return;
+    if (!window.confirm(`Email this reminder to ${d.buyer_email}?${d.payments_enabled ? " It will include a Razorpay payment link." : ""}`)) return;
+    setBusy(true);
+    try {
+      const r = await api<{ to: string; payment_link: string | null }>(`/decisions/${d.invoice_id}/send-email`, { method: "POST" });
+      toast(`Emailed to ${r.to}${r.payment_link ? " with a payment link" : ""}`);
+      onChanged();
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not send it", "bad");
     } finally {
       setBusy(false);
     }
@@ -162,15 +179,31 @@ function DecisionDrawer({ invoiceId, onClose, onChanged }: { invoiceId: string |
       onClose={onClose}
       title={d ? d.buyer.name : "Loading…"}
       subtitle={d ? <Link href={`/app/invoices/${d.invoice_id}`} className="hover:text-brand">{d.invoice_number} · {rupees(d.outstanding_paise)} outstanding</Link> : null}
-      footer={canSend && canWrite ? (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <Select label="I sent it by" value={channel} onChange={(e) => setChannel(e.target.value)} className="w-44">
-            <option value="phone">Phone call</option>
-            <option value="email">My own email</option>
-            <option value="whatsapp">My own WhatsApp</option>
-            <option value="in_person">In person</option>
-          </Select>
-          <Button onClick={() => void approve()} loading={busy} icon={<Check className="size-4" />}>Mark as sent</Button>
+      footer={canSend && canWrite && d ? (
+        <div className="space-y-3">
+          {d.buyer_email && !d.buyer_opted_out ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="min-w-0 text-[12.5px] text-ink-3">
+                Sends the draft below as-is{d.payments_enabled ? ", with a payment link" : ""}, from “{session.active_business?.name} via Recova”. Replies come to you.
+              </p>
+              <Button onClick={() => void emailIt()} loading={busy} icon={<Send className="size-4" />} className="w-full sm:w-auto">
+                Email it to {d.buyer_email}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-ink-3">
+              {d.buyer_opted_out ? "This buyer opted out, so Recova won’t email them." : "Add the buyer’s email address to send it from here."}
+            </p>
+          )}
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t border-line pt-3">
+            <Select label="Or I sent it myself, by" value={channel} onChange={(e) => setChannel(e.target.value)} className="w-52">
+              <option value="phone">Phone call</option>
+              <option value="email">My own email</option>
+              <option value="whatsapp">My own WhatsApp</option>
+              <option value="in_person">In person</option>
+            </Select>
+            <Button variant="secondary" onClick={() => void approve()} loading={busy} icon={<Check className="size-4" />}>Mark as sent</Button>
+          </div>
         </div>
       ) : undefined}
     >

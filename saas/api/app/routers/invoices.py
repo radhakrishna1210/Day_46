@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 
-from app import audit, bridge, replies
+from app import audit, bridge, payments, replies
 from app.clock import today_for
 from app.deps import TenantContext, tenant_context
 from app.models import Buyer, BuyerReply, Invoice, Payment, Promise
@@ -85,6 +85,8 @@ def invoice_out(inv: Invoice, today: date, *, detail: bool = False) -> dict:
             "contacts": [{"id": c.id, "contacted_on": c.contacted_on.isoformat(), "rung": c.rung,
                           "rung_name": bridge.RUNG_NAMES.get(c.rung), "channel": c.channel,
                           "outcome": c.outcome} for c in inv.contacts],
+            "payments_enabled": payments.enabled(),
+            "payment_link": _link_out(inv),
             "replies": [{"id": r.id, "received_on": r.received_on.isoformat(), "channel": r.channel,
                          "text": r.text, "intent": r.intent, "suggested_intent": r.suggested_intent,
                          "suggested_by": r.suggested_by, "recorded_by": r.recorded_by,
@@ -92,6 +94,15 @@ def invoice_out(inv: Invoice, today: date, *, detail: bool = False) -> dict:
                         for r in inv.replies],
         }
     return out
+
+
+def _link_out(inv: Invoice) -> dict | None:
+    """The newest payment link, so the page shows paid / open / cancelled."""
+    link = max(inv.payment_links, key=lambda l: l.created_at, default=None)
+    if link is None:
+        return None
+    return {"url": link.short_url, "amount_paise": link.amount_paise, "status": link.status,
+            "created_at": link.created_at.isoformat(), "mode": payments.mode()}
 
 
 def _load(ctx: TenantContext, invoice_id: str) -> Invoice:
@@ -271,6 +282,39 @@ def confirm_reply(invoice_id: str, body: ReplyConfirmIn,
     ctx.db.commit()
     ctx.db.refresh(inv)
     return invoice_out(inv, today, detail=True)
+
+
+# --------------------------------------------------------------------------
+# Razorpay payment links
+# --------------------------------------------------------------------------
+
+@router.post("/{invoice_id}/payment-link", status_code=status.HTTP_201_CREATED)
+def make_payment_link(invoice_id: str, ctx: TenantContext = Depends(tenant_context)) -> dict:
+    inv = _load(ctx, invoice_id)
+    today = today_for()
+    try:
+        payments.link_for(ctx.db, inv, ctx.tenant, today, ctx.user.email)
+    except payments.PaymentsError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    ctx.db.commit()
+    ctx.db.refresh(inv)
+    return invoice_out(inv, today, detail=True)
+
+
+@router.post("/{invoice_id}/payment-link/check")
+def check_payment_link(invoice_id: str, ctx: TenantContext = Depends(tenant_context)) -> dict:
+    """Ask Razorpay whether the open link was paid (works without a webhook)."""
+    inv = _load(ctx, invoice_id)
+    link = payments.open_link(ctx.db, inv)
+    if link is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No open payment link on this invoice")
+    try:
+        state = payments.refresh(ctx.db, link)
+    except payments.PaymentsError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Couldn't reach Razorpay: {exc}")
+    ctx.db.commit()
+    ctx.db.refresh(inv)
+    return invoice_out(inv, today_for(), detail=True) | {"link_status": state}
 
 
 @router.post("/{invoice_id}/dispute")

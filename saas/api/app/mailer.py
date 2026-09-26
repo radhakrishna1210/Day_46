@@ -8,8 +8,10 @@ for production -- same code, different credentials.
 With SMTP_HOST empty (the development default) nothing leaves the machine:
 the message is printed to the API log, so a sign-in code can still be read.
 
-Recipients are always the platform's own users. Buyer reminders are NOT sent
-by this module -- that stays the owner's decision (CLAUDE.md non-negotiable #4).
+Recipients are the platform's own users -- and buyers, but only for a reminder
+an owner/member explicitly clicked Send on (routers/decisions.py send_email),
+after the rules re-decided it. RECOVA_EMAIL_ALLOWLIST keeps development email
+inside the owner's own inboxes (CLAUDE.md non-negotiable #4).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import smtplib
 import ssl
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 
 from sqlalchemy.orm import Session
 
@@ -34,11 +37,24 @@ DEV_SENT: list[dict[str, str]] = []
 
 
 def queue(db: Session, *, to: str, kind: str, subject: str, text: str,
-          html_body: str | None = None, tenant_id: str | None = None) -> OutboxEmail:
+          html_body: str | None = None, tenant_id: str | None = None,
+          from_name: str | None = None, reply_to: str | None = None) -> OutboxEmail:
     row = OutboxEmail(to_email=to, kind=kind, subject=subject, body_text=text,
-                      body_html=html_body, tenant_id=tenant_id)
+                      body_html=html_body, tenant_id=tenant_id, from_name=from_name,
+                      reply_to=reply_to)
     db.add(row)
     return row
+
+
+def send_now(db: Session, row: OutboxEmail) -> str:
+    """Deliver one message immediately and settle it: 'sent', 'blocked' or
+    'failed'. Never left queued, so the retry loop can't send it later behind
+    the caller's back (a buyer reminder is logged only when this says 'sent')."""
+    db.flush()
+    deliver(db, row)
+    if row.status == "queued":
+        row.status = "failed"
+    return row.status
 
 
 def allowed(to: str) -> bool:
@@ -63,7 +79,8 @@ def deliver(db: Session, row: OutboxEmail) -> bool:
         if settings.smtp_enabled():
             _send_smtp(row)
         else:
-            DEV_SENT.append({"to": row.to_email, "subject": row.subject, "text": row.body_text})
+            DEV_SENT.append({"to": row.to_email, "subject": row.subject, "text": row.body_text,
+                             "from_name": row.from_name or "", "reply_to": row.reply_to or ""})
             log.warning("SMTP not configured -- email NOT sent. To: %s | %s\n%s",
                         row.to_email, row.subject, row.body_text)
             print(f"\n[recova mail -- not sent, SMTP off] To: {row.to_email}\n"
@@ -88,7 +105,13 @@ def deliver_pending(db: Session, limit: int = 50) -> int:
 
 def _send_smtp(row: OutboxEmail) -> None:
     msg = EmailMessage()
-    msg["From"] = settings.env("MAIL_FROM") or settings.env("SMTP_USER")
+    sender = settings.env("MAIL_FROM") or settings.env("SMTP_USER")
+    if row.from_name:       # "<Business> via Recova <address>" -- same address, their name
+        msg["From"] = formataddr((row.from_name, parseaddr(sender)[1]))
+    else:
+        msg["From"] = sender
+    if row.reply_to:
+        msg["Reply-To"] = row.reply_to
     msg["To"] = row.to_email
     msg["Subject"] = row.subject
     msg.set_content(row.body_text)

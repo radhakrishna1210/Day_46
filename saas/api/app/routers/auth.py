@@ -21,7 +21,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit, google, mailer, otp, settings
+from app import audit, google, mailer, otp, payments, settings
 from app.db import get_db
 from app.deps import SUSPENDED_USER, current_user, is_super_admin
 from app.routers import team
@@ -133,7 +133,8 @@ def _sign_in(db: Session, response: Response, user: User) -> dict:
 def providers() -> dict:
     """Which sign-in methods this server offers -- the sign-in page asks."""
     return {"password": True, "email_code": True, "google": settings.google_enabled(),
-            "email_delivery": "smtp" if settings.smtp_enabled() else "log"}
+            "email_delivery": "smtp" if settings.smtp_enabled() else "log",
+            "payments": payments.mode()}
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)

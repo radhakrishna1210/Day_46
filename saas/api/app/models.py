@@ -151,6 +151,7 @@ class Invoice(Base):
                                                        order_by="ContactLog.contacted_on")
     replies: Mapped[list[BuyerReply]] = relationship(cascade="all, delete-orphan",
                                                      order_by="BuyerReply.created_at")
+    payment_links: Mapped[list[PaymentLink]] = relationship(cascade="all, delete-orphan")
 
 
 class Payment(Base):
@@ -226,11 +227,34 @@ class OutboxEmail(Base):
     subject: Mapped[str] = mapped_column(String(300))
     body_text: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str | None] = mapped_column(Text)
+    #: Buyer reminders go out as "<Business> via Recova", replies to the business.
+    from_name: Mapped[str | None] = mapped_column(String(200))
+    reply_to: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(10), default="queued")   # queued|sent|failed|blocked
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PaymentLink(Base):
+    """A Razorpay Payment Link for (part of) an invoice. Recova records the
+    money only when Razorpay says it was paid -- by signed webhook or by asking
+    Razorpay directly -- never because a buyer clicked something."""
+
+    __tablename__ = "payment_links"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    provider_id: Mapped[str] = mapped_column(String(40), unique=True)       # plink_...
+    short_url: Mapped[str] = mapped_column(String(300))
+    amount_paise: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(12), default="created")      # created|paid|cancelled|expired
+    provider_payment_id: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(200))
 
 
 class BuyerReply(Base):

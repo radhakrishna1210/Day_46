@@ -5,6 +5,7 @@ import { BadgeCheck, Building2, Landmark, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "@/components/session";
 import { DigestCard } from "@/components/digest-card";
+import { useProviders } from "@/components/google-button";
 import { TeamCard } from "@/components/team";
 import { Button, Card, CardHeader, ErrorNote, Field, PageHeader, Select, Skeleton } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -97,6 +98,28 @@ function ProfileForm({ p, onSaved }: { p: BusinessProfile; onSaved: () => Promis
   );
 }
 
+function ChannelsCard() {
+  const p = useProviders();
+  const rows = [
+    { name: "Email", state: p?.email_delivery === "smtp" ? "On" : "Off", note: p?.email_delivery === "smtp" ? "Reminders you approve are emailed from “your business via Recova”; replies come to you." : "Email isn’t configured on this server." },
+    { name: "Payment links", state: p?.payments === "live" ? "Live" : p?.payments === "test" ? "Test mode" : "Off", note: p?.payments ? "Razorpay links go in emailed reminders; paid links record the payment." : "Razorpay isn’t connected." },
+    { name: "WhatsApp", state: "Not yet", note: "Send from your own WhatsApp and mark it sent." },
+  ];
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 text-[13.5px] font-semibold"><Building2 className="size-4" /> Channels</div>
+      <ul className="mt-3 space-y-3">
+        {rows.map((r) => (
+          <li key={r.name} className="text-[13px]">
+            <div className="flex items-center justify-between"><span className="font-medium">{r.name}</span><span className="text-ink-3">{r.state}</span></div>
+            <p className="mt-0.5 text-ink-2">{r.note}</p>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function SideCards({ legal }: { legal: LegalFigures | null }) {
   return (
         <div className="space-y-6">
@@ -115,10 +138,7 @@ function SideCards({ legal }: { legal: LegalFigures | null }) {
             )}
           </Card>
 
-          <Card className="p-5">
-            <div className="flex items-center gap-2 text-[13.5px] font-semibold"><Building2 className="size-4" /> Channels</div>
-            <p className="mt-1.5 text-[13px] text-ink-2">Email, WhatsApp and payment links aren’t connected yet. Recova drafts every message; you send it and mark it sent.</p>
-          </Card>
+          <ChannelsCard />
         </div>
   );
 }

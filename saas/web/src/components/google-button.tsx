@@ -2,7 +2,7 @@
 
 import { useApi } from "@/lib/api";
 
-type Providers = { google: boolean; email_code: boolean; email_delivery: "smtp" | "log" };
+type Providers = { google: boolean; email_code: boolean; email_delivery: "smtp" | "log"; payments: "test" | "live" | null };
 
 export function useProviders() {
   return useApi<Providers>("/auth/providers").data;

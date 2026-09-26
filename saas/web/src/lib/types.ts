@@ -69,6 +69,8 @@ export type InvoiceDetail = InvoiceRow & {
   payments: { id: string; paid_on: string; amount_paise: number; note: string | null }[];
   promises: { id: string; promised_date: string; amount: "full" | "partial"; status: "open" | "kept" | "broken"; recorded_on: string; note: string | null }[];
   contacts: { id: string; contacted_on: string; rung: number; rung_name: string | null; channel: string; outcome: string }[];
+  payments_enabled: boolean;
+  payment_link: { url: string; amount_paise: number; status: "created" | "paid" | "cancelled" | "expired"; created_at: string; mode: "test" | "live" | null } | null;
   replies: {
     id: string; received_on: string; channel: string; text: string; intent: string;
     suggested_intent: string | null; suggested_by: "ai" | "rules" | null; recorded_by: string; promised_date: string | null;
@@ -90,6 +92,7 @@ export type DecisionDetail = Decision & {
   draft: { subject: string; body: string; language: string; fallback_used: boolean; source: string } | null;
   legal: Legal;
   score: Score;
+  buyer_email: string | null; buyer_opted_out: boolean; payments_enabled: boolean; contacted_today: boolean;
 };
 
 export type Dashboard = {

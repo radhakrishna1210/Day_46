@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, CalendarCheck2, HandCoins, Mail, MessageSquareText, ShieldAlert, Trash2 } from "lucide-react";
 import { InvoiceActions } from "@/components/invoice-actions";
 import { Ladder } from "@/components/ladder";
+import { PaymentLinkCard } from "@/components/payment-link";
 import { useRole } from "@/components/session";
 import { StatusPill } from "@/components/status";
 import { Button, Card, CardHeader, ErrorNote, Pill, Skeleton } from "@/components/ui";
@@ -118,6 +119,9 @@ export default function InvoicePage() {
         </div>
 
         <div className="space-y-6">
+          {d.payments_enabled && (d.outstanding_paise > 0 || d.payment_link) && (
+            <PaymentLinkCard invoiceId={d.id} link={d.payment_link} disputed={d.disputed} outstanding={d.outstanding_paise} onChanged={reload} />
+          )}
           <Card className="p-5">
             <h2 className="text-[15px] font-semibold tracking-tight">Legal position</h2>
             <p className="mt-1 text-[12.5px] text-ink-3">MSMED Act 2006 · simplified, not legal advice</p>

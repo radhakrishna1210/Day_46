@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, mailer, settings
+from app import audit, mailer, payments, settings
 from app.clock import today_for
 from app.models import WRITERS, Invoice, Membership, Promise, Tenant, User
 from app.routers.decisions import build_queue
@@ -159,6 +159,13 @@ def run_for_tenant(db: Session, tenant: Tenant, today: date, *, only: User | Non
 def run_daily(db: Session, today: date | None = None, *, force: bool = False) -> list[dict]:
     """Every active business that has not had today's run yet (or all, with force)."""
     today = today or today_for()
+    # Payments first, so the digest counts money that arrived since yesterday.
+    try:
+        if payments.refresh_open(db):
+            db.commit()
+    except Exception:  # noqa: BLE001 -- Razorpay being down must not stop the digest
+        db.rollback()
+        log.exception("payment link refresh failed")
     done = []
     for tenant in db.scalars(select(Tenant).where(Tenant.suspended_at.is_(None))).all():
         if not force and tenant.last_daily_run == today:
